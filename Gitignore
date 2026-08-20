@@ -1,0 +1,9 @@
+STUDIA-VOICE/
+├── .gitignore
+├── requirements.txt
+├── main.py
+├── package.json
+├── index.html
+└── src/
+    ├── api.js
+    └── App.jsx
