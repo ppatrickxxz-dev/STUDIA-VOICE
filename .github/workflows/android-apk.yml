@@ -5,9 +5,11 @@ on:
   push:
     branches:
       - android/package-gate-20260825-1247
+    paths-ignore:
+      - 'dist/**'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
@@ -44,10 +46,21 @@ jobs:
       - name: Verify APK exists
         run: test -s buildsrc/PabloVoice-Android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload PabloVoice APK
+      - name: Upload PabloVoice APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: PabloVoice-debug-apk
           path: buildsrc/PabloVoice-Android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish direct APK on isolated branch
+        run: |
+          mkdir -p dist
+          cp buildsrc/PabloVoice-Android/app/build/outputs/apk/debug/app-debug.apk dist/PabloVoice.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/PabloVoice.apk
+          git diff --cached --quiet && exit 0
+          git commit -m "Publish direct PabloVoice APK"
+          git push origin HEAD:${GITHUB_REF_NAME}
