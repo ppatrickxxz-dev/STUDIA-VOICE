@@ -1,10 +1,19 @@
 {
   "benchmark": "PabloVoice Benchmark v1",
-  "state": "vocal-ready/mix-pending",
+  "state": "acoustic-ready",
   "storage_policy": {
     "public_repository_contains_audio": false,
     "binary_audio_is_private": true,
     "repository_stores_only_hashes_and_metadata": true
+  },
+  "lineage": {
+    "project_id": "d64e4de9-791e-41bc-9307-7957389b2499",
+    "render_job_id": "c2dc5446-021c-46fa-a03f-6cbb2c19e739",
+    "engine": "kaggle_full_pipeline_v4_1",
+    "source_asset_id": "a5bc5f31-a546-4ded-99fb-9a0867980202",
+    "source_name": "Sem Promessa.mp3",
+    "source_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d",
+    "pipeline_verified": true
   },
   "assets": {
     "vocal_canonical_source": {
@@ -56,20 +65,37 @@
     },
     "reference_mix": {
       "role": "reference-mix",
-      "status": "pending",
-      "sha256": null
+      "asset_id": "b8212b7b-8a93-4dd0-b6c9-9f008c403f3c",
+      "original_name": "master-c2dc5446.flac",
+      "sha256": "4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9",
+      "size_bytes": 36552984,
+      "mime_type": "audio/flac",
+      "duration_seconds": 184.96,
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "bit_depth": 24,
+      "integrated_lufs": -12.07,
+      "true_peak_db": -0.93,
+      "lra": 4.1,
+      "qa_passed": true,
+      "immutable_for_v1": true
     },
     "reference_instrumental": {
       "role": "reference-instrumental",
-      "status": "pending",
-      "sha256": null
+      "asset_id": "b43b4919-6860-49a3-95fc-bb94f2c7561b",
+      "original_name": "instrumental-c2dc5446.flac",
+      "sha256": "4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a",
+      "pcm_sha256": "102b6a272dbfacaa48c76186fc137d17ac69bfc70e1d1e854e8da6bbeeba3b33",
+      "size_bytes": 15898389,
+      "mime_type": "audio/flac",
+      "immutable_for_v1": true
     }
   },
   "gate": {
     "vocal_reference_frozen": true,
-    "mix_reference_frozen": false,
-    "instrumental_reference_frozen": false,
-    "acoustic_benchmark_runnable": false,
-    "reason": "reference mix and instrumental are still missing"
+    "mix_reference_frozen": true,
+    "instrumental_reference_frozen": true,
+    "acoustic_benchmark_runnable": true,
+    "reason": null
   }
 }
