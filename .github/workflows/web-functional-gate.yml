@@ -2,7 +2,7 @@ name: PabloVoice Web Functional Gate
 
 on:
   push:
-    branches: [main, develop, 'integration/**', 'feature/**', 'release/**']
+    branches: [main, develop, 'integration/**', 'feature/**', 'fix/**', 'release/**']
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -31,7 +31,27 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Start local canonical build
         run: |
-          python3 -m http.server 4173 --directory apps/web/dist > /tmp/pablovoice-web.log 2>&1 &
+          python3 - <<'PY' > /tmp/pablovoice-web.log 2>&1 &
+          import http.server
+          import os
+          import socketserver
+
+          os.chdir('apps/web/dist')
+
+          class GateHandler(http.server.SimpleHTTPRequestHandler):
+              def do_GET(self):
+                  for header in ('If-Modified-Since', 'If-None-Match'):
+                      if header in self.headers:
+                          del self.headers[header]
+                  return super().do_GET()
+
+              def end_headers(self):
+                  self.send_header('Cache-Control', 'no-store, max-age=0')
+                  super().end_headers()
+
+          with socketserver.TCPServer(('127.0.0.1', 4173), GateHandler) as server:
+              server.serve_forever()
+          PY
           echo $! > /tmp/pablovoice-web.pid
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
