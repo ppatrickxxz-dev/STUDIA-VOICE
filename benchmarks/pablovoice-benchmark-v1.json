@@ -1,7 +1,7 @@
 {
   "benchmark": "PabloVoice Benchmark v1",
   "version": "1.0.0",
-  "status": "contract-ready/audio-pending",
+  "status": "contract-ready/vocal-ready/mix-pending",
   "language": "pt-BR",
   "providers": ["pablovoice", "suno", "elevenmusic"],
   "principles": {
@@ -35,10 +35,15 @@
   ],
   "required_assets": {
     "lyrics": "benchmarks/assets/frozen-lyrics.txt",
-    "reference_vocal": "benchmarks/assets/reference-vocal.wav",
-    "reference_mix": "benchmarks/assets/reference-mix.wav",
-    "reference_instrumental": "benchmarks/assets/reference-instrumental.wav",
-    "brief": "benchmarks/assets/frozen-brief.json"
+    "brief": "benchmarks/assets/frozen-brief.json",
+    "binary_manifest": "benchmarks/assets/binary-reference-manifest.json",
+    "reference_vocal": "assets.vocal_provider_input",
+    "reference_mix": "assets.reference_mix",
+    "reference_instrumental": "assets.reference_instrumental"
+  },
+  "binary_storage_policy": {
+    "public_repo_audio_forbidden": true,
+    "hashes_and_metadata_only_in_repo": true
   },
   "result_policy": {
     "winner_requires_all_hard_gates": true,
