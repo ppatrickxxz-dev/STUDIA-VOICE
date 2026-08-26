@@ -1,0 +1,22 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "B10 conversational edit execution",
+  "frozen_before_first_provider_output": true,
+  "cases": [
+    {
+      "id": "B10_C1_ptbr_local_voice_edit",
+      "language": "pt-BR",
+      "command": "Deixa minha voz mais limpa e presente, centraliza ela e coloca um fade bem curto no começo, sem mexer no fim.",
+      "target": "active_track",
+      "expected_operations": [
+        {"type":"set_effect","key":"clean","value":true},
+        {"type":"set_effect","key":"presence","value":true},
+        {"type":"set_track","key":"pan","value":0},
+        {"type":"set_effect","key":"fadeIn","value":0.25}
+      ],
+      "must_preserve": ["trimEnd", "fadeOut"],
+      "must_not_require_daw_terms": true,
+      "unsupported_extra_actions_are_failure": true
+    }
+  ]
+}
