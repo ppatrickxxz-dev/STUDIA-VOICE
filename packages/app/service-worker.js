@@ -1,4 +1,4 @@
-const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r3';
+const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r4';
 const SHELL = [
   './', './index.html', './styles.css', './preboot.mjs', './app.js', './storage.mjs', './recording.mjs',
   './audio-engine.mjs', './manifest.webmanifest', './core/src/project.mjs',
@@ -22,7 +22,15 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith((async () => {
     try {
-      const response = await fetch(event.request);
+      const networkRequest = event.request.mode === 'navigate'
+        ? new Request(event.request, { cache: 'reload' })
+        : event.request;
+      let response = await fetch(networkRequest);
+      if (response.status === 304) {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        response = await fetch(new Request(event.request, { cache: 'reload' }));
+      }
       if (response.ok) {
         const cache = await caches.open(CACHE);
         await cache.put(event.request, response.clone());
