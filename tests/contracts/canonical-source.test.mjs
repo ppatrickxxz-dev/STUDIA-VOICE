@@ -19,8 +19,7 @@ test('REGRESSION-001: neither Web nor Android boots from Vercel Authentication',
 test('Web and Android resolve the same canonical packages', async () => {
   const [build, android] = await Promise.all([read('scripts/build-web.mjs'), read('apps/android/app/build.gradle')]);
   assert.match(build, /resolve\(packages, 'app'\)/);
-  assert.match(build, /\['core', 'audio', 'songwriting'\]/);
+  assert.match(build, /\['core', 'audio', 'analysis', 'songwriting'\]/);
   assert.match(android, /packages\/app/);
   assert.match(android, /file\('\.\.\/\.\.\/\.\.\/packages'\)/);
 });
-
