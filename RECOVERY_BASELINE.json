@@ -1,0 +1,20 @@
+{
+  "product": "PabloVoice Studio",
+  "recovery_release": "8.1.0-canonical-recovery",
+  "date": "2026-08-26",
+  "primary_runtime_source": "PABLOVOICE_STUDIO_RUNTIME_8.0.6_SOURCE_2026-08-24.zip",
+  "creative_source": "PABLOVOICE_STUDIO_INTEGRATED_v1.2.9_RUNTIME_PROVIDER_WIRING.zip",
+  "android_evidence_source": "PabloVoice-VERIFICADO-ANDROID.zip",
+  "validated": {
+    "runtime_8_0_6": "140/140",
+    "creative_v1_2_9": "38/38"
+  },
+  "known_gates": {
+    "android_physical": false,
+    "browser_aac_opus_remux_physical": false,
+    "autonomous_provider_connected": false,
+    "creative_blind_benchmark_completed": false
+  },
+  "canonical_source_sha256": "1893d7d2c8bab188327671d5751acc54456283521c0b616be5578b86cbb4645e",
+  "truth_policy": "No production approval without physical and runtime evidence."
+}
