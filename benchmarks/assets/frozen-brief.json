@@ -1,5 +1,7 @@
 {
-  "id": "pv-benchmark-v1-reference",
+  "id": "pv-benchmark-v1-generation-target",
+  "purpose": "generation_target",
+  "scope_tests": ["B01", "B05"],
   "language": "pt-BR",
   "bpm": 102,
   "time_signature": "4/4",
@@ -26,5 +28,10 @@
     "same_seed_when_provider_supports_it": true,
     "no_manual_post_fix_before_scoring": true,
     "retain_raw_provider_output": true
+  },
+  "semantic_boundary": {
+    "describes_reference_mix": false,
+    "describes_reference_instrumental": false,
+    "bpm_key_and_target_duration_are_generation_targets_only": true
   }
 }
