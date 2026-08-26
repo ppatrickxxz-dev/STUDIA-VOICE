@@ -1,0 +1,32 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "provider": "pablovoice",
+  "kind": "readiness_baseline_not_score",
+  "runtime_version": "2.4.0-rc.1",
+  "audited_before_provider_run": true,
+  "evidence": {
+    "app_source_sha": "1bd48ceea1e318ec696cc88d9c0d20c37e4782c0",
+    "audio_engine_sha": "0bc21da5db14a0158a6c9975098ce7539f055fb7"
+  },
+  "summary": {
+    "fully_runnable_tests": [],
+    "partial_tests": ["B06", "B07", "B12"],
+    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B08", "B09", "B10", "B11"],
+    "score_awarded": false
+  },
+  "tests": {
+    "B01": {"status":"blocked","reason":"Runtime explicitly marks generative AI unavailable until a safe provider is configured."},
+    "B02": {"status":"blocked","reason":"No audio-aware generative section replacement operation exists in the current runtime."},
+    "B03": {"status":"blocked","reason":"Lyrics can be edited as text, but there is no local audio lyric replacement operation."},
+    "B04": {"status":"blocked","reason":"Runtime explicitly marks vocal conversion unavailable; no identity-preserving regeneration exists."},
+    "B05": {"status":"blocked","reason":"PT-BR lyric analysis exists, but no sung-vocal generation exists locally."},
+    "B06": {"status":"partial_non_promotable","reason":"Semitone detune/pitch shift exists, but it is not note-aware correction and the UI explicitly warns that pitch changes duration; no formant preservation."},
+    "B07": {"status":"partial_non_promotable","reason":"A 22 ms / +11 cent double layer exists, but there is no musically generated high/low harmony engine."},
+    "B08": {"status":"blocked","reason":"Mixer and effects can change presentation, but no arrangement-generation operation preserves melody/lyrics/identity under benchmark constraints."},
+    "B09": {"status":"blocked","reason":"Runtime explicitly marks stem separation unavailable."},
+    "B10": {"status":"blocked","reason":"Pablo reads local state and emits deterministic tips; it does not execute arbitrary natural-language audio edits."},
+    "B11": {"status":"blocked","reason":"Non-destructive revisions exist, but sequential generative local edits with continuity preservation do not."},
+    "B12": {"status":"partial_non_promotable","reason":"Local WAV master render/export exists, but benchmark-required stem export is not yet implemented in the canonical runtime."}
+  },
+  "promotion_rule": "Partial readiness is not a benchmark pass. A test becomes scorable only after its full required operation produces retained output evidence against the frozen inputs."
+}
