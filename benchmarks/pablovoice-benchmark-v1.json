@@ -1,0 +1,114 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "version": "1.0.0",
+  "status": "contract-ready/audio-pending",
+  "language": "pt-BR",
+  "providers": ["pablovoice", "suno", "elevenmusic"],
+  "principles": {
+    "same_inputs": true,
+    "frozen_runtime": true,
+    "blind_review": true,
+    "no_threshold_changes_after_run": true,
+    "section_edits_must_preserve_unedited_context": true
+  },
+  "hard_gates": {
+    "section_replacement": {"min_score": 8.5, "required": true},
+    "vocal_identity": {"min_score": 8.5, "required": true},
+    "pt_br_prosody": {"min_score": 8.5, "required": true},
+    "continuity": {"min_score": 8.5, "required": true},
+    "artifact_rate": {"max_percent": 3.0, "required": true}
+  },
+  "score_scale": {"min": 0, "max": 10},
+  "tests": [
+    {
+      "id": "B01",
+      "name": "Full song generation",
+      "task": "Generate a complete song from the frozen lyric, BPM, key, structure and style brief.",
+      "metrics": ["musicality", "structure_adherence", "lyric_adherence", "pt_br_prosody", "mix_coherence"]
+    },
+    {
+      "id": "B02",
+      "name": "Section replacement",
+      "task": "Replace only the selected verse while preserving every unselected region.",
+      "metrics": ["section_accuracy", "continuity", "boundary_cleanliness", "lyric_adherence"],
+      "hard_gate": "section_replacement"
+    },
+    {
+      "id": "B03",
+      "name": "Lyric correction in place",
+      "task": "Change one lyric line without rebuilding the instrumental or neighboring vocal phrasing.",
+      "metrics": ["edit_locality", "continuity", "prosody", "boundary_cleanliness"]
+    },
+    {
+      "id": "B04",
+      "name": "Vocal identity preservation",
+      "task": "Regenerate a vocal phrase while preserving the frozen reference vocal identity.",
+      "metrics": ["timbre_similarity", "formant_stability", "performance_naturalness", "speaker_consistency"],
+      "hard_gate": "vocal_identity"
+    },
+    {
+      "id": "B05",
+      "name": "PT-BR prosody",
+      "task": "Sing the frozen Brazilian Portuguese passage naturally, preserving stress, contractions and colloquial flow.",
+      "metrics": ["stress_accuracy", "phoneme_naturalness", "word_timing", "colloquial_flow"],
+      "hard_gate": "pt_br_prosody"
+    },
+    {
+      "id": "B06",
+      "name": "Pitch and note correction",
+      "task": "Correct pitch and target notes without robotic timbre or loss of expressive detail.",
+      "metrics": ["intonation", "timbre_preservation", "vibrato_naturalness", "artifact_rate"]
+    },
+    {
+      "id": "B07",
+      "name": "Harmony generation",
+      "task": "Generate discreet high and low harmonies aligned to the lead vocal.",
+      "metrics": ["harmonic_correctness", "timing_alignment", "blend", "lead_preservation"]
+    },
+    {
+      "id": "B08",
+      "name": "Arrangement change",
+      "task": "Change arrangement characteristics while preserving melody, lyric, vocal identity and song form.",
+      "metrics": ["arrangement_adherence", "melody_preservation", "vocal_identity", "continuity"]
+    },
+    {
+      "id": "B09",
+      "name": "Stem separation and reconstruction",
+      "task": "Separate stems and reconstruct the mix with minimal leakage and phase damage.",
+      "metrics": ["stem_isolation", "leakage", "phase_integrity", "reconstruction_similarity"]
+    },
+    {
+      "id": "B10",
+      "name": "Conversational edit execution",
+      "task": "Execute a natural-language edit request correctly without requiring technical DAW terminology.",
+      "metrics": ["intent_understanding", "operation_accuracy", "edit_locality", "result_quality"]
+    },
+    {
+      "id": "B11",
+      "name": "Continuity under repeated edits",
+      "task": "Apply three sequential local edits while preserving the global identity of the song.",
+      "metrics": ["continuity", "identity_drift", "mix_drift", "boundary_cleanliness"],
+      "hard_gate": "continuity"
+    },
+    {
+      "id": "B12",
+      "name": "Export integrity",
+      "task": "Export master and stems with correct duration, sample format, channel layout and no added truncation or clipping.",
+      "metrics": ["duration_integrity", "format_integrity", "clipping", "stem_alignment"]
+    }
+  ],
+  "required_assets": {
+    "lyrics": "benchmarks/assets/frozen-lyrics.txt",
+    "reference_vocal": "benchmarks/assets/reference-vocal.wav",
+    "reference_mix": "benchmarks/assets/reference-mix.wav",
+    "reference_instrumental": "benchmarks/assets/reference-instrumental.wav",
+    "brief": "benchmarks/assets/frozen-brief.json"
+  },
+  "result_policy": {
+    "winner_requires_all_hard_gates": true,
+    "overall_score_without_hard_gates_is_non_promotable": true,
+    "raw_outputs_must_be_retained": true,
+    "human_blind_review_required": true,
+    "automated_metrics_required_when_applicable": true
+  }
+}
