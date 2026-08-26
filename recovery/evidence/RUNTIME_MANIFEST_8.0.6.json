@@ -1,0 +1,68 @@
+{
+  "product": "PabloVoice Studio",
+  "package": "runtime-8.0.6",
+  "date": "2026-08-24",
+  "candidate_release": "8.0.6-video-remux-binary-candidate",
+  "runtime_version": "0.3.7",
+  "runtime_architecture": "ES modules + PWA + Supabase live contracts + Agent/PMI + Instrument Web Audio/MIDI/WAV + Podcast Cleanup + Video Audio + verified Mediabunny remux + Companion",
+  "dist_file_count": 62,
+  "dist_bytes": 436340,
+  "validation": {
+    "checks_passed": 140,
+    "checks_total": 140,
+    "build": true,
+    "module_syntax": true,
+    "vendor_sha_verified": true,
+    "binary_remux_canary": true,
+    "video_packet_preserved": true,
+    "treated_audio_replaced": true,
+    "browser_aac_opus_live_validation": false,
+    "android_live_validation": false,
+    "asr_visible": false
+  },
+  "release_policy": {
+    "status": "candidate",
+    "production_ui_untouched": true,
+    "export_button_preview_only_after_real_audio_render": true,
+    "promotion_requires_physical_browser_android_remux": true
+  },
+  "vendor": {
+    "package": "mediabunny",
+    "version": "1.55.2",
+    "verified": true,
+    "bytes": 658872,
+    "sha256": "0ffdb882fab437f402a9a4d95a1aa854bedfa061c6d08684c1a702ddd6ad8029",
+    "delivery": "verified Supabase proxy test-recording-v63-once@14"
+  },
+  "binary_remux_canary": {
+    "ok": true,
+    "container": "mp4",
+    "source_bytes": 10044718,
+    "final_bytes": 9095709,
+    "final_duration_seconds": 40,
+    "source_video_codec": "avc",
+    "source_audio_codec": "aac",
+    "final_video_codec": "avc",
+    "final_audio_codec": "pcm-s16",
+    "source_video_first_packet_sha256": "9c40c2bd7e5f89b1723170531f613259e52c842909433729944d59c150f455ac",
+    "final_video_first_packet_sha256": "9c40c2bd7e5f89b1723170531f613259e52c842909433729944d59c150f455ac",
+    "source_audio_first_packet_sha256": "9d64e9a8b71b5d2a37051b8203ef4ab06ccd88a006829c8d0a1f7b84655ba9f0",
+    "final_audio_first_packet_sha256": "375af2e275cafcc66a67e5fe8c940ea2c3bfbfadbeae8c855b7f303be18e5e45",
+    "final_file_sha256": "570b8e2379bc885962453401aa65891c3ff940fcafef3b41127edaf9ebb73bd8",
+    "treated_audio_sha256": "e6dd14681c9ad3a7f695e5c028d138f4666ed87833c1a6376b411eff4f36018b",
+    "assertions": {
+      "has_video": true,
+      "has_audio": true,
+      "video_packet_preserved": true,
+      "audio_packet_replaced": true,
+      "output_nonempty": true,
+      "duration_positive": true
+    }
+  },
+  "known_limitations": [
+    "Supabase Edge cannot host full HTML document due gateway text/plain+sandbox behavior",
+    "Supabase Edge cannot run AAC WASM encoder because Worker/worker_threads is unavailable",
+    "Remote LLM provider remains optional/not configured",
+    "Physical Android/browser AAC or Opus remux still pending"
+  ]
+}
