@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '../apps/web/dist');
 const required = [
   'index.html', 'preboot.mjs', 'app.js', 'styles.css', 'service-worker.js', 'manifest.webmanifest',
-  'core/src/project.mjs', 'audio/src/presets.mjs', 'songwriting/src/analyzer.mjs',
+  'core/src/project.mjs', 'audio/src/presets.mjs', 'analysis/src/analyzer.mjs', 'songwriting/src/analyzer.mjs',
 ];
 for (const path of required) {
   await access(resolve(root, path));
