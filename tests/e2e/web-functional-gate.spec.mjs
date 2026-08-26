@@ -31,14 +31,18 @@ async function setRange(page, selector, value) {
   }, value);
 }
 
-test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export', async ({ page }) => {
+function captureErrors(page) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
+  return errors;
+}
 
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
+test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export', async ({ page }) => {
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
   await expect(page.getByText('Sua ideia ganha som.').first()).toBeVisible();
 
@@ -47,11 +51,7 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await expect(page.getByRole('heading', { name: 'Gate Web 2026' })).toBeVisible();
 
-  await page.locator('#audio-picker').setInputFiles({
-    name: 'gate-tone.wav',
-    mimeType: 'audio/wav',
-    buffer: wavFixture(),
-  });
+  await page.locator('#audio-picker').setInputFiles({ name: 'gate-tone.wav', mimeType: 'audio/wav', buffer: wavFixture() });
   await expect(page.getByText('gate-tone.wav').first()).toBeVisible();
   await expect(page.locator('#waveform')).toBeVisible();
   await expect(page.locator('[data-action="export"]').first()).toBeEnabled();
@@ -71,7 +71,7 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await expect(clean).toHaveClass(/on/);
   await clean.click();
   await expect(page.locator('[data-action="effect"][data-value="clean"]')).not.toHaveClass(/on/);
-  await page.locator('[data-action="effect"][data-value="clean"]') .click();
+  await page.locator('[data-action="effect"][data-value="clean"]').click();
   await expect(page.locator('[data-action="effect"][data-value="clean"]')).toHaveClass(/on/);
   await page.locator('[data-action="ab"][data-value="original"]').click();
   await expect(page.locator('[data-action="ab"][data-value="original"]')).toHaveClass(/active/);
@@ -80,10 +80,12 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
 
   await page.locator('[data-action="save"]').click();
   await expect(page.getByText('Projeto salvo neste aparelho.')).toBeVisible();
-
   await page.locator('[data-route="projects"]').first().click();
   await expect(page.getByText('Gate Web 2026').first()).toBeVisible();
+
   await page.reload({ waitUntil: 'networkidle' });
+  await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
+  await page.locator('[data-route="projects"]').first().click();
   await expect(page.getByText('Gate Web 2026').first()).toBeVisible();
   await page.locator('[data-action="open-project"]').first().click();
   await expect(page.getByRole('heading', { name: 'Gate Web 2026' })).toBeVisible();
@@ -99,6 +101,31 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
   await page.locator('[data-route="pablo"]').first().click();
   await expect(page.getByText(/assistente local/i).first()).toBeVisible();
+  expect(errors.filter((message) => !/favicon/i.test(message))).toEqual([]);
+});
 
+test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async ({ page }) => {
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.locator('[data-action="record"]').first().click();
+  await expect(page.getByRole('heading', { name: 'Gravando voz' })).toBeVisible();
+  await page.waitForTimeout(700);
+  await page.locator('[data-action="stop-record"]').click();
+  await expect(page.getByText('Gravação pronta no Studio.')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#waveform')).toBeVisible();
+  await page.locator('[data-action="studio-tab"][data-value="voice"]').click();
+  await expect(page.locator('[data-action="effect"][data-value="clean"]')).toBeVisible();
+  expect(errors.filter((message) => !/favicon/i.test(message))).toEqual([]);
+});
+
+test('WEB MOBILE GATE: Android-sized viewport boots and navigates without overflow failure', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
+  await page.locator('[data-route="studio"]').first().click();
+  await expect(page.getByText(/Primeiro, uma ideia|Studio/i).first()).toBeVisible();
+  const metrics = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 2);
   expect(errors.filter((message) => !/favicon/i.test(message))).toEqual([]);
 });
