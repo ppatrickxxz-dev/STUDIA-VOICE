@@ -1,0 +1,33 @@
+{
+  "sample_rate_assumption_hz": 48000,
+  "regions": [
+    {
+      "id": "R1_verse_replace",
+      "purpose": "B02 section replacement",
+      "start_seconds": 18.0,
+      "end_seconds": 34.0,
+      "instruction": "Replace only this verse region. Preserve all audio outside the selection bit-for-bit when the provider/runtime allows exact locality; otherwise measure drift outside the region."
+    },
+    {
+      "id": "R2_lyric_fix",
+      "purpose": "B03 lyric correction in place",
+      "start_seconds": 42.0,
+      "end_seconds": 48.0,
+      "instruction": "Replace one lyric line while preserving neighboring vocal phrasing and instrumental continuity."
+    },
+    {
+      "id": "R3_voice_identity",
+      "purpose": "B04 vocal identity preservation",
+      "start_seconds": 64.0,
+      "end_seconds": 72.0,
+      "instruction": "Regenerate the phrase using the frozen reference vocal identity with natural formants and no robotic pitch stepping."
+    },
+    {
+      "id": "R4_ptbr_prosody",
+      "purpose": "B05 PT-BR prosody",
+      "start_seconds": 96.0,
+      "end_seconds": 112.0,
+      "instruction": "Render the frozen PT-BR prosody passage preserving colloquial reductions, lexical stress and natural sung timing."
+    }
+  ]
+}
