@@ -1,5 +1,5 @@
 import { migrateProject } from './core/src/project.mjs';
-import { analysisIsMeasured } from './analysis/src/analyzer.mjs';
+import { analysisIsMeasured, consumeSourceAnalysis } from './analysis/src/analyzer.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
 const DB_VERSION = 3;
@@ -64,13 +64,14 @@ export async function deleteProject(id) {
 
 export async function saveAudioAsset({ id, blob, name, type, analysis = null, createdAt = Date.now() }) {
   if (!(blob instanceof Blob) || blob.size === 0) throw new TypeError('Arquivo de áudio vazio.');
-  if (analysis !== null && !analysisIsMeasured(analysis)) throw new TypeError('Análise de áudio sem proveniência mensurável.');
+  const measuredAnalysis = analysis ?? consumeSourceAnalysis(blob);
+  if (measuredAnalysis !== null && !analysisIsMeasured(measuredAnalysis)) throw new TypeError('Análise de áudio sem proveniência mensurável.');
   const value = {
     id,
     blob,
     name: String(name || 'áudio'),
     type: type || blob.type || 'application/octet-stream',
-    analysis: analysis ? structuredClone(analysis) : null,
+    analysis: measuredAnalysis ? structuredClone(measuredAnalysis) : null,
     createdAt,
   };
   await put('audio', value);
