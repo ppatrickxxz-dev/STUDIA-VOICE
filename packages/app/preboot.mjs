@@ -24,6 +24,7 @@ function fallbackShell() {
 }
 
 try {
+  await import('./analysis-integration.mjs');
   await import('./app.js');
   fallbackShell();
 } catch (error) {
