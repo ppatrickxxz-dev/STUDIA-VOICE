@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeWav, normalizationFactor, wavHeader } from '../../packages/audio/src/presets.mjs';
+import { PabloAudioEngine } from '../../packages/app/audio-engine.mjs';
 
 function fakeBuffer(channels = [[0, .5, -1, 1]], sampleRate = 48000) {
   const data = channels.map((values) => Float32Array.from(values));
@@ -20,3 +21,6 @@ test('normalization is bounded to protect extreme gain changes', () => {
   assert.equal(normalizationFactor(fakeBuffer([[0, 1]]), .5), .5);
 });
 
+test('audio engine exposes aligned per-track rendering for stem export', () => {
+  assert.equal(typeof PabloAudioEngine.prototype.renderTrack, 'function');
+});
