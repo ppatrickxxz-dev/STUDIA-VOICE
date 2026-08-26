@@ -1,0 +1,75 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "state": "vocal-ready/mix-pending",
+  "storage_policy": {
+    "public_repository_contains_audio": false,
+    "binary_audio_is_private": true,
+    "repository_stores_only_hashes_and_metadata": true
+  },
+  "assets": {
+    "vocal_canonical_source": {
+      "role": "canonical-vocal-source",
+      "original_name": "voz.wav",
+      "sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
+      "size_bytes": 13909412,
+      "codec": "pcm_s16le",
+      "sample_rate_hz": 40000,
+      "channels": 1,
+      "duration_seconds": 173.866675,
+      "bit_rate_bps": 640000,
+      "peak_dbfs_approx": -2.3,
+      "rms_dbfs_approx": -25.3,
+      "clipping_detected": false,
+      "immutable_for_v1": true
+    },
+    "vocal_provider_input": {
+      "role": "deterministic-provider-input",
+      "derived_from_sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
+      "sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+      "size_bytes": 15335120,
+      "codec": "pcm_s16le",
+      "sample_rate_hz": 44100,
+      "channels": 1,
+      "duration_seconds": 173.866689,
+      "processing": ["resample 40000->44100 Hz"],
+      "gain_change_db": 0,
+      "denoise": false,
+      "pitch_correction": false,
+      "formant_processing": false,
+      "immutable_for_v1": true
+    },
+    "vocal_complementary_source": {
+      "role": "identity-coverage-only",
+      "original_name": "voz_modelo_complementar_menos_10mb.m4a",
+      "sha256": "72cc0de6de29318391e12cf5dc01810b3a82b2ea78ff57694faa0a065f1d63ea",
+      "size_bytes": 8666008,
+      "codec": "aac",
+      "sample_rate_hz": 44100,
+      "channels": 1,
+      "duration_seconds": 704.810998,
+      "bit_rate_bps": 96975,
+      "peak_dbfs_approx": -0.8,
+      "rms_dbfs_approx": -27.3,
+      "clipping_detected": false,
+      "used_as_primary_provider_input": false,
+      "immutable_for_v1": true
+    },
+    "reference_mix": {
+      "role": "reference-mix",
+      "status": "pending",
+      "sha256": null
+    },
+    "reference_instrumental": {
+      "role": "reference-instrumental",
+      "status": "pending",
+      "sha256": null
+    }
+  },
+  "gate": {
+    "vocal_reference_frozen": true,
+    "mix_reference_frozen": false,
+    "instrumental_reference_frozen": false,
+    "acoustic_benchmark_runnable": false,
+    "reason": "reference mix and instrumental are still missing"
+  }
+}
