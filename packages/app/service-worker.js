@@ -1,6 +1,6 @@
-const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r2';
+const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r3';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './storage.mjs', './recording.mjs',
+  './', './index.html', './styles.css', './preboot.mjs', './app.js', './storage.mjs', './recording.mjs',
   './audio-engine.mjs', './manifest.webmanifest', './core/src/project.mjs',
   './audio/src/presets.mjs', './songwriting/src/analyzer.mjs',
 ];
@@ -31,10 +31,6 @@ self.addEventListener('fetch', (event) => {
     } catch (error) {
       const cached = await caches.match(event.request);
       if (cached) return cached;
-
-      // Only document navigations may fall back to the application shell.
-      // Returning index.html for JS/CSS/module requests causes a MIME/parse failure
-      // and leaves the static boot screen visible after refresh.
       if (event.request.mode === 'navigate') {
         const shell = await caches.match('./index.html') || await caches.match('./');
         if (shell) return shell;

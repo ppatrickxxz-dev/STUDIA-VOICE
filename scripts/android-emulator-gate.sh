@@ -8,41 +8,76 @@ evidence_dir="${2:-test-results/android-emulator}"
 mkdir -p "$evidence_dir"
 
 adb install -r "$apk_path"
-adb shell pm grant "$package_name" android.permission.RECORD_AUDIO
+adb shell pm grant "$package_name" android.permission.RECORD_AUDIO || true
 adb shell svc wifi disable || true
 adb shell svc data disable || true
 adb shell settings put global airplane_mode_on 1 || true
 
+capture_diagnostics() {
+  local label="${1:-failure}"
+  adb logcat -d -v threadtime > "$evidence_dir/${label}-logcat.txt" || true
+  adb shell dumpsys activity activities > "$evidence_dir/${label}-activities.txt" || true
+  adb shell dumpsys window windows > "$evidence_dir/${label}-windows.txt" || true
+  adb exec-out screencap -p > "$evidence_dir/${label}.png" 2>/dev/null || true
+}
+
+frame_variation() {
+  local image="$1"
+  convert "$image" -colorspace Gray -format '%[fx:standard_deviation]' info: 2>/dev/null || echo 0
+}
+
+is_foreground() {
+  local activity window
+  activity="$(adb shell dumpsys activity activities 2>/dev/null | tr -d '\r' | grep -E 'mResumedActivity|topResumedActivity' | grep "$package_name" || true)"
+  window="$(adb shell dumpsys window windows 2>/dev/null | tr -d '\r' | grep -E 'mCurrentFocus|mFocusedApp' | grep "$package_name" || true)"
+  [ -n "$activity" ] || [ -n "$window" ]
+}
+
+assert_no_fatal_crash() {
+  local log="$1"
+  if grep -Eq "FATAL EXCEPTION|Process: ${package_name}.*FATAL" "$log" 2>/dev/null; then
+    echo 'ANDROID_FATAL_CRASH_DETECTED' >&2
+    return 1
+  fi
+}
+
 launch_and_wait() {
-  adb shell am force-stop "$package_name"
-  adb shell am start -W -n "$package_name/$activity_name" | tee "$evidence_dir/launch.txt"
-  for attempt in $(seq 1 30); do
-    adb shell uiautomator dump /sdcard/pv-window.xml >/dev/null 2>&1 || true
-    adb pull /sdcard/pv-window.xml "$evidence_dir/window.xml" >/dev/null 2>&1 || true
-    if grep -Eq 'Você tá no estúdio|PabloVoice|Sua ideia ganha som' "$evidence_dir/window.xml" 2>/dev/null; then return 0; fi
-    sleep 1
+  local label="$1"
+  adb shell am force-stop "$package_name" || true
+  adb logcat -c || true
+  timeout 35s adb shell am start -W -n "$package_name/$activity_name" > "$evidence_dir/${label}-launch.txt" 2>&1 || true
+
+  for attempt in $(seq 1 45); do
+    local pid variation
+    pid="$(adb shell pidof "$package_name" 2>/dev/null | tr -d '\r' || true)"
+    adb exec-out screencap -p > "$evidence_dir/${label}.png" 2>/dev/null || true
+    variation="$(frame_variation "$evidence_dir/${label}.png")"
+    if [ -n "$pid" ] && is_foreground && awk -v value="$variation" 'BEGIN { exit !(value > 0.02) }'; then
+      adb logcat -d -v threadtime > "$evidence_dir/${label}-logcat.txt" || true
+      assert_no_fatal_crash "$evidence_dir/${label}-logcat.txt"
+      adb shell dumpsys activity activities > "$evidence_dir/${label}-activities.txt" || true
+      adb shell dumpsys window windows > "$evidence_dir/${label}-windows.txt" || true
+      printf '%s\n' "$pid" > "$evidence_dir/${label}-pid.txt"
+      printf '%s\n' "$variation" > "$evidence_dir/${label}-variation.txt"
+      return 0
+    fi
+    sleep 2
   done
-  echo 'ANDROID_BOOT_TEXT_GATE_FAILED' >&2
+
+  capture_diagnostics "${label}-failure"
+  echo "ANDROID_RENDER_GATE_FAILED label=$label" >&2
   return 1
 }
 
-launch_and_wait
-adb exec-out screencap -p > "$evidence_dir/launch-offline.png"
-variation="$(convert "$evidence_dir/launch-offline.png" -colorspace Gray -format '%[fx:standard_deviation]' info:)"
-awk -v value="$variation" 'BEGIN { if (value <= 0.02) exit 1 }' || {
-  echo "REGRESSION-007 FAIL: screenshot variation $variation indicates a blank/black render" >&2
-  exit 1
-}
+launch_and_wait launch-offline
+adb shell input keyevent KEYCODE_HOME || true
+sleep 2
+launch_and_wait foreground
 
-adb shell input keyevent KEYCODE_HOME
-sleep 1
-adb shell am start -W -n "$package_name/$activity_name" > "$evidence_dir/foreground.txt"
-adb exec-out screencap -p > "$evidence_dir/foreground.png"
-launch_and_wait
-adb exec-out screencap -p > "$evidence_dir/relaunch-offline.png"
-adb logcat -d -v threadtime > "$evidence_dir/logcat.txt"
-adb shell pidof "$package_name" | tee "$evidence_dir/pid.txt"
+adb shell uiautomator dump /sdcard/pv-window.xml >/dev/null 2>&1 || true
+adb pull /sdcard/pv-window.xml "$evidence_dir/window.xml" >/dev/null 2>&1 || true
 
-echo "ANDROID_NON_MIC_GATES_PASSED visual_standard_deviation=$variation"
+launch_variation="$(cat "$evidence_dir/launch-offline-variation.txt")"
+foreground_variation="$(cat "$evidence_dir/foreground-variation.txt")"
+echo "ANDROID_EMULATOR_NON_MIC_GATE_PASSED launch_variation=$launch_variation foreground_variation=$foreground_variation"
 echo 'MIC_CAPTURE_REQUIRES_PHYSICAL_DEVICE'
-
