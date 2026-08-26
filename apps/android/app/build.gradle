@@ -1,0 +1,75 @@
+plugins { id 'com.android.application' }
+
+def releaseStorePath = providers.environmentVariable('PV_RELEASE_STORE_FILE').orNull
+def releaseStorePassword = providers.environmentVariable('PV_RELEASE_STORE_PASSWORD').orNull
+def releaseKeyAlias = providers.environmentVariable('PV_RELEASE_KEY_ALIAS').orNull
+def releaseKeyPassword = providers.environmentVariable('PV_RELEASE_KEY_PASSWORD').orNull
+def releaseSigningReady = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it != null && !it.isBlank() }
+
+android {
+    namespace 'com.pablovoice.studio'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.pablovoice.studio'
+        minSdk 24
+        targetSdk 35
+        versionCode 24001
+        versionName '2.4.0-rc.1'
+        buildConfigField 'String', 'PV_COMMIT', '"' + (System.getenv('GITHUB_SHA') ?: 'local') + '"'
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs = [file('../../../packages/app'), file('../../../packages')]
+        }
+    }
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            release {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.validation'
+            versionNameSuffix '-validation'
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (releaseSigningReady) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures { buildConfig true }
+
+    packaging {
+        resources { excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*'] }
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.17.0'
+}
+
+tasks.register('verifyReleaseSigning') {
+    doLast {
+        if (!releaseSigningReady) throw new GradleException('Release signing secrets are not configured. Validation/debug builds remain available.')
+    }
+}
+

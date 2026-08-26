@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+      NativeBridge checks RECORD_AUDIO at the public recording entry point before
+      any AudioRecord is created. AudioRecord startup runs inside a guarded try/catch,
+      and the recorder thread also contains its own exception boundary. Android Lint
+      cannot follow the JavaScript bridge permission predicate across these methods,
+      so suppress only MissingPermission in this native host file; every other lint
+      category remains a release-blocking error.
+    -->
+    <issue id="MissingPermission">
+        <ignore path="src/main/java/com/pablovoice/studio/MainActivity.java" />
+    </issue>
+</lint>

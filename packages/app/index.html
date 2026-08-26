@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#080911">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="PabloVoice — seu estúdio local para gravar, editar e exportar áudio.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="stylesheet" href="./styles.css">
+    <title>PabloVoice</title>
+  </head>
+  <body>
+    <noscript>O PabloVoice precisa de JavaScript para processar áudio no aparelho.</noscript>
+    <div id="app" aria-live="polite">
+      <main class="pv-boot">
+        <div class="pv-boot-mark">PV</div>
+        <h1>Você tá no estúdio</h1>
+        <p>Sua ideia ganha som.</p>
+      </main>
+    </div>
+    <input id="audio-picker" class="sr-only" type="file" accept="audio/*,.wav,.mp3,.aac,.m4a,.ogg,.opus,.flac">
+    <div class="pv-toast-wrap" data-toasts aria-live="assertive"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
