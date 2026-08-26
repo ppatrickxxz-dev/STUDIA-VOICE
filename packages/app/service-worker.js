@@ -1,8 +1,8 @@
-const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r3';
+const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r4';
 const SHELL = [
-  './', './index.html', './styles.css', './preboot.mjs', './app.js', './storage.mjs', './recording.mjs',
+  './', './index.html', './styles.css', './preboot.mjs', './analysis-integration.mjs', './app.js', './storage.mjs', './recording.mjs',
   './audio-engine.mjs', './manifest.webmanifest', './core/src/project.mjs',
-  './audio/src/presets.mjs', './songwriting/src/analyzer.mjs',
+  './audio/src/presets.mjs', './analysis/src/analyzer.mjs', './songwriting/src/analyzer.mjs',
 ];
 
 self.addEventListener('install', (event) => {
@@ -19,7 +19,6 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
-
   event.respondWith((async () => {
     try {
       const response = await fetch(event.request);
