@@ -1,0 +1,15 @@
+node_modules/
+apps/web/dist/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties
+.vercel/
+.DS_Store
+test-results/
+artifacts/
+

@@ -1,0 +1,12 @@
+{
+  "name": "PabloVoice",
+  "short_name": "PabloVoice",
+  "description": "Studio de áudio local-first",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#07080d",
+  "theme_color": "#080911",
+  "lang": "pt-BR",
+  "orientation": "any"
+}
+

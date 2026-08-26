@@ -1,0 +1,78 @@
+name: PabloVoice signed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example v2.4.0-rc.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  signed-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Require protected signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.PV_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.PV_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PV_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PV_RELEASE_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/pablovoice-release.jks"
+      - name: Re-run release gates
+        run: |
+          node scripts/lint.mjs
+          node --test tests/unit/*.test.mjs tests/contracts/*.test.mjs
+          bash scripts/security-gate.sh
+          node scripts/build-web.mjs
+          node scripts/verify-web-build.mjs
+          node scripts/performance-gate.mjs
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build signed APK and AAB
+        env:
+          PV_RELEASE_STORE_FILE: ${{ runner.temp }}/pablovoice-release.jks
+          PV_RELEASE_STORE_PASSWORD: ${{ secrets.PV_RELEASE_STORE_PASSWORD }}
+          PV_RELEASE_KEY_ALIAS: ${{ secrets.PV_RELEASE_KEY_ALIAS }}
+          PV_RELEASE_KEY_PASSWORD: ${{ secrets.PV_RELEASE_KEY_PASSWORD }}
+        run: gradle -p apps/android --no-daemon verifyReleaseSigning lintRelease assembleRelease bundleRelease
+      - name: Validate signed release APK
+        run: |
+          bash scripts/validate-apk.sh apps/android/app/build/outputs/apk/release/app-release.apk com.pablovoice.studio
+          sha256sum apps/android/app/build/outputs/bundle/release/app-release.aab > apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          git rev-parse "$RELEASE_TAG"
+          gh release create "$RELEASE_TAG" \
+            apps/android/app/build/outputs/apk/release/app-release.apk \
+            apps/android/app/build/outputs/apk/release/app-release.apk.sha256 \
+            apps/android/app/build/outputs/bundle/release/app-release.aab \
+            apps/android/app/build/outputs/bundle/release/app-release.aab.sha256 \
+            --draft --verify-tag --generate-notes --title "PabloVoice $RELEASE_TAG"

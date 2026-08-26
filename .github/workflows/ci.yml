@@ -1,0 +1,104 @@
+name: PabloVoice CI
+
+on:
+  push:
+    branches: [main, develop, 'integration/**', 'feature/**', 'release/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pablovoice-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-and-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package.json
+      - name: Syntax, unit, contract, and regression gates
+        run: |
+          node scripts/lint.mjs
+          node --test tests/unit/*.test.mjs tests/contracts/*.test.mjs
+          bash scripts/security-gate.sh
+      - name: Build and validate Web
+        env:
+          PV_VERSION: 2.4.0-rc.1
+        run: |
+          node scripts/build-web.mjs
+          node scripts/verify-web-build.mjs
+          node scripts/performance-gate.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pablovoice-web-${{ github.sha }}
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  android-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install pinned Android SDK components
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Lint and build validation APK
+        run: gradle -p apps/android --no-daemon lintDebug assembleDebug
+      - name: Validate APK package, alignment, signature, size, and assets
+        run: bash scripts/validate-apk.sh apps/android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pablovoice-android-validation-${{ github.sha }}
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            apps/android/app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 14
+
+  android-emulator:
+    needs: android-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pablovoice-android-validation-${{ github.sha }}
+          path: artifacts/android
+      - name: Install visual evidence dependency
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+      - name: Resolve validation APK
+        run: find artifacts/android -name app-debug.apk -type f -print -quit | tee /tmp/pv-apk-path
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/android-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pablovoice-android-emulator-evidence-${{ github.sha }}
+          path: test-results/android-emulator
+          if-no-files-found: warn
+          retention-days: 14
