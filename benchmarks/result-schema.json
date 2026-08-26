@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PabloVoice Benchmark v1 Result",
+  "type": "object",
+  "required": ["provider", "runtime_version", "test_id", "raw_output_sha256", "scores", "hard_gate_pass"],
+  "properties": {
+    "provider": {"enum": ["pablovoice", "suno", "elevenmusic"]},
+    "runtime_version": {"type": "string", "minLength": 1},
+    "test_id": {"pattern": "^B(0[1-9]|1[0-2])$"},
+    "raw_output_sha256": {"pattern": "^[a-f0-9]{64}$"},
+    "scores": {
+      "type": "object",
+      "additionalProperties": {"type": "number", "minimum": 0, "maximum": 10}
+    },
+    "automated_metrics": {"type": "object"},
+    "blind_review": {
+      "type": "object",
+      "properties": {
+        "reviewer_count": {"type": "integer", "minimum": 1},
+        "provider_hidden": {"const": true}
+      },
+      "required": ["reviewer_count", "provider_hidden"]
+    },
+    "hard_gate_pass": {"type": "boolean"},
+    "notes": {"type": "string"}
+  },
+  "additionalProperties": false
+}

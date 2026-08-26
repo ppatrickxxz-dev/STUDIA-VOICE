@@ -1,0 +1,30 @@
+{
+  "id": "pv-benchmark-v1-reference",
+  "language": "pt-BR",
+  "bpm": 102,
+  "time_signature": "4/4",
+  "key": "F# minor",
+  "target_duration_seconds": 195,
+  "style": ["contemporary R&B", "Brazilian pop-funk", "subtle Y2K texture"],
+  "vocal_direction": {
+    "lead": "intimate, natural, close-mic, expressive, non-robotic",
+    "accent": "Brazilian Portuguese, natural colloquial flow",
+    "harmonies": "discreet high and low harmonies, never masking lead"
+  },
+  "arrangement": {
+    "verse": "sparse drums, warm bass, soft keys/guitar texture",
+    "pre_chorus": "rising harmonic density without tempo change",
+    "chorus": "stronger low end and Brazilian funk-informed percussion while preserving R&B vocal space"
+  },
+  "mix_targets": {
+    "lead_vocal_priority": true,
+    "avoid_harsh_sibilance": true,
+    "avoid_audible_pitch_steps": true,
+    "preserve_breath_and_microdynamics": true
+  },
+  "constraints": {
+    "same_seed_when_provider_supports_it": true,
+    "no_manual_post_fix_before_scoring": true,
+    "retain_raw_provider_output": true
+  }
+}
