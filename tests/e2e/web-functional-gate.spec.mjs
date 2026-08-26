@@ -71,7 +71,7 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await expect(clean).toHaveClass(/on/);
   await clean.click();
   await expect(page.locator('[data-action="effect"][data-value="clean"]')).not.toHaveClass(/on/);
-  await page.locator('[data-action="effect"][data-value="clean"]').click();
+  await page.locator('[data-action="effect"][data-value="clean"]') .click();
   await expect(page.locator('[data-action="effect"][data-value="clean"]')).toHaveClass(/on/);
   await page.locator('[data-action="ab"][data-value="original"]').click();
   await expect(page.locator('[data-action="ab"][data-value="original"]')).toHaveClass(/active/);
