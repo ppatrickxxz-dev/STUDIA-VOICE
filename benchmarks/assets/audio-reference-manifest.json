@@ -1,0 +1,47 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "frozen_at": "2026-08-26",
+  "status": "vocal-reference-frozen/mix-instrumental-pending",
+  "canonical_vocal": {
+    "source_name": "voz.wav",
+    "role": "reference-vocal",
+    "sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
+    "bytes": 13909412,
+    "container": "wav",
+    "codec": "pcm_s16le",
+    "sample_rate_hz": 40000,
+    "channels": 1,
+    "duration_seconds": 173.866675,
+    "rms_dbfs": -25.202393,
+    "peak_dbfs": -2.131655,
+    "clipped_sample_percent": 0.0,
+    "near_silence_percent": 31.652659
+  },
+  "complementary_vocal": {
+    "source_name": "voz_modelo_complementar_menos_10mb.m4a",
+    "role": "identity-coverage-only",
+    "sha256": "72cc0de6de29318391e12cf5dc01810b3a82b2ea78ff57694faa0a065f1d63ea",
+    "bytes": 8666008,
+    "container": "m4a",
+    "codec": "aac",
+    "sample_rate_hz": 44100,
+    "channels": 1,
+    "duration_seconds": 704.810998,
+    "rms_dbfs": -27.299147,
+    "peak_dbfs": -0.378431,
+    "clipped_sample_percent": 0.0,
+    "near_silence_percent": 34.237927,
+    "benchmark_input": false
+  },
+  "policy": {
+    "canonical_vocal_hash_locked": true,
+    "complementary_audio_must_not_replace_canonical_input_mid_run": true,
+    "providers_receive_same_canonical_vocal": true,
+    "binary_audio_not_committed_by_this_manifest": true
+  },
+  "pending": [
+    "reference-mix.wav",
+    "reference-instrumental.wav",
+    "binary ingestion/storage path for canonical reference-vocal.wav"
+  ]
+}
