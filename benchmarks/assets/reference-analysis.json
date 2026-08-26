@@ -1,0 +1,59 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "edit_reference",
+  "status": "verified-core/tempo-supporting/key-unresolved",
+  "scope_tests": ["B02", "B03", "B04", "B06", "B07", "B08", "B09", "B10", "B11", "B12"],
+  "frozen_reference": {
+    "project_id": "d64e4de9-791e-41bc-9307-7957389b2499",
+    "render_job_id": "c2dc5446-021c-46fa-a03f-6cbb2c19e739",
+    "source_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d",
+    "reference_mix_sha256": "4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9",
+    "reference_instrumental_sha256": "4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a",
+    "duration_seconds": 184.96,
+    "sample_rate_hz": 48000,
+    "channels": 2,
+    "bit_depth": 24,
+    "integrated_lufs": -12.07,
+    "true_peak_db": -0.93,
+    "lra": 4.1,
+    "qa_passed": true
+  },
+  "tempo": {
+    "status": "supporting_observation_not_gate",
+    "observed_bpm": 123.04688,
+    "observations": [
+      {
+        "asset_id": "eb90990f-1ff4-459c-85b1-73333dc55f5d",
+        "asset_sha256": "f11cd05dfa81c28d90faf2670b125fa058500225fef85000a60c694835049573",
+        "relation": "same-project sibling instrumental",
+        "duration_seconds": 184.96,
+        "bpm": 123.04688,
+        "bpm_confidence": 0.9182,
+        "engine": "librosa 0.11.0"
+      },
+      {
+        "asset_id": "688de169-4a59-49c0-9dfa-7845b0892ea7",
+        "asset_sha256": "046ca03be99cb5f003992b18fd1918d9415a35906ed7f8748d88c338ccbb3da5",
+        "relation": "same-project sibling instrumental",
+        "duration_seconds": 184.96,
+        "bpm": 123.04688,
+        "bpm_confidence": 0.9202,
+        "engine": "librosa 0.11.0"
+      }
+    ],
+    "rule": "Do not require or rewrite the frozen edit reference to this BPM unless the frozen reference instrumental itself is measured and hash-matched."
+  },
+  "key": {
+    "status": "unresolved_not_gate",
+    "observed_candidate": "G major",
+    "reason": "Key confidence is low (0.0813-0.2238) and G minor scores nearly as highly; no key claim is promoted to benchmark truth.",
+    "rule": "Edit-reference tests preserve the source audio and do not depend on a declared key."
+  },
+  "coherence_rule": {
+    "generation_brief_is_not_reference_metadata": true,
+    "edit_tests_must_not_inherit_generation_bpm": true,
+    "edit_tests_must_not_inherit_generation_key": true,
+    "edit_tests_must_not_inherit_generation_target_duration": true,
+    "correction_made_before_first_provider_output": true
+  }
+}
