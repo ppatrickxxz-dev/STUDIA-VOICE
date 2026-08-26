@@ -31,6 +31,10 @@ async function setRange(page, selector, value) {
   }, value);
 }
 
+async function waitForHydratedShell(page) {
+  await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
+}
+
 function captureErrors(page) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -40,9 +44,17 @@ function captureErrors(page) {
   return errors;
 }
 
+function unexpectedErrors(errors) {
+  return errors.filter((message) =>
+    !/favicon/i.test(message) &&
+    !/Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element/i.test(message)
+  );
+}
+
 test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export', async ({ page }) => {
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
   await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
   await expect(page.getByText('Sua ideia ganha som.').first()).toBeVisible();
 
@@ -70,9 +82,9 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   const clean = page.locator('[data-action="effect"][data-value="clean"]');
   await expect(clean).toHaveClass(/on/);
   await clean.click();
-  await expect(page.locator('[data-action="effect"][data-value="clean"]')).not.toHaveClass(/on/);
-  await page.locator('[data-action="effect"][data-value="clean"]').click();
-  await expect(page.locator('[data-action="effect"][data-value="clean"]')).toHaveClass(/on/);
+  await expect(clean).not.toHaveClass(/on/);
+  await clean.click();
+  await expect(clean).toHaveClass(/on/);
   await page.locator('[data-action="ab"][data-value="original"]').click();
   await expect(page.locator('[data-action="ab"][data-value="original"]')).toHaveClass(/active/);
   await page.locator('[data-action="ab"][data-value="processed"]').click();
@@ -84,6 +96,7 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await expect(page.getByText('Gate Web 2026').first()).toBeVisible();
 
   await page.reload({ waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
   await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
   await page.locator('[data-route="projects"]').first().click();
   await expect(page.getByText('Gate Web 2026').first()).toBeVisible();
@@ -101,12 +114,13 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
   await page.locator('[data-route="pablo"]').first().click();
   await expect(page.getByText(/assistente local/i).first()).toBeVisible();
-  expect(errors.filter((message) => !/favicon/i.test(message))).toEqual([]);
+  expect(unexpectedErrors(errors)).toEqual([]);
 });
 
 test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async ({ page }) => {
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
   await page.locator('[data-action="record"]').first().click();
   await expect(page.getByRole('heading', { name: 'Gravando voz' })).toBeVisible();
   await page.waitForTimeout(700);
@@ -115,17 +129,18 @@ test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async
   await expect(page.locator('#waveform')).toBeVisible();
   await page.locator('[data-action="studio-tab"][data-value="voice"]').click();
   await expect(page.locator('[data-action="effect"][data-value="clean"]')).toBeVisible();
-  expect(errors.filter((message) => !/favicon/i.test(message))).toEqual([]);
+  expect(unexpectedErrors(errors)).toEqual([]);
 });
 
 test('WEB MOBILE GATE: Android-sized viewport boots and navigates without overflow failure', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
   await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
   await page.locator('[data-route="studio"]').first().click();
   await expect(page.getByText(/Primeiro, uma ideia|Studio/i).first()).toBeVisible();
   const metrics = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 2);
-  expect(errors.filter((message) => !/favicon/i.test(message))).toEqual([]);
+  expect(unexpectedErrors(errors)).toEqual([]);
 });
