@@ -68,7 +68,10 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
 
   await page.locator('[data-action="studio-tab"][data-value="voice"]').click();
   const clean = page.locator('[data-action="effect"][data-value="clean"]');
+  await expect(clean).toHaveClass(/on/);
   await clean.click();
+  await expect(page.locator('[data-action="effect"][data-value="clean"]')).not.toHaveClass(/on/);
+  await page.locator('[data-action="effect"][data-value="clean"]').click();
   await expect(page.locator('[data-action="effect"][data-value="clean"]')).toHaveClass(/on/);
   await page.locator('[data-action="ab"][data-value="original"]').click();
   await expect(page.locator('[data-action="ab"][data-value="original"]')).toHaveClass(/active/);
@@ -90,8 +93,7 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await page.locator('[data-action="export"]').first().click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^Gate_Web_2026-.*\.wav$/);
-  const downloadPath = await download.path();
-  expect(downloadPath).toBeTruthy();
+  expect(await download.path()).toBeTruthy();
 
   await page.locator('[data-route="compose"]').first().click();
   await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
