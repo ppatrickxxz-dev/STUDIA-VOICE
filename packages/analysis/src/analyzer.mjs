@@ -1,6 +1,8 @@
 export const AUDIO_ANALYSIS_SCHEMA_VERSION = 1;
 export const AUDIO_ANALYSIS_ENGINE = 'pablovoice.analysis.local-v1';
 
+const sourceAnalysis = new WeakMap();
+
 export function analyzeAudioBuffer(buffer, options = {}) {
   validateBuffer(buffer);
   const sampleRate = Number(buffer.sampleRate);
@@ -90,6 +92,20 @@ export function analysisIsMeasured(result) {
   return Boolean(result && result.schemaVersion === AUDIO_ANALYSIS_SCHEMA_VERSION && result.provenance?.kind === 'measured');
 }
 
+export function registerSourceAnalysis(source, analysis) {
+  if (!isWeakKey(source)) throw new TypeError('Fonte de áudio inválida para registrar análise.');
+  if (!analysisIsMeasured(analysis)) throw new TypeError('Somente análise mensurada pode ser registrada.');
+  sourceAnalysis.set(source, analysis);
+  return analysis;
+}
+
+export function consumeSourceAnalysis(source) {
+  if (!isWeakKey(source)) return null;
+  const analysis = sourceAnalysis.get(source) || null;
+  sourceAnalysis.delete(source);
+  return analysis;
+}
+
 function validateBuffer(buffer) {
   if (!buffer || typeof buffer.getChannelData !== 'function') throw new TypeError('AudioBuffer inválido para análise.');
   if (!Number.isFinite(Number(buffer.sampleRate)) || Number(buffer.sampleRate) <= 0) throw new TypeError('Sample rate inválido.');
@@ -130,4 +146,8 @@ function finite(value, fallback) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function isWeakKey(value) {
+  return (typeof value === 'object' && value !== null) || typeof value === 'function';
 }
