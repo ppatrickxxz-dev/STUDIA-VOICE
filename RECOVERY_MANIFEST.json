@@ -1,0 +1,34 @@
+{
+  "product": "PabloVoice Studio",
+  "recovery_date": "2026-08-26",
+  "canonicalization_status": "IN_PROGRESS",
+  "source_policy": "GitHub becomes the single versioned source of truth; recovered library artifacts are evidence until migrated and verified.",
+  "production_policy": "Do not promote production from compilation, smoke tests, preview success, or unverified Android builds.",
+  "current_truth": {
+    "github_main_before_recovery": "minimal/incomplete",
+    "latest_recovered_runtime_artifact": "PabloVoice_8.1.0_ANDROID_GATE_DIRECT.html",
+    "recovered_runtime_manifest": "RUNTIME_MANIFEST_8.0.6.json",
+    "functional_gate": "NOT_PASSED",
+    "android_physical_gate": "NOT_PASSED",
+    "motion_review_2": "PENDING",
+    "production_promotion": "BLOCKED"
+  },
+  "recovered_capabilities": {
+    "pmi_retrieval": "VALIDATED_IN_RECOVERED_EVIDENCE",
+    "music_arrangement_analysis": "VALIDATED_IN_RECOVERED_EVIDENCE",
+    "voice_ab_fidelity": "VALIDATED_IN_RECOVERED_EVIDENCE",
+    "adaptive_partial_harmony": "VALIDATED_IN_RECOVERED_EVIDENCE",
+    "agent_router": "CANDIDATE",
+    "remote_llm_provider": "NOT_VERIFIED_CONFIGURED",
+    "instrument_lab": "CANDIDATE_ENGINE_EXISTS_PHYSICAL_E2E_MISSING",
+    "podcast_cleanup": "PARTIAL_CANDIDATE",
+    "video_audio_remux": "CANDIDATE_BINARY_CANARY_EXISTS",
+    "android_live_validation": "MISSING"
+  },
+  "priority": {
+    "P0": ["recover source into GitHub", "reproducible build", "render retry/observability", "upload persistence", "record/play/edit/export", "Android physical gate"],
+    "P1": ["Audio Analysis Bus", "Voice Lab", "StemEngine", "Breath/Alignment Intelligence", "Mix Intelligence Graph", "Pablo AI contextual runtime"],
+    "P2": ["Audio-to-Instrument/Sampler", "MIDI/piano roll", "advanced harmony", "Generator Adapter", "Songwriting end-to-end"],
+    "P3": ["Pocket Studio", "pets/companions", "Eras/progression", "visual/industry intelligence"]
+  }
+}
