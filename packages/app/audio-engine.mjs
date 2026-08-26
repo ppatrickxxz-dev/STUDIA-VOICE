@@ -13,14 +13,17 @@ export class PabloAudioEngine {
     this.generation = 0;
   }
 
-  async audioContext() {
+  async audioContext({ resume = true } = {}) {
     if (!this.context) this.context = new (globalThis.AudioContext || globalThis.webkitAudioContext)();
-    if (this.context.state === 'suspended') await this.context.resume();
+    if (resume && this.context.state === 'suspended') await this.context.resume();
     return this.context;
   }
 
   async decode(trackId, blob) {
-    const context = await this.audioContext();
+    // Decoding does not require an audible/resumed AudioContext. Keeping the
+    // context suspended here is essential for project restoration on reload,
+    // where browser autoplay policy provides no user gesture to unlock audio.
+    const context = await this.audioContext({ resume: false });
     const started = performance.now();
     const buffer = await context.decodeAudioData(await blob.arrayBuffer());
     this.buffers.set(trackId, buffer);
@@ -272,4 +275,3 @@ function normalizeInPlace(buffer, target) {
 function pitchRate(semitones) {
   return 2 ** (Number(semitones || 0) / 12);
 }
-
