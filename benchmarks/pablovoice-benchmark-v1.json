@@ -19,23 +19,38 @@
     "artifact_rate": {"max_percent": 3.0, "required": true}
   },
   "score_scale": {"min": 0, "max": 10},
+  "input_domains": {
+    "generation_target": {
+      "tests": ["B01", "B05"],
+      "brief": "benchmarks/assets/frozen-brief.json",
+      "lyrics": "benchmarks/assets/frozen-lyrics.txt",
+      "rule": "BPM, key and target duration are generation targets, not metadata for the edit reference."
+    },
+    "edit_reference": {
+      "tests": ["B02", "B03", "B04", "B06", "B07", "B08", "B09", "B10", "B11", "B12"],
+      "analysis": "benchmarks/assets/reference-analysis.json",
+      "binary_manifest": "benchmarks/assets/binary-reference-manifest.json",
+      "rule": "Preserve the frozen reference lineage. Do not inherit generation-target BPM, key or target duration."
+    }
+  },
   "tests": [
-    {"id":"B01","name":"Full song generation","task":"Generate a complete song from the frozen lyric, BPM, key, structure and style brief.","metrics":["musicality","structure_adherence","lyric_adherence","pt_br_prosody","mix_coherence"]},
-    {"id":"B02","name":"Section replacement","task":"Replace only the selected verse while preserving every unselected region.","metrics":["section_accuracy","continuity","boundary_cleanliness","lyric_adherence"],"hard_gate":"section_replacement"},
-    {"id":"B03","name":"Lyric correction in place","task":"Change one lyric line without rebuilding the instrumental or neighboring vocal phrasing.","metrics":["edit_locality","continuity","prosody","boundary_cleanliness"]},
-    {"id":"B04","name":"Vocal identity preservation","task":"Regenerate a vocal phrase while preserving the frozen reference vocal identity.","metrics":["timbre_similarity","formant_stability","performance_naturalness","speaker_consistency"],"hard_gate":"vocal_identity"},
-    {"id":"B05","name":"PT-BR prosody","task":"Sing the frozen Brazilian Portuguese passage naturally, preserving stress, contractions and colloquial flow.","metrics":["stress_accuracy","phoneme_naturalness","word_timing","colloquial_flow"],"hard_gate":"pt_br_prosody"},
-    {"id":"B06","name":"Pitch and note correction","task":"Correct pitch and target notes without robotic timbre or loss of expressive detail.","metrics":["intonation","timbre_preservation","vibrato_naturalness","artifact_rate"]},
-    {"id":"B07","name":"Harmony generation","task":"Generate discreet high and low harmonies aligned to the lead vocal.","metrics":["harmonic_correctness","timing_alignment","blend","lead_preservation"]},
-    {"id":"B08","name":"Arrangement change","task":"Change arrangement characteristics while preserving melody, lyric, vocal identity and song form.","metrics":["arrangement_adherence","melody_preservation","vocal_identity","continuity"]},
-    {"id":"B09","name":"Stem separation and reconstruction","task":"Separate stems and reconstruct the mix with minimal leakage and phase damage.","metrics":["stem_isolation","leakage","phase_integrity","reconstruction_similarity"]},
-    {"id":"B10","name":"Conversational edit execution","task":"Execute a natural-language edit request correctly without requiring technical DAW terminology.","metrics":["intent_understanding","operation_accuracy","edit_locality","result_quality"]},
-    {"id":"B11","name":"Continuity under repeated edits","task":"Apply three sequential local edits while preserving the global identity of the song.","metrics":["continuity","identity_drift","mix_drift","boundary_cleanliness"],"hard_gate":"continuity"},
-    {"id":"B12","name":"Export integrity","task":"Export master and stems with correct duration, sample format, channel layout and no added truncation or clipping.","metrics":["duration_integrity","format_integrity","clipping","stem_alignment"]}
+    {"id":"B01","input_domain":"generation_target","name":"Full song generation","task":"Generate a complete song from the frozen generation-target lyric, BPM, key, structure and style brief.","metrics":["musicality","structure_adherence","lyric_adherence","pt_br_prosody","mix_coherence"]},
+    {"id":"B02","input_domain":"edit_reference","name":"Section replacement","task":"Replace only the selected verse while preserving every unselected region.","metrics":["section_accuracy","continuity","boundary_cleanliness","lyric_adherence"],"hard_gate":"section_replacement"},
+    {"id":"B03","input_domain":"edit_reference","name":"Lyric correction in place","task":"Change one lyric line without rebuilding the instrumental or neighboring vocal phrasing.","metrics":["edit_locality","continuity","prosody","boundary_cleanliness"]},
+    {"id":"B04","input_domain":"edit_reference","name":"Vocal identity preservation","task":"Regenerate a vocal phrase while preserving the frozen reference vocal identity.","metrics":["timbre_similarity","formant_stability","performance_naturalness","speaker_consistency"],"hard_gate":"vocal_identity"},
+    {"id":"B05","input_domain":"generation_target","name":"PT-BR prosody","task":"Sing the frozen Brazilian Portuguese generation-target passage naturally, preserving stress, contractions and colloquial flow.","metrics":["stress_accuracy","phoneme_naturalness","word_timing","colloquial_flow"],"hard_gate":"pt_br_prosody"},
+    {"id":"B06","input_domain":"edit_reference","name":"Pitch and note correction","task":"Correct pitch and target notes in the frozen reference without robotic timbre or loss of expressive detail.","metrics":["intonation","timbre_preservation","vibrato_naturalness","artifact_rate"]},
+    {"id":"B07","input_domain":"edit_reference","name":"Harmony generation","task":"Generate discreet high and low harmonies aligned to the frozen reference lead vocal.","metrics":["harmonic_correctness","timing_alignment","blend","lead_preservation"]},
+    {"id":"B08","input_domain":"edit_reference","name":"Arrangement change","task":"Change arrangement characteristics while preserving melody, lyric, vocal identity and song form of the frozen reference.","metrics":["arrangement_adherence","melody_preservation","vocal_identity","continuity"]},
+    {"id":"B09","input_domain":"edit_reference","name":"Stem separation and reconstruction","task":"Separate frozen-reference stems and reconstruct the mix with minimal leakage and phase damage.","metrics":["stem_isolation","leakage","phase_integrity","reconstruction_similarity"]},
+    {"id":"B10","input_domain":"edit_reference","name":"Conversational edit execution","task":"Execute a frozen natural-language edit request against the reference correctly without requiring technical DAW terminology.","metrics":["intent_understanding","operation_accuracy","edit_locality","result_quality"]},
+    {"id":"B11","input_domain":"edit_reference","name":"Continuity under repeated edits","task":"Apply three sequential local edits to the frozen reference while preserving the global identity of the song.","metrics":["continuity","identity_drift","mix_drift","boundary_cleanliness"],"hard_gate":"continuity"},
+    {"id":"B12","input_domain":"edit_reference","name":"Export integrity","task":"Export frozen-reference master and stems with correct duration, sample format, channel layout and no added truncation or clipping.","metrics":["duration_integrity","format_integrity","clipping","stem_alignment"]}
   ],
   "required_assets": {
     "lyrics": "benchmarks/assets/frozen-lyrics.txt",
-    "brief": "benchmarks/assets/frozen-brief.json",
+    "generation_brief": "benchmarks/assets/frozen-brief.json",
+    "reference_analysis": "benchmarks/assets/reference-analysis.json",
     "binary_manifest": "benchmarks/assets/binary-reference-manifest.json",
     "reference_vocal": "assets.vocal_provider_input",
     "reference_mix": "assets.reference_mix",
