@@ -98,13 +98,28 @@ export class PabloAudioEngine {
     if (!tracks.length) throw new Error('Nenhuma faixa disponível para exportação.');
     const preset = EXPORT_PRESETS[presetName] || EXPORT_PRESETS.demo;
     const duration = Math.max(0.02, this.duration(project));
-    const channels = Math.max(1, Math.min(2, ...tracks.map((track) => this.buffers.get(track.id).numberOfChannels)));
+    const channels = Math.max(1, Math.min(2, Math.max(...tracks.map((track) => this.buffers.get(track.id).numberOfChannels))));
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(channels, frames, preset.sampleRate);
     const master = createMaster(offline, offline.destination);
     for (const track of tracks) createTrackSources(offline, this.buffers.get(track.id), track, 'processed', 0, 0, master);
     const rendered = await offline.startRendering();
     normalizeInPlace(rendered, preset.peak);
+    return rendered;
+  }
+
+  async renderTrack(project, trackId, presetName = 'demo') {
+    const track = (project?.tracks || []).find((candidate) => candidate.id === trackId);
+    const buffer = track && this.buffers.get(track.id);
+    if (!track || !buffer) throw new Error('Faixa não disponível para exportação.');
+    const preset = EXPORT_PRESETS[presetName] || EXPORT_PRESETS.demo;
+    const duration = Math.max(0.02, this.duration(project));
+    const frames = Math.ceil(duration * preset.sampleRate);
+    const offline = new OfflineAudioContext(2, frames, preset.sampleRate);
+    createTrackSources(offline, buffer, track, 'processed', 0, 0, offline.destination);
+    const rendered = await offline.startRendering();
+    const peak = peakOf(rendered);
+    if (peak > 1.0001) throw new Error(`A faixa “${track.name || track.id}” ultrapassa 0 dBFS. Abaixe o ganho antes de exportar stems.`);
     return rendered;
   }
 }
