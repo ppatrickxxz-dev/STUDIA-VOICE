@@ -1,4 +1,4 @@
-const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r2';
+const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r3';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './storage.mjs', './recording.mjs',
   './audio-engine.mjs', './manifest.webmanifest', './core/src/project.mjs',
@@ -22,7 +22,21 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith((async () => {
     try {
-      const response = await fetch(event.request);
+      // A controlled reload may carry conditional cache headers and make a simple
+      // static server answer 304. A service worker must not hand that bare 304
+      // back as the navigation body, otherwise the boot HTML can remain visible
+      // without the module graph being re-executed. Force a fresh document response.
+      const networkRequest = event.request.mode === 'navigate'
+        ? new Request(event.request, { cache: 'reload' })
+        : event.request;
+      let response = await fetch(networkRequest);
+
+      if (response.status === 304) {
+        const cached304 = await caches.match(event.request);
+        if (cached304) return cached304;
+        response = await fetch(new Request(event.request, { cache: 'reload' }));
+      }
+
       if (response.ok) {
         const cache = await caches.open(CACHE);
         await cache.put(event.request, response.clone());
