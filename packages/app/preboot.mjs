@@ -33,6 +33,8 @@ function fallbackShell() {
 }
 
 try {
+  const { installAudioPlaybackRecovery, installPhysicalGateRuntime } = await import('./physical-gate-runtime.mjs');
+  installAudioPlaybackRecovery();
   await import('./app.js');
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
   const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
@@ -42,6 +44,7 @@ try {
   installBreathReviewUI();
   installAdvancedAIStudio();
   installRuntimeCapabilityStatus();
+  installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
   console.error('PABLOVOICE_BOOT_IMPORT_FAILED', error);
