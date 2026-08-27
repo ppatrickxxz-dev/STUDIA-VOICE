@@ -1,4 +1,3 @@
-import { snapshotProject } from './core/src/project.mjs';
 import { normalizeSamplerState } from './sampler-engine.mjs';
 import {
   activeBeatStepCount,
@@ -10,7 +9,7 @@ import {
   setBeatHumanize,
 } from './beat-lab-engine.mjs';
 
-export function applyPabloBeatOperation(project, operation = {}) {
+export async function applyPabloBeatOperation(project, operation = {}) {
   if (!project || typeof project !== 'object') return blocked('project_required', 'Crie ou abra um projeto primeiro.');
   const sampler = normalizeSamplerState(project.sampler || {});
   if (!sampler.pads.length) return blocked('sampler_required', 'Crie pads no Sampler primeiro. O Pablo não inventou sons fora do seu projeto.');
@@ -69,7 +68,7 @@ export function applyPabloBeatOperation(project, operation = {}) {
 
   const next = structuredClone(project);
   next.beatLab = normalizeBeatLabState(beat, sampler);
-  const saved = snapshotProject(next, label);
+  const saved = await snapshotProjectCompat(next, label);
   return {
     ok: true,
     mutated: true,
@@ -88,6 +87,18 @@ export function applyPabloBeatOperation(project, operation = {}) {
       })),
     },
   };
+}
+
+async function snapshotProjectCompat(project, label) {
+  for (const specifier of ['./core/src/project.mjs', '../core/src/project.mjs']) {
+    try {
+      const module = await import(specifier);
+      if (typeof module.snapshotProject === 'function') return module.snapshotProject(project, label);
+    } catch {
+      // Packaged runtime and source tests place the canonical core package at different roots.
+    }
+  }
+  throw new Error('Canonical project snapshot runtime is unavailable.');
 }
 
 function blocked(reason, reply, extra = {}) {
