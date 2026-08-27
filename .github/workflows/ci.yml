@@ -2,7 +2,7 @@ name: PabloVoice CI
 
 on:
   push:
-    branches: [main, develop, 'integration/**', 'feature/**', 'release/**']
+    branches: [main, develop, 'integration/**', 'feature/**', 'fix/**', 'release/**']
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -83,8 +83,12 @@ jobs:
         with:
           name: pablovoice-android-validation-${{ github.sha }}
           path: artifacts/android
-      - name: Install visual evidence dependency
-        run: sudo apt-get update && sudo apt-get install -y imagemagick
+      - uses: android-actions/setup-android@v3
+      - name: Install emulator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          sdkmanager 'platform-tools' 'emulator' 'system-images;android-35;default;x86_64'
       - name: Resolve validation APK
         run: find artifacts/android -name app-debug.apk -type f -print -quit | tee /tmp/pv-apk-path
       - name: Enable KVM acceleration when available
@@ -96,20 +100,49 @@ jobs:
             ls -l /dev/kvm
             echo 'KVM acceleration enabled for emulator gate.'
           else
-            echo 'KVM device unavailable; emulator runner will use its supported fallback.'
+            echo 'KVM device unavailable; emulator will use software fallback.'
           fi
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash scripts/android-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+      - name: Create and boot Android emulator deterministically
+        run: |
+          echo no | avdmanager create avd --force -n pablovoice-ci --package 'system-images;android-35;default;x86_64' --device 'pixel_6'
+          adb start-server
+          nohup emulator @pablovoice-ci -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics > /tmp/pablovoice-emulator.log 2>&1 &
+          echo $! > /tmp/pablovoice-emulator.pid
+
+          booted=0
+          for attempt in $(seq 1 120); do
+            state="$(adb get-state 2>/dev/null || true)"
+            completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            if [ "$state" = "device" ] && [ "$completed" = "1" ]; then
+              booted=1
+              break
+            fi
+            if [ "$state" = "offline" ]; then
+              adb reconnect offline >/dev/null 2>&1 || true
+            fi
+            sleep 5
+          done
+
+          if [ "$booted" != "1" ]; then
+            echo 'Android emulator did not become ready.'
+            adb devices -l || true
+            tail -n 250 /tmp/pablovoice-emulator.log || true
+            exit 1
+          fi
+
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb devices -l
+          echo 'Android emulator ready.'
+      - name: Run Android functional gate
+        run: bash scripts/android-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pablovoice-android-emulator-evidence-${{ github.sha }}
-          path: test-results/android-emulator
+          path: |
+            test-results/android-emulator
+            /tmp/pablovoice-emulator.log
           if-no-files-found: warn
           retention-days: 14
