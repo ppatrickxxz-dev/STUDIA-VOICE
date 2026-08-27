@@ -1,0 +1,302 @@
+import { activeProjectSessionId, getAudioAsset, getProject, listProjects, saveProject } from './storage.mjs';
+import { analyzeAudioTrack } from './audio-analysis-runtime.mjs';
+import { buildAudioToInstrumentPlan } from './audio/src/sampler/audio-to-instrument.mjs';
+import {
+  createSamplerState,
+  normalizeSamplerState,
+  samplerPadDuration,
+  selectSamplerPad,
+  updateSamplerPad,
+} from './sampler-engine.mjs';
+
+let mounted = false;
+let busy = false;
+let activeProject = null;
+let samplerState = null;
+let audioContext = null;
+const decodedAssets = new Map();
+
+export function installSampler() {
+  if (mounted) return;
+  mounted = true;
+  injectStyles();
+  const observer = new MutationObserver(mountEntryPoint);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('click', onClick);
+  document.addEventListener('change', onChange);
+  mountEntryPoint();
+}
+
+function mountEntryPoint() {
+  const actions = document.querySelector('.pv-studio-actions');
+  if (!actions || actions.querySelector('[data-sampler-open]')) return;
+  const button = document.createElement('button');
+  button.className = 'pv-btn';
+  button.dataset.samplerOpen = 'true';
+  button.textContent = '▦ Sampler';
+  actions.insertBefore(button, actions.lastElementChild || null);
+}
+
+async function onClick(event) {
+  const open = event.target.closest('[data-sampler-open]');
+  if (open) {
+    await openSampler(open);
+    return;
+  }
+  if (event.target.closest('[data-sampler-close]')) {
+    document.querySelector('[data-sampler-panel]')?.remove();
+    return;
+  }
+  const reslice = event.target.closest('[data-sampler-reslice]');
+  if (reslice && !busy) {
+    await rebuildFromActiveTrack(reslice);
+    return;
+  }
+  const padButton = event.target.closest('[data-sampler-pad]');
+  if (padButton && samplerState) {
+    samplerState = selectSamplerPad(samplerState, padButton.dataset.samplerPad);
+    renderSampler();
+    const pad = samplerState.pads.find((item) => item.id === samplerState.selectedPadId);
+    if (pad) await auditionPad(pad);
+  }
+}
+
+async function onChange(event) {
+  const input = event.target.closest('[data-sampler-field]');
+  if (!input || !samplerState?.selectedPadId || !activeProject) return;
+  const field = input.dataset.samplerField;
+  const value = Number(input.value);
+  if (!Number.isFinite(value)) return;
+  const pad = samplerState.pads.find((item) => item.id === samplerState.selectedPadId);
+  if (!pad) return;
+  const patch = { [field]: value };
+  if (field === 'start' && value >= pad.end) patch.start = Math.max(0, pad.end - 0.01);
+  if (field === 'end' && value <= pad.start) patch.end = pad.start + 0.01;
+  samplerState = updateSamplerPad(samplerState, pad.id, patch);
+  activeProject.sampler = samplerState;
+  activeProject.updatedAt = Date.now();
+  await saveProject(activeProject);
+  renderSampler();
+}
+
+async function openSampler(button) {
+  if (busy) return;
+  busy = true;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = 'Abrindo…';
+  try {
+    activeProject = await currentProject();
+    if (!activeProject) throw new Error('Crie ou abra um projeto antes de usar o Sampler.');
+    samplerState = activeProject.sampler ? normalizeSamplerState(activeProject.sampler) : null;
+    if (!samplerState?.pads?.length) await rebuildSamplerState();
+    ensurePanel();
+    renderSampler();
+  } catch (error) {
+    console.error('SAMPLER_OPEN_FAILED', error);
+    toast(error?.message || 'Não consegui abrir o Sampler.', 'error');
+  } finally {
+    busy = false;
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+async function rebuildFromActiveTrack(button) {
+  busy = true;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = 'Recortando…';
+  try {
+    activeProject = await currentProject();
+    if (!activeProject) throw new Error('Abra um projeto primeiro.');
+    await rebuildSamplerState();
+    renderSampler();
+    toast(`${samplerState.pads.length} pad(s) preparados a partir dos transientes.`, 'ok');
+  } catch (error) {
+    console.error('SAMPLER_RESLICE_FAILED', error);
+    toast(error?.message || 'Não consegui recortar essa faixa.', 'error');
+  } finally {
+    busy = false;
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+async function rebuildSamplerState() {
+  const track = activeProject.tracks?.find((item) => item.id === activeProject.activeTrackId) || activeProject.tracks?.[0];
+  if (!track?.assetId) throw new Error('Escolha uma faixa de áudio primeiro.');
+  const analysis = await analyzeAudioTrack(track);
+  const plan = buildAudioToInstrumentPlan(analysis, { minConfidence: 0.45, minSliceSeconds: 0.04 });
+  samplerState = createSamplerState(plan, { maxPads: 16 });
+  if (!samplerState.pads.length) {
+    throw new Error('Não encontrei cortes confiáveis nessa faixa. Tente um áudio com ataques mais definidos.');
+  }
+  activeProject.sampler = samplerState;
+  activeProject.updatedAt = Date.now();
+  await saveProject(activeProject);
+}
+
+function ensurePanel() {
+  if (document.querySelector('[data-sampler-panel]')) return;
+  const panel = document.createElement('section');
+  panel.className = 'pv-sampler-panel';
+  panel.dataset.samplerPanel = 'true';
+  panel.innerHTML = `
+    <div class="pv-sampler-card" role="dialog" aria-modal="true" aria-label="Sampler">
+      <header class="pv-sampler-head">
+        <div><strong>Sampler</strong><small data-sampler-summary></small></div>
+        <button class="pv-btn" type="button" data-sampler-close>Fechar</button>
+      </header>
+      <div class="pv-sampler-tools">
+        <button class="pv-btn" type="button" data-sampler-reslice>↻ Recortar faixa ativa</button>
+        <span>Toque nos pads para ouvir cada corte.</span>
+      </div>
+      <div class="pv-sampler-grid" data-sampler-grid></div>
+      <div class="pv-sampler-edit" data-sampler-edit></div>
+    </div>`;
+  document.body.appendChild(panel);
+}
+
+function renderSampler() {
+  ensurePanel();
+  const state = normalizeSamplerState(samplerState || {});
+  samplerState = state;
+  const summary = document.querySelector('[data-sampler-summary]');
+  if (summary) summary.textContent = `${state.pads.length} pads · cortes do áudio do projeto`;
+  const grid = document.querySelector('[data-sampler-grid]');
+  if (grid) {
+    grid.replaceChildren();
+    state.pads.forEach((pad, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pv-sampler-pad';
+      if (pad.id === state.selectedPadId) button.classList.add('active');
+      button.dataset.samplerPad = pad.id;
+      button.setAttribute('aria-pressed', pad.id === state.selectedPadId ? 'true' : 'false');
+      const name = document.createElement('b');
+      name.textContent = pad.label;
+      const info = document.createElement('small');
+      info.textContent = `${index + 1} · ${samplerPadDuration(pad).toFixed(2)}s`;
+      button.append(name, info);
+      grid.appendChild(button);
+    });
+  }
+  renderEditor(state);
+}
+
+function renderEditor(state) {
+  const edit = document.querySelector('[data-sampler-edit]');
+  if (!edit) return;
+  edit.replaceChildren();
+  const pad = state.pads.find((item) => item.id === state.selectedPadId);
+  if (!pad) {
+    edit.textContent = 'Nenhum pad selecionado.';
+    return;
+  }
+  const title = document.createElement('div');
+  title.className = 'pv-sampler-edit-title';
+  title.textContent = `${pad.label} · ajuste sem alterar o áudio original`;
+  edit.appendChild(title);
+  const fields = [
+    ['start', 'Começo', pad.start, 0, Math.max(pad.end - 0.01, 0), 0.01],
+    ['end', 'Fim', pad.end, pad.start + 0.01, pad.end + Math.max(1, samplerPadDuration(pad)), 0.01],
+    ['gain', 'Volume', pad.gain, 0, 2, 0.05],
+    ['fadeIn', 'Entrada suave', pad.fadeIn, 0, Math.max(0.01, samplerPadDuration(pad) / 2), 0.005],
+    ['fadeOut', 'Saída suave', pad.fadeOut, 0, Math.max(0.01, samplerPadDuration(pad) / 2), 0.005],
+  ];
+  const wrap = document.createElement('div');
+  wrap.className = 'pv-sampler-fields';
+  for (const [field, label, value, min, max, step] of fields) {
+    const row = document.createElement('label');
+    row.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.dataset.samplerField = field;
+    input.value = Number(value).toFixed(field === 'gain' ? 2 : 3);
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    row.appendChild(input);
+    wrap.appendChild(row);
+  }
+  edit.appendChild(wrap);
+}
+
+async function auditionPad(pad) {
+  const assetId = pad.sourceAssetId || samplerState?.sourceAssetId;
+  if (!assetId) return;
+  const buffer = await decodedAudio(assetId);
+  const context = ensureAudioContext();
+  await context.resume?.();
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  source.buffer = buffer;
+  source.playbackRate.value = pad.playbackRate || 1;
+  source.connect(gain).connect(context.destination);
+  const duration = Math.max(0.01, Math.min(buffer.duration - pad.start, pad.end - pad.start));
+  const now = context.currentTime;
+  const level = Math.max(0.0001, pad.gain || 0.0001);
+  const fadeIn = Math.min(pad.fadeIn || 0, duration / 2);
+  const fadeOut = Math.min(pad.fadeOut || 0, duration / 2);
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(fadeIn > 0 ? 0.0001 : level, now);
+  if (fadeIn > 0) gain.gain.linearRampToValueAtTime(level, now + fadeIn);
+  if (fadeOut > 0) {
+    gain.gain.setValueAtTime(level, Math.max(now + fadeIn, now + duration - fadeOut));
+    gain.gain.linearRampToValueAtTime(0.0001, now + duration);
+  }
+  source.start(0, Math.max(0, pad.start), duration);
+}
+
+async function decodedAudio(assetId) {
+  if (decodedAssets.has(assetId)) return decodedAssets.get(assetId);
+  const asset = await getAudioAsset(assetId);
+  if (!asset?.blob) throw new Error('O áudio desse pad não está disponível no aparelho.');
+  const bytes = await asset.blob.arrayBuffer();
+  const buffer = await ensureAudioContext().decodeAudioData(bytes.slice(0));
+  decodedAssets.set(assetId, buffer);
+  return buffer;
+}
+
+function ensureAudioContext() {
+  if (audioContext && audioContext.state !== 'closed') return audioContext;
+  const AudioCtx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AudioCtx) throw new Error('A reprodução de samples não está disponível neste aparelho.');
+  audioContext = new AudioCtx();
+  return audioContext;
+}
+
+async function currentProject() {
+  const id = activeProjectSessionId();
+  if (id) {
+    const project = await getProject(id);
+    if (project) return project;
+  }
+  return (await listProjects())[0] || null;
+}
+
+function toast(message, kind = '') {
+  const wrap = document.querySelector('[data-toasts]');
+  if (!wrap) return;
+  const item = document.createElement('div');
+  item.className = `pv-toast ${kind}`;
+  item.textContent = message;
+  wrap.appendChild(item);
+  setTimeout(() => item.remove(), 3500);
+}
+
+function injectStyles() {
+  if (document.querySelector('[data-sampler-style]')) return;
+  const style = document.createElement('style');
+  style.dataset.samplerStyle = 'true';
+  style.textContent = `
+    .pv-sampler-panel{position:fixed;inset:0;z-index:80;background:rgba(4,5,10,.76);display:grid;place-items:end center;padding:16px}
+    .pv-sampler-card{width:min(760px,100%);max-height:88vh;overflow:auto;background:#10121b;border:1px solid rgba(255,255,255,.14);border-radius:22px;padding:16px;box-shadow:0 28px 80px rgba(0,0,0,.45)}
+    .pv-sampler-head,.pv-sampler-tools{display:flex;align-items:center;justify-content:space-between;gap:12px}.pv-sampler-head small{display:block;opacity:.68;margin-top:3px}.pv-sampler-tools{margin:14px 0;font-size:12px;opacity:.88}
+    .pv-sampler-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.pv-sampler-pad{min-height:76px;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:#191c29;color:inherit;text-align:left;padding:12px;touch-action:manipulation}.pv-sampler-pad.active{outline:2px solid currentColor}.pv-sampler-pad b,.pv-sampler-pad small{display:block}.pv-sampler-pad small{opacity:.62;margin-top:6px}
+    .pv-sampler-edit{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}.pv-sampler-edit-title{font-size:13px;margin-bottom:10px}.pv-sampler-fields{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.pv-sampler-fields label{font-size:11px;opacity:.82}.pv-sampler-fields input{width:100%;margin-top:5px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:#090a10;color:inherit;padding:9px}
+    @media(max-width:620px){.pv-sampler-panel{padding:8px}.pv-sampler-card{border-radius:18px}.pv-sampler-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.pv-sampler-pad{min-height:68px;padding:9px}.pv-sampler-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.pv-sampler-tools span{display:none}}
+  `;
+  document.head.appendChild(style);
+}
