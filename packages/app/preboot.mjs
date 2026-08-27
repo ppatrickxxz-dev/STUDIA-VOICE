@@ -39,11 +39,13 @@ try {
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
   const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
+  const { installAcousticEvidenceStatusUI } = await import('./acoustic-evidence-status-ui.mjs');
   const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
   const { installRemoteAuthUI } = await import('./remote-auth-ui.mjs');
   installPabloConversationUI();
   installBreathReviewUI();
   installAdvancedAIStudio();
+  installAcousticEvidenceStatusUI();
   installRuntimeCapabilityStatus();
   installRemoteAuthUI();
   installPhysicalGateRuntime();
