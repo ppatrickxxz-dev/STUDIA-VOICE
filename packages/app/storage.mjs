@@ -33,6 +33,16 @@ export function activeProjectSessionId() {
   catch { return null; }
 }
 
+export function sortProjectsByContext(projects = [], activeId = null) {
+  return [...projects].sort((a, b) => {
+    if (activeId) {
+      if (a.id === activeId && b.id !== activeId) return -1;
+      if (b.id === activeId && a.id !== activeId) return 1;
+    }
+    return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+  });
+}
+
 export async function saveProject(project) {
   const clean = migrateProject(project);
   await put('projects', clean);
@@ -51,18 +61,13 @@ export async function getProject(id) {
 export async function listProjects() {
   const values = await all('projects');
   const activeId = activeProjectSessionId();
-  return values.map((raw) => {
+  const projects = values.map((raw) => {
     const project = migrateProject(raw);
     if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
     if (raw.settings) project.legacySettings = raw.settings;
     return project;
-  }).sort((a, b) => {
-    if (activeId) {
-      if (a.id === activeId && b.id !== activeId) return -1;
-      if (b.id === activeId && a.id !== activeId) return 1;
-    }
-    return b.updatedAt - a.updatedAt;
   });
+  return sortProjectsByContext(projects, activeId);
 }
 
 export async function deleteProject(id) {
