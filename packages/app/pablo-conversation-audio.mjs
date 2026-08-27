@@ -65,9 +65,22 @@ export function interpretPabloAudioMessage(message, context = {}) {
   return unsupported('no_safe_audio_intent');
 }
 
-export async function executePabloAudioMessage(message, context, { audioToolRuntime, executeDeterministicEdit } = {}) {
+export async function executePabloAudioMessage(message, context, {
+  audioToolRuntime,
+  executeDeterministicEdit,
+  persistAuthorialMemory,
+} = {}) {
   const music = await tryMusicIntelligence(message, context);
-  if (music?.supported) return { ...music, execution: 'read_only', canApply: false };
+  if (music?.supported) {
+    if (music.kind === 'pmi_authorial_feedback') {
+      if (typeof persistAuthorialMemory !== 'function') {
+        return { ...music, execution: 'preview_only', canApply: false };
+      }
+      const persistence = await persistAuthorialMemory(music.authorialMemory, music.feedback);
+      return { ...music, persistence, execution: 'allowed', canApply: true };
+    }
+    return { ...music, execution: 'read_only', canApply: false };
+  }
 
   const parsed = interpretPabloAudioMessage(message, context);
   if (!parsed.supported) return parsed;
@@ -93,7 +106,9 @@ export async function executePabloAudioMessage(message, context, { audioToolRunt
 
 async function tryMusicIntelligence(message, context) {
   try {
-    const { respondToMusicCreation } = await import('./music-intelligence/src/index.mjs');
+    const { respondToAuthorialFeedback, respondToMusicCreation } = await import('./music-intelligence/src/index.mjs');
+    const feedback = respondToAuthorialFeedback(message, context);
+    if (feedback?.supported) return feedback;
     return respondToMusicCreation(message, context);
   } catch {
     return null;
