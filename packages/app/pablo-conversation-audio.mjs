@@ -1,4 +1,5 @@
 const pmiSessionCache = new Map();
+const pmiPendingDraftCache = new Map();
 
 export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   voice_forward: 'bring_voice_forward',
@@ -82,6 +83,25 @@ export async function executePabloAudioMessage(message, context, {
       const persistence = await persistAuthorialMemory(music.authorialMemory, music.feedback);
       return { ...music, persistence, execution: 'allowed', canApply: true };
     }
+    if (music.kind === 'pmi_draft_revision_request') {
+      if (typeof generateMusicDraft !== 'function') {
+        return {
+          ...music,
+          reply: 'Entendi a revisão do rascunho, mas o Composer online não está disponível nesta sessão. Mantive a versão atual intacta.',
+          execution: 'preview_only',
+          canApply: false,
+        };
+      }
+      const generated = await generateMusicDraft(music.request);
+      const pending = rememberPendingDraft(context?.projectId, {
+        text: generated?.text,
+        command: music.command,
+        targetSection: music.targetSection,
+        targetGenre: music.targetGenre,
+        pendingVersion: music.pendingVersion,
+      }, { revision: true });
+      return generatedDraftResult(music, generated, pending, { revisionOfPending: true });
+    }
     if (music.kind === 'pmi_generation_request') {
       if (music.blocked) {
         return {
@@ -103,21 +123,13 @@ export async function executePabloAudioMessage(message, context, {
         };
       }
       const generated = await generateMusicDraft(music.request);
-      return {
-        supported: true,
-        kind: 'pmi_generated_draft',
+      const pending = rememberPendingDraft(context?.projectId, {
+        text: generated?.text,
         command: music.command,
         targetSection: music.targetSection,
         targetGenre: music.targetGenre,
-        session: music.session,
-        text: String(generated?.text || '').trim(),
-        reply: String(generated?.text || '').trim(),
-        provider: generated?.provider || null,
-        model: generated?.model || null,
-        execution: 'preview_only',
-        canApply: false,
-        reviewRequired: true,
-      };
+      });
+      return generatedDraftResult(music, generated, pending);
     }
     return { ...music, execution: 'read_only', canApply: false };
   }
@@ -144,16 +156,24 @@ export async function executePabloAudioMessage(message, context, {
   return { ...parsed, result, execution: 'allowed', canApply: true };
 }
 
+export function clearPmiPendingDraft(projectId = '') {
+  const key = String(projectId || '');
+  return key ? pmiPendingDraftCache.delete(key) : false;
+}
+
 async function tryMusicIntelligence(message, context = {}) {
   const intelligence = await loadMusicIntelligence();
   if (!intelligence) return null;
   const projectId = String(context.projectId || '');
-  const enrichedContext = projectId && pmiSessionCache.has(projectId)
-    ? { ...context, pmiSession: pmiSessionCache.get(projectId) }
-    : context;
+  let enrichedContext = { ...context };
+  if (projectId && pmiSessionCache.has(projectId)) enrichedContext.pmiSession = pmiSessionCache.get(projectId);
+  if (projectId && pmiPendingDraftCache.has(projectId)) enrichedContext.pendingDraft = pmiPendingDraftCache.get(projectId);
 
   const feedback = intelligence.respondToAuthorialFeedback(message, enrichedContext);
   if (feedback?.supported) return feedback;
+
+  const revision = intelligence.planPendingDraftRevision(message, enrichedContext);
+  if (revision?.supported) return revision;
 
   const generation = intelligence.planComposerGeneration(message, enrichedContext);
   if (generation?.supported) {
@@ -169,6 +189,44 @@ async function tryMusicIntelligence(message, context = {}) {
 function rememberPmiSession(projectId, session) {
   if (!projectId || !session || session.schema !== 'pmi_music_session_v1') return;
   pmiSessionCache.set(projectId, session);
+}
+
+function rememberPendingDraft(projectId, draft = {}, { revision = false } = {}) {
+  const key = String(projectId || '');
+  const prior = key ? pmiPendingDraftCache.get(key) : null;
+  const text = String(draft.text || '').trim().slice(0, 12000);
+  const baseVersion = Math.max(1, Math.floor(Number(prior?.version || draft.pendingVersion) || 1));
+  const pending = Object.freeze({
+    text,
+    version: revision ? Math.min(99, baseVersion + 1) : 1,
+    command: String(draft.command || prior?.command || '').slice(0, 64) || null,
+    targetSection: String(draft.targetSection || prior?.targetSection || '').slice(0, 64) || null,
+    targetGenre: String(draft.targetGenre || prior?.targetGenre || '').slice(0, 64) || null,
+  });
+  if (key && text) pmiPendingDraftCache.set(key, pending);
+  return pending;
+}
+
+function generatedDraftResult(music, generated, pending, { revisionOfPending = false } = {}) {
+  const text = String(generated?.text || '').trim();
+  return {
+    supported: true,
+    kind: 'pmi_generated_draft',
+    command: music.command,
+    targetSection: music.targetSection,
+    targetGenre: music.targetGenre,
+    session: music.session || null,
+    text,
+    reply: text,
+    provider: generated?.provider || null,
+    model: generated?.model || null,
+    draftVersion: pending?.version || 1,
+    revisionOfPending,
+    previousDraftVersion: revisionOfPending ? Math.max(1, (pending?.version || 2) - 1) : null,
+    execution: 'preview_only',
+    canApply: false,
+    reviewRequired: true,
+  };
 }
 
 async function loadMusicIntelligence() {
