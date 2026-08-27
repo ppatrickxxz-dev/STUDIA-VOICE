@@ -105,14 +105,22 @@ export async function executePabloAudioMessage(message, context, {
 }
 
 async function tryMusicIntelligence(message, context) {
-  try {
-    const { respondToAuthorialFeedback, respondToMusicCreation } = await import('./music-intelligence/src/index.mjs');
-    const feedback = respondToAuthorialFeedback(message, context);
-    if (feedback?.supported) return feedback;
-    return respondToMusicCreation(message, context);
-  } catch {
-    return null;
+  const intelligence = await loadMusicIntelligence();
+  if (!intelligence) return null;
+  const feedback = intelligence.respondToAuthorialFeedback(message, context);
+  if (feedback?.supported) return feedback;
+  return intelligence.respondToMusicCreation(message, context);
+}
+
+async function loadMusicIntelligence() {
+  for (const specifier of ['./music-intelligence/src/index.mjs', '../music-intelligence/src/index.mjs']) {
+    try {
+      return await import(specifier);
+    } catch {
+      // Source tests and packaged runtime resolve the canonical package from different roots.
+    }
   }
+  return null;
 }
 
 function looksLikeDeterministicEdit(text) {
