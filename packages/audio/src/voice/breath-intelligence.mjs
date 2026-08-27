@@ -14,8 +14,8 @@ export function planBreathEdits(analysis, { mode = 'soften', minConfidence = nul
     const reductionDb = mode === 'natural' ? 0 : mode === 'soften' ? -6 : -18;
     return {
       id: event.id || `breath_${index}`,
-      startSeconds: Number(event.startSeconds ?? event.timeSeconds ?? 0),
-      endSeconds: Number(event.endSeconds ?? event.timeSeconds ?? 0),
+      startSeconds: eventTime(event, 'start'),
+      endSeconds: eventTime(event, 'end'),
       confidence,
       decision: effectiveDecision,
       action: mode,
@@ -33,4 +33,12 @@ export function summarizeBreathPlan(plan = []) {
     if (item.automatic) summary.automatic += 1;
     return summary;
   }, { total: 0, automatic: 0, auto: 0, suggest: 0, manual: 0, unknown: 0 });
+}
+
+function eventTime(event, edge) {
+  const candidates = edge === 'start'
+    ? [event.startSeconds, event.start, event.timeSeconds, event.time]
+    : [event.endSeconds, event.end, event.timeSeconds, event.time];
+  const value = candidates.map(Number).find(Number.isFinite);
+  return value ?? 0;
 }
