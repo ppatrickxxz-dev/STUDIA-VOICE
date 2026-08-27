@@ -1,5 +1,9 @@
 export function analyzeTempo(onsets = [], { minBpm = 60, maxBpm = 200, durationSeconds = null } = {}) {
-  const times = onsets.map((event) => typeof event === 'number' ? event : event?.time).filter(Number.isFinite).sort((a,b)=>a-b);
+  const times = onsets
+    .map((event) => typeof event === 'number' ? event : event?.time ?? event?.timeSeconds ?? event?.startSeconds)
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a,b)=>a-b);
   if (times.length < 2) return { bpm: null, confidence: 0, beats: [], tempoMap: [] };
   const intervals = [];
   for (let i = 1; i < times.length; i++) {
