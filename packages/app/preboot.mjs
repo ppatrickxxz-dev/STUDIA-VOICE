@@ -36,8 +36,10 @@ try {
   await import('./app.js');
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
+  const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
   installPabloConversationUI();
   installAdvancedAIStudio();
+  installRuntimeCapabilityStatus();
   fallbackShell();
 } catch (error) {
   console.error('PABLOVOICE_BOOT_IMPORT_FAILED', error);
