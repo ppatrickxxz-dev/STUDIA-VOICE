@@ -9,6 +9,11 @@ export {
   learnAuthorialDecision,
 } from './authorial-memory.mjs';
 export {
+  parseAuthorialFeedback,
+  applyAuthorialFeedback,
+  respondToAuthorialFeedback,
+} from './authorial-feedback.mjs';
+export {
   startCompositionSession,
   critiqueDraft,
   isMusicCreationRequest,
@@ -22,5 +27,6 @@ export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'rhyme_intelligence',
   'draft_critic',
   'authorial_memory',
+  'authorial_feedback',
   'conversational_entrypoint',
 ]);
