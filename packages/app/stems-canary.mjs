@@ -1,5 +1,5 @@
 import { RemoteAuthAdapter } from './remote-auth.mjs';
-import { getAudioAsset, getProject, listProjects } from './storage.mjs';
+import { getAudioAsset, listProjects } from './storage.mjs';
 import { encodeWav } from './audio/src/presets.mjs';
 
 const PROJECT_URL='https://yokmhqoncdwvxmzzybqa.supabase.co';
@@ -22,15 +22,19 @@ async function sha256(blob){const d=await crypto.subtle.digest('SHA-256',await b
 async function wavFromBlob(blob){const C=globalThis.AudioContext||globalThis.webkitAudioContext;if(!C)throw Error('Web Audio indisponível.');const ctx=new C();try{const buffer=await ctx.decodeAudioData((await blob.arrayBuffer()).slice(0));return{blob:new Blob([encodeWav(buffer)],{type:'audio/wav'}),duration:buffer.duration,sampleRate:buffer.sampleRate,channels:Math.min(2,buffer.numberOfChannels)}}finally{await ctx.close().catch(()=>{})}}
 
 async function resolveVisibleProject(){
-  const remembered=localStorage.getItem(ACTIVE_PROJECT_KEY);
-  if(remembered){const project=await getProject(remembered);if(project)return project;localStorage.removeItem(ACTIVE_PROJECT_KEY)}
   const visibleName=document.querySelector('.pv-hero.compact .pv-title')?.textContent?.trim()||'';
   const visibleTrack=document.querySelector('.pv-hero.compact .pv-lead')?.textContent?.trim()||'';
+  if(!visibleName)throw Error('Abra o Studio de um projeto antes do canário.');
   const projects=await listProjects();
-  const candidates=projects.filter((project)=>project?.name===visibleName && project?.tracks?.some((track)=>track.name===visibleTrack));
+  const candidates=projects.filter((project)=>project?.name===visibleName && (visibleTrack ? project?.tracks?.some((track)=>track.name===visibleTrack) : true));
+  const remembered=localStorage.getItem(ACTIVE_PROJECT_KEY);
+  if(remembered){
+    const rememberedVisible=candidates.find((project)=>project.id===remembered);
+    if(rememberedVisible)return rememberedVisible;
+    localStorage.removeItem(ACTIVE_PROJECT_KEY);
+  }
   if(candidates.length===1)return candidates[0];
   if(candidates.length>1)throw Error('Há mais de um projeto compatível com a tela atual. Reabra o projeto antes do canário para evitar enviar o áudio errado.');
-  if(projects.length===1)return projects[0];
   throw Error('Não foi possível identificar com segurança o projeto aberto. Reabra-o em Meus projetos e tente novamente.');
 }
 
