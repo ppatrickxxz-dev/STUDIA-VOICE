@@ -11,15 +11,68 @@ import {
 
 export async function applyPabloBeatOperation(project, operation = {}) {
   if (!project || typeof project !== 'object') return blocked('project_required', 'Crie ou abra um projeto primeiro.');
+  const action = String(operation.action || '');
+
+  if (action === 'mark_section') {
+    const sections = await loadSectionMapRuntime();
+    if (!sections) return blocked('section_map_runtime_unavailable', 'O mapa de seções não está disponível nesta versão. Não alterei o projeto.', { action });
+    const startSeconds = Number(operation.args?.startSeconds);
+    const endSeconds = operation.args?.endSeconds == null ? null : Number(operation.args.endSeconds);
+    if (!Number.isFinite(startSeconds) || startSeconds < 0 || startSeconds > 14400) {
+      return blocked('invalid_section_time', 'O tempo informado para a seção não é válido. Não alterei o projeto.', { action });
+    }
+    if (endSeconds != null && (!Number.isFinite(endSeconds) || endSeconds <= startSeconds || endSeconds > 14400)) {
+      return blocked('invalid_section_range', 'O intervalo informado para a seção não é válido. Não alterei o projeto.', { action });
+    }
+    const kind = sections.normalizeSectionKind(operation.args?.section);
+    if (!kind) return blocked('invalid_section_kind', 'Não reconheci essa seção musical. Não alterei o projeto.', { action });
+    const next = structuredClone(project);
+    next.arrangementMap = sections.upsertConfirmedSection(next.arrangementMap, {
+      kind,
+      startSeconds,
+      endSeconds,
+      source: 'user_manual',
+      confidence: 1,
+    });
+    const label = sections.sectionLabel(kind);
+    const saved = await snapshotProjectCompat(next, `${label} marcado na timeline`);
+    return {
+      ok: true,
+      mutated: true,
+      project: saved,
+      action,
+      reply: `${label} marcado em ${formatSeconds(startSeconds)} como timing manual confirmado.`,
+      data: {
+        projectId: saved.id,
+        section: kind,
+        sectionLabel: label,
+        startSeconds,
+        endSeconds,
+        source: 'user_manual',
+        confidence: 1,
+      },
+    };
+  }
+
   const sampler = normalizeSamplerState(project.sampler || {});
   if (!sampler.pads.length) return blocked('sampler_required', 'Crie pads no Sampler primeiro. O Pablo não inventou sons fora do seu projeto.');
 
-  const action = String(operation.action || '');
   if (action === 'fill_before_section') {
+    const sections = await loadSectionMapRuntime();
+    const target = sections?.findConfirmedSection?.(project.arrangementMap, operation.args?.section || 'chorus', {
+      occurrence: operation.args?.occurrence || 1,
+    });
+    if (!target) {
+      return blocked(
+        'section_mapping_required',
+        'Eu consigo criar uma virada no fim do padrão atual, mas ainda não consigo posicioná-la antes do refrão sem um timing de seção confirmado. Você pode dizer, por exemplo, “marca o refrão em 45 segundos”. Não alterei o projeto.',
+        { action },
+      );
+    }
     return blocked(
-      'section_mapping_required',
-      'Eu consigo criar uma virada no fim do padrão atual, mas ainda não consigo posicioná-la antes do refrão sem um mapa de seções ligado ao Beat Lab. Não alterei o projeto.',
-      { action },
+      'section_fill_runtime_required',
+      `${target.label} está confirmado em ${formatSeconds(target.startSeconds)}. O mapa temporal já está pronto, mas o agendamento da virada nessa posição ainda não foi promovido; mantive o beat intacto.`,
+      { action, targetSection: target },
     );
   }
   if (action === 'genre_pattern') {
@@ -89,6 +142,18 @@ export async function applyPabloBeatOperation(project, operation = {}) {
   };
 }
 
+async function loadSectionMapRuntime() {
+  for (const specifier of ['./core/src/section-map.mjs', '../core/src/section-map.mjs']) {
+    try {
+      const module = await import(specifier);
+      if (typeof module.normalizeArrangementMap === 'function') return module;
+    } catch {
+      // Packaged runtime and source tests place the canonical core package at different roots.
+    }
+  }
+  return null;
+}
+
 async function snapshotProjectCompat(project, label) {
   for (const specifier of ['./core/src/project.mjs', '../core/src/project.mjs']) {
     try {
@@ -99,6 +164,15 @@ async function snapshotProjectCompat(project, label) {
     }
   }
   throw new Error('Canonical project snapshot runtime is unavailable.');
+}
+
+function formatSeconds(value) {
+  const total = Math.max(0, Number(value) || 0);
+  const minutes = Math.floor(total / 60);
+  const seconds = total - minutes * 60;
+  if (!minutes) return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
+  const rendered = seconds.toFixed(seconds % 1 ? 1 : 0).padStart(seconds % 1 ? 4 : 2, '0');
+  return `${minutes}:${rendered}`;
 }
 
 function blocked(reason, reply, extra = {}) {
