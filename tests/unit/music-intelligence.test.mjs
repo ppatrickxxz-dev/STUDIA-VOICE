@@ -1,0 +1,61 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  buildConcept,
+  analyzeRhymeArchitecture,
+  createAuthorialMemory,
+  learnChoice,
+  evaluateAuthorialFit,
+  critiqueLyrics,
+  isMusicCreationRequest,
+  startCompositionSession,
+  respondToMusicCreation,
+} from '../../packages/music-intelligence/src/index.mjs';
+
+test('PMI preserves premise while adding anchors, tension and three directions', () => {
+  const brief = 'Uma viagem que não chegou ao destino; a aventura foi o que aconteceu no caminho.';
+  const result = buildConcept(brief);
+  assert.equal(result.premise, brief);
+  assert.ok(result.emotions.includes('descoberta'));
+  assert.equal(result.directions.length, 3);
+  assert.match(result.tension, /plano inicial/);
+  assert.match(result.payoff, /percurso/);
+});
+
+test('PMI session stays local and plans before forcing full lyrics', () => {
+  const session = startCompositionSession({ brief: 'Um encontro e desencontro durante uma viagem.', genre: 'R&B' });
+  assert.equal(session.phase, 'discover');
+  assert.equal(session.engine, 'pmi-music-1.0');
+  assert.equal(session.authorialGuard.preserveUserLines, true);
+  assert.ok(session.songPlan.structure.includes('pre_refrão'));
+  assert.equal(session.songPlan.hookSeeds.length, 3);
+});
+
+test('PMI recognizes conversational creation requests without hijacking audio edits', () => {
+  assert.equal(isMusicCreationRequest('Pablo, quero fazer uma música sobre uma viagem que deu errado'), true);
+  assert.equal(isMusicCreationRequest('aumenta o volume da faixa'), false);
+  const answer = respondToMusicCreation('Quero criar uma música sobre desejo que a pessoa tenta negar');
+  assert.equal(answer.supported, true);
+  assert.equal(answer.kind, 'pmi_music_session');
+  assert.match(answer.reply, /três caminhos/i);
+});
+
+test('authorial memory remains backward compatible and guards rejected language', () => {
+  let memory = createAuthorialMemory();
+  memory = learnChoice(memory, { decision: 'rejected', category: 'term', value: 'promessa' });
+  memory = learnChoice(memory, { decision: 'accepted', category: 'term', value: 'malícia' });
+  assert.equal(memory.evidenceCount, 2);
+  const fit = evaluateAuthorialFit('Sem promessa, só malícia', memory);
+  assert.equal(fit.passesHardAvoids, false);
+  assert.deepEqual(fit.avoidedHits, ['promessa']);
+  assert.deepEqual(fit.preferredHits, ['malícia']);
+});
+
+test('critic combines meter, rhyme architecture and authorial guard', () => {
+  const draft = `[Verso]\nHoje eu saí sem procurar\nMas dei de cara com você\nUm olhar demorou demais\nPra eu fingir não entender`;
+  const rhyme = analyzeRhymeArchitecture(draft);
+  assert.ok(Number.isFinite(rhyme.singability));
+  const review = critiqueLyrics(draft, { concept: buildConcept('um flerte que começa no olhar') });
+  assert.ok(Array.isArray(review.findings));
+  assert.ok(Number.isFinite(review.metrics.singability));
+});

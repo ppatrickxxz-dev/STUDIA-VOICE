@@ -66,6 +66,9 @@ export function interpretPabloAudioMessage(message, context = {}) {
 }
 
 export async function executePabloAudioMessage(message, context, { audioToolRuntime, executeDeterministicEdit } = {}) {
+  const music = await tryMusicIntelligence(message, context);
+  if (music?.supported) return { ...music, execution: 'read_only', canApply: false };
+
   const parsed = interpretPabloAudioMessage(message, context);
   if (!parsed.supported) return parsed;
 
@@ -86,6 +89,15 @@ export async function executePabloAudioMessage(message, context, { audioToolRunt
 
   const result = await executeDeterministicEdit(message, parsed.trackId);
   return { ...parsed, result, execution: 'allowed', canApply: true };
+}
+
+async function tryMusicIntelligence(message, context) {
+  try {
+    const { respondToMusicCreation } = await import('./music-intelligence/src/index.mjs');
+    return respondToMusicCreation(message, context);
+  } catch {
+    return null;
+  }
 }
 
 function looksLikeDeterministicEdit(text) {
