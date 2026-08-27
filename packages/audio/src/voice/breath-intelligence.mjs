@@ -1,6 +1,7 @@
 import { confidenceDecision, normalizeConfidence } from '../contracts/confidence.mjs';
 
 const MODES = new Set(['natural', 'soften', 'remove']);
+export const BREATH_AUTOMATION_SOURCE = 'pablo-breath-intelligence-v1';
 
 export function planBreathEdits(analysis, { mode = 'soften', minConfidence = null } = {}) {
   if (!analysis?.voice) throw new Error('voice analysis is required');
@@ -33,6 +34,31 @@ export function summarizeBreathPlan(plan = []) {
     if (item.automatic) summary.automatic += 1;
     return summary;
   }, { total: 0, automatic: 0, auto: 0, suggest: 0, manual: 0, unknown: 0 });
+}
+
+export function breathPlanToRegionAutomation(plan = [], { source = BREATH_AUTOMATION_SOURCE } = {}) {
+  return plan
+    .filter((item) => item?.automatic === true && item?.decision === 'auto')
+    .map((item, index) => ({
+      id: String(item.id || `breath_region_${index}`),
+      kind: 'breath-gain',
+      startSeconds: Number(item.startSeconds),
+      endSeconds: Number(item.endSeconds),
+      gainDb: Number(item.reductionDb),
+      confidence: normalizeConfidence(item.confidence) ?? 0,
+      source,
+      enabled: true,
+    }))
+    .filter((item) => Number.isFinite(item.startSeconds)
+      && Number.isFinite(item.endSeconds)
+      && Number.isFinite(item.gainDb)
+      && item.endSeconds > item.startSeconds);
+}
+
+export function replaceBreathAutomation(existing = [], plan = [], options = {}) {
+  const source = options.source || BREATH_AUTOMATION_SOURCE;
+  const preserved = (Array.isArray(existing) ? existing : []).filter((event) => event?.source !== source);
+  return [...preserved, ...breathPlanToRegionAutomation(plan, { source })];
 }
 
 function eventTime(event, edge) {
