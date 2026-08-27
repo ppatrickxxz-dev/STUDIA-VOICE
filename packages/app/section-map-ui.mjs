@@ -22,15 +22,22 @@ const SECTION_OPTIONS = Object.freeze([
 let mounted = false;
 let activeProject = null;
 let editingSectionId = null;
+let lastCursorSeconds = 0;
+let lastCursorProjectId = '';
 
 export function installSectionMapUI() {
   if (mounted) return;
   mounted = true;
   ensureStylesheet();
-  const observer = new MutationObserver(mountEntryPoint);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const observer = new MutationObserver(onDomMutation);
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   document.addEventListener('click', onClick);
   document.addEventListener('submit', onSubmit);
+  onDomMutation();
+}
+
+function onDomMutation() {
+  captureCursorPosition();
   mountEntryPoint();
 }
 
@@ -125,6 +132,7 @@ async function onSubmit(event) {
 
 async function showSectionMap() {
   try {
+    captureCursorPosition();
     activeProject = await currentProject();
     if (!activeProject) throw new Error('Crie ou abra um projeto antes de organizar as seções.');
     activeProject.arrangementMap = normalizeArrangementMap(activeProject.arrangementMap);
@@ -171,7 +179,7 @@ function renderSectionMap() {
           <button class="pv-btn primary" type="submit">${editing ? 'Atualizar' : 'Salvar seção'}</button>
         </div>
       </form>
-      <p class="pv-section-hint">Aceita segundos ou relógio, como 45, 1:12 ou 1:12.5. “Usar cursor” pega a posição atual do Studio.</p>
+      <p class="pv-section-hint">Aceita segundos ou relógio, como 45, 1:12 ou 1:12.5. “Usar cursor” pega a posição atual ou o último ponto ouvido antes de parar.</p>
     </section>
   </section>`;
   document.body.appendChild(overlay);
@@ -219,9 +227,20 @@ async function removeSection(sectionId) {
   }
 }
 
+function captureCursorPosition() {
+  const projectId = String(activeProjectSessionId() || '');
+  if (projectId !== lastCursorProjectId) {
+    lastCursorProjectId = projectId;
+    lastCursorSeconds = 0;
+  }
+  const parsed = parseClockSeconds(document.querySelector('#current-time')?.textContent || '');
+  if (parsed != null && parsed > 0) lastCursorSeconds = parsed;
+}
+
 function currentCursorSeconds() {
-  const text = document.querySelector('#current-time')?.textContent || '0';
-  return parseClockSeconds(text) ?? 0;
+  captureCursorPosition();
+  const live = parseClockSeconds(document.querySelector('#current-time')?.textContent || '');
+  return live != null && live > 0 ? live : lastCursorSeconds;
 }
 
 async function currentProject() {
