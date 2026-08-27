@@ -115,10 +115,9 @@ export async function executePabloAudioMessage(message, context, {
     return { ...direct, execution: 'preview_only', canApply: false };
   }
   if (direct.supported && direct.kind === 'beat_operation') {
-    if (typeof executeBeatOperation !== 'function') {
-      return { ...direct, execution: 'preview_only', canApply: false };
-    }
-    const result = await executeBeatOperation(direct);
+    const executor = typeof executeBeatOperation === 'function' ? executeBeatOperation : executeDefaultBeatOperation;
+    const result = await executor(direct, context);
+    if (!result) return { ...direct, execution: 'preview_only', canApply: false };
     return {
       ...direct,
       result,
@@ -214,6 +213,16 @@ export async function executePabloAudioMessage(message, context, {
 export function clearPmiPendingDraft(projectId = '') {
   const key = String(projectId || '');
   return key ? pmiPendingDraftCache.delete(key) : false;
+}
+
+async function executeDefaultBeatOperation(operation, context = {}) {
+  try {
+    const runtime = await import('./pablo-beat-runtime.mjs');
+    if (typeof runtime.executePersistedPabloBeatOperation !== 'function') return null;
+    return runtime.executePersistedPabloBeatOperation(operation, context);
+  } catch {
+    return null;
+  }
 }
 
 async function tryMusicIntelligence(message, context = {}) {
