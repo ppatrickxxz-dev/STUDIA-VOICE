@@ -2,6 +2,7 @@ import { learnChoice, createAuthorialMemory } from './authorial-memory.mjs';
 
 const REJECT = /^(?:pablo[,\s]*)?(?:não use|nao use|evita|evite|não quero|nao quero|não gosto de|nao gosto de)\s+(?:a\s+palavra\s+|o\s+termo\s+|a\s+expressão\s+|a\s+expressao\s+)?["“']?(.+?)["”']?[.!]?$/i;
 const ACCEPT = /^(?:pablo[,\s]*)?(?:gosto de|prefiro|quero manter|usa mais|use mais)\s+(?:a\s+palavra\s+|o\s+termo\s+|a\s+expressão\s+|a\s+expressao\s+)?["“']?(.+?)["”']?[.!]?$/i;
+const AUDIO_ONLY = /\b(grave|graves|agudo|agudos|volume|ganho|reverb|delay|compress(?:or|ão|ao)|mix|pan|pitch|bpm|faixa|instrumento|instrumental)\b/i;
 
 export function parseAuthorialFeedback(message = '') {
   const source = String(message || '').trim();
@@ -10,7 +11,7 @@ export function parseAuthorialFeedback(message = '') {
   const match = rejected || accepted;
   if (!match) return Object.freeze({ supported: false });
   const value = cleanValue(match[1]);
-  if (!value || value.length > 160) return Object.freeze({ supported: false });
+  if (!value || value.length > 160 || AUDIO_ONLY.test(value)) return Object.freeze({ supported: false });
   const decision = rejected ? 'rejected' : 'accepted';
   const category = classifyCategory(value);
   return Object.freeze({ supported: true, decision, category, value });
@@ -45,6 +46,6 @@ function cleanValue(value) {
 
 function classifyCategory(value) {
   const text = String(value).toLowerCase();
-  if (/\b(refrão|refrao|verso|ponte|pré-refrão|pre-refrao|estrutura)\b/.test(text)) return 'structure';
+  if (/\b(refrão|refrao|refrões|refroes|verso|versos|ponte|pontes|pré-refrão|pre-refrao|pré-refrões|pre-refroes|estrutura)\b/.test(text)) return 'structure';
   return text.split(/\s+/).filter(Boolean).length <= 4 ? 'term' : 'pattern';
 }
