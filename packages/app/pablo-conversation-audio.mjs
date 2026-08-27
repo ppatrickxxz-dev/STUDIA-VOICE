@@ -10,6 +10,10 @@ export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   audio_to_instrument: 'audio_to_instrument',
   inspect_audio: 'inspect_audio',
   inspect_mix: 'inspect_mix',
+  beat_organize: 'beat_organize',
+  beat_humanize: 'beat_humanize',
+  beat_reference_groove: 'beat_reference_groove',
+  beat_fill: 'beat_fill',
 });
 
 export function interpretPabloAudioMessage(message, context = {}) {
@@ -19,6 +23,37 @@ export function interpretPabloAudioMessage(message, context = {}) {
   const trackId = context.trackId || null;
   const assetId = context.assetId || null;
   const projectId = context.projectId || null;
+
+  if (matches(text, ['virada antes do refrao', 'faz uma virada antes do refrao', 'cria uma virada antes do refrao'])) {
+    return beatOperation('fill_before_section', { section: 'chorus', position: 'before', intensity: 0.65 }, 'preview_only');
+  }
+
+  if (matches(text, ['faz bateria funk aqui', 'cria uma bateria funk', 'faz um beat funk aqui', 'faz um beat de funk aqui'])) {
+    return {
+      supported: true,
+      kind: 'beat_generation_plan',
+      action: 'genre_pattern',
+      args: { genre: 'funk' },
+      previewPolicy: 'preview_only',
+      reply: 'Entendi o pedido de uma bateria funk, mas os padrões por gênero ainda precisam do gate musical antes de eu aplicar um automaticamente.',
+    };
+  }
+
+  if (matches(text, ['organiza os pads da bateria', 'organiza os sons da bateria', 'organiza os pads', 'organiza o beat'])) {
+    return beatOperation('organize', {}, 'preview_then_apply');
+  }
+
+  if (matches(text, ['deixa essa bateria menos reta', 'deixa a bateria menos reta', 'humaniza essa bateria', 'humaniza a bateria', 'deixa o beat mais humano'])) {
+    return beatOperation('humanize', { amount: humanizeAmount(text) }, 'preview_then_apply');
+  }
+
+  if (matches(text, ['usa o groove desse audio', 'usa o groove do audio', 'aplica o groove desse audio', 'pega o groove desse audio', 'segue o groove desse audio'])) {
+    return beatOperation('apply_groove', { amount: grooveAmount(text) }, 'preview_then_apply');
+  }
+
+  if (matches(text, ['faz uma virada', 'cria uma virada', 'coloca uma virada', 'adiciona uma virada'])) {
+    return beatOperation('fill', { intensity: fillIntensity(text) }, 'preview_then_apply');
+  }
 
   if (matches(text, ['voz mais na frente', 'minha voz na frente', 'destaca minha voz', 'voz mais presente no mix'])) {
     return tool('bring_voice_forward', { projectId, trackId }, 'preview_then_apply');
@@ -71,9 +106,28 @@ export function interpretPabloAudioMessage(message, context = {}) {
 export async function executePabloAudioMessage(message, context, {
   audioToolRuntime,
   executeDeterministicEdit,
+  executeBeatOperation,
   persistAuthorialMemory,
   generateMusicDraft,
 } = {}) {
+  const direct = interpretPabloAudioMessage(message, context);
+  if (direct.supported && direct.kind === 'beat_generation_plan') {
+    return { ...direct, execution: 'preview_only', canApply: false };
+  }
+  if (direct.supported && direct.kind === 'beat_operation') {
+    if (typeof executeBeatOperation !== 'function') {
+      return { ...direct, execution: 'preview_only', canApply: false };
+    }
+    const result = await executeBeatOperation(direct);
+    return {
+      ...direct,
+      result,
+      reply: result?.reply || direct.reply || null,
+      execution: result?.ok === true ? 'allowed' : 'preview_only',
+      canApply: result?.ok === true && result?.mutated === true,
+    };
+  }
+
   const music = await tryMusicIntelligence(message, context);
   if (music?.supported) {
     if (music.kind === 'pmi_authorial_feedback') {
@@ -135,7 +189,7 @@ export async function executePabloAudioMessage(message, context, {
     return { ...music, execution: 'read_only', canApply: false };
   }
 
-  const parsed = interpretPabloAudioMessage(message, context);
+  const parsed = direct;
   if (!parsed.supported) return parsed;
 
   if (parsed.kind === 'tool_call') {
@@ -250,6 +304,28 @@ async function loadMusicIntelligence() {
 
 function looksLikeDeterministicEdit(text) {
   return /\b(limpa|limpar|limpeza|presente|presenca|quente|calor|sibilancia|sibilante|de-?esser|centraliza|centralizado|centro|fade)\b/.test(text);
+}
+
+function beatOperation(action, args, previewPolicy) {
+  return { supported: true, kind: 'beat_operation', action, args, previewPolicy };
+}
+
+function humanizeAmount(text) {
+  if (/\b(muito|bem mais|bastante)\b/.test(text)) return 0.65;
+  if (/\b(pouco|sutil|leve)\b/.test(text)) return 0.22;
+  return 0.35;
+}
+
+function grooveAmount(text) {
+  if (/\b(muito|forte|bastante)\b/.test(text)) return 0.85;
+  if (/\b(pouco|sutil|leve)\b/.test(text)) return 0.35;
+  return 0.65;
+}
+
+function fillIntensity(text) {
+  if (/\b(grande|forte|intensa|pesada)\b/.test(text)) return 0.9;
+  if (/\b(curta|simples|leve|sutil)\b/.test(text)) return 0.4;
+  return 0.65;
 }
 
 function tool(name, args, previewPolicy) {
