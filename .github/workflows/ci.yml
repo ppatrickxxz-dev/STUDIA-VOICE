@@ -74,7 +74,7 @@ jobs:
           retention-days: 14
 
   android-emulator:
-    needs: android-build
+    needs: [web-and-contracts, android-build]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
