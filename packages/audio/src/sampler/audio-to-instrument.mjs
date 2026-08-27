@@ -1,19 +1,39 @@
+import { extractGrooveTemplate } from './groove-template.mjs';
+import { normalizeOnsetEvents } from './onset-utils.mjs';
+
 export function createSlicesFromAnalysis(analysis, { minConfidence = 0.45, minSliceSeconds = 0.04 } = {}) {
-  const onsets = analysis?.signal?.onsets || analysis?.onsets || [];
   const duration = Number(analysis?.source?.durationSeconds ?? analysis?.durationSeconds);
-  const points = onsets
-    .map((event) => typeof event === 'number' ? { time: event, confidence: 1 } : event)
-    .filter((event) => Number.isFinite(event?.time) && (Number(event.confidence ?? 1) >= minConfidence))
-    .sort((a,b)=>a.time-b.time);
-  const boundaries = [0, ...points.map((event)=>event.time)];
-  if (Number.isFinite(duration)) boundaries.push(duration);
-  const unique = [...new Set(boundaries.filter((time)=>time >= 0))].sort((a,b)=>a-b);
+  const points = normalizeOnsetEvents(analysis?.signal?.onsets || analysis?.onsets || [], {
+    minConfidence,
+    minTimeSeconds: 0,
+    maxTimeSeconds: Number.isFinite(duration) ? duration : Infinity,
+  });
+  const boundaries = [{ timeSeconds: 0, confidence: 1, strength: 0 }, ...points];
+  if (Number.isFinite(duration)) boundaries.push({ timeSeconds: duration, confidence: 1, strength: 0 });
+  const unique = [];
+  for (const point of boundaries.sort((a, b) => a.timeSeconds - b.timeSeconds)) {
+    const last = unique[unique.length - 1];
+    if (last && Math.abs(last.timeSeconds - point.timeSeconds) < 1e-6) {
+      if (point.confidence > last.confidence) unique[unique.length - 1] = point;
+      continue;
+    }
+    unique.push(point);
+  }
   const slices = [];
   for (let i = 0; i < unique.length - 1; i++) {
-    const start = unique[i];
-    const end = unique[i + 1];
+    const startPoint = unique[i];
+    const endPoint = unique[i + 1];
+    const start = startPoint.timeSeconds;
+    const end = endPoint.timeSeconds;
     if (end - start < minSliceSeconds) continue;
-    slices.push({ id: `slice_${slices.length + 1}`, start, end, duration: end - start });
+    slices.push({
+      id: `slice_${slices.length + 1}`,
+      start,
+      end,
+      duration: end - start,
+      onsetConfidence: Number(startPoint.confidence ?? 0),
+      onsetStrength: Number(startPoint.strength ?? 0),
+    });
   }
   return slices;
 }
@@ -56,6 +76,7 @@ export function buildAudioToInstrumentPlan(analysis, options = {}) {
     slices: createSlicesFromAnalysis(analysis, options),
     pianoRoll: Number(analysis?.music?.bpm) > 0 ? mapNoteEventsToPianoRoll(analysis, options) : [],
     chromatic: createChromaticInstrumentDescriptor(analysis, options),
+    groove: extractGrooveTemplate(analysis, options),
     sourceAssetId: analysis?.assetId || null,
     analysisSchemaVersion: analysis?.schemaVersion || null
   };
