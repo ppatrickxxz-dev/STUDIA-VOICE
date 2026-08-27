@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   signed-release:
@@ -34,18 +35,36 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Require protected signing secrets
+      - name: Fetch protected signing material via GitHub OIDC
         env:
-          KEYSTORE_B64: ${{ secrets.PV_RELEASE_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.PV_RELEASE_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.PV_RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.PV_RELEASE_KEY_PASSWORD }}
+          SIGNING_BROKER_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/device-auth
         run: |
-          test -n "$KEYSTORE_B64"
-          test -n "$STORE_PASSWORD"
-          test -n "$KEY_ALIAS"
-          test -n "$KEY_PASSWORD"
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SIGNING_BROKER_URL" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H 'content-type: application/json' \
+            --data '{"action":"signing_bundle"}')"
+          printf '%s' "$RESPONSE" | jq -e '.ok == true and (.bundle.keystore_b64|length>0) and (.bundle.store_password|length>0) and (.bundle.key_alias|length>0) and (.bundle.key_password|length>0)' >/dev/null
+          KEYSTORE_B64="$(printf '%s' "$RESPONSE" | jq -r '.bundle.keystore_b64')"
+          STORE_PASSWORD="$(printf '%s' "$RESPONSE" | jq -r '.bundle.store_password')"
+          KEY_ALIAS="$(printf '%s' "$RESPONSE" | jq -r '.bundle.key_alias')"
+          KEY_PASSWORD="$(printf '%s' "$RESPONSE" | jq -r '.bundle.key_password')"
+          echo "::add-mask::$STORE_PASSWORD"
+          echo "::add-mask::$KEY_ALIAS"
+          echo "::add-mask::$KEY_PASSWORD"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/pablovoice-release.jks"
+          chmod 600 "$RUNNER_TEMP/pablovoice-release.jks"
+          {
+            echo "PV_RELEASE_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "PV_RELEASE_KEY_ALIAS=$KEY_ALIAS"
+            echo "PV_RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          unset OIDC_TOKEN OIDC_JSON RESPONSE KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD
       - name: Re-run release gates
         run: |
           node scripts/lint.mjs
@@ -58,9 +77,6 @@ jobs:
       - name: Build signed APK and AAB
         env:
           PV_RELEASE_STORE_FILE: ${{ runner.temp }}/pablovoice-release.jks
-          PV_RELEASE_STORE_PASSWORD: ${{ secrets.PV_RELEASE_STORE_PASSWORD }}
-          PV_RELEASE_KEY_ALIAS: ${{ secrets.PV_RELEASE_KEY_ALIAS }}
-          PV_RELEASE_KEY_PASSWORD: ${{ secrets.PV_RELEASE_KEY_PASSWORD }}
         run: gradle -p apps/android --no-daemon verifyReleaseSigning lintRelease assembleRelease bundleRelease
       - name: Validate signed release APK
         run: |
