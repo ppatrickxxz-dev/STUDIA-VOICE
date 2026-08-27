@@ -1,4 +1,5 @@
 import { listProjects, getAudioAsset, saveProject as persistProject } from './storage.mjs';
+import { RemoteAuthAdapter } from './remote-auth.mjs';
 import { executeNaturalLanguageEdit } from './core/src/natural-language-edit.mjs';
 import { analyzeWaveform } from './audio/src/analyzers/waveform-basic.mjs';
 import { detectOnsets } from './audio/src/analyzers/onset-basic.mjs';
@@ -8,7 +9,10 @@ import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-aud
 import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
 
 const analysisCache = new Map();
+const remoteAuth = new RemoteAuthAdapter();
 let injecting = false;
+
+remoteAuth.consumeBootstrapFragment();
 
 export function installPabloConversationUI() {
   const observer = new MutationObserver(() => injectConversationBox());
@@ -107,6 +111,57 @@ async function contextForMessage() {
   };
 }
 
+function remoteContextPack(project) {
+  const tracks = Array.isArray(project?.tracks) ? project.tracks : [];
+  return {
+    source: 'pablovoice-unified-local-first',
+    project: {
+      local_id: project?.id || null,
+      title: project?.name || 'Projeto PabloVoice',
+      preset: project?.preset || null,
+      track_count: tracks.length,
+      active_track_id: project?.activeTrackId || null,
+      lyrics: String(project?.lyrics || '').slice(0, 12000),
+      notes: String(project?.notes || '').slice(0, 4000),
+    },
+    tracks: tracks.slice(0, 16).map((track) => ({
+      id: track.id,
+      name: track.name,
+      kind: track.kind,
+      duration: Number(track.duration || 0),
+      gain: Number(track.gain ?? 1),
+      pan: Number(track.pan || 0),
+      muted: Boolean(track.muted),
+      solo: Boolean(track.solo),
+      effects: track.effects || {},
+    })),
+  };
+}
+
+async function tryRemoteReasoning(message) {
+  const project = await activeProject();
+  if (!project) return null;
+  const health = await remoteAuth.agentHealth();
+  if (!health?.available || !health?.authenticated) return null;
+  const linked = await remoteAuth.ensureRemoteProject(project);
+  if (!linked?.ok || !linked.project?.id) return null;
+  const result = await remoteAuth.agentTurn({
+    project_id: linked.project.id,
+    message,
+    intent: { mode: 'advice_only', destructive_actions: false, source: 'unified_pablo_chat' },
+    context_pack: remoteContextPack(project),
+    tools: [],
+  });
+  if (!result?.ok || !String(result.reply || '').trim()) return null;
+  return {
+    supported: true,
+    kind: 'remote_reasoning',
+    reply: String(result.reply).trim(),
+    provider: result.provider || health.provider || 'remote',
+    model: result.model || health.model || null,
+  };
+}
+
 async function submitMessage(form) {
   const input = form.querySelector('input[name="message"]');
   const message = input?.value.trim();
@@ -117,9 +172,15 @@ async function submitMessage(form) {
   try {
     const context = await contextForMessage();
     const result = await executePabloAudioMessage(message, context, { audioToolRuntime, executeDeterministicEdit });
-    appendMessage(formatResult(result), 'assistant', result);
-    if (result.kind === 'deterministic_edit' && result.canApply) {
-      appendMessage('A edição determinística foi aplicada e salva. Reabra o Studio para ouvir a prévia atualizada.', 'assistant');
+    if (result?.supported) {
+      appendMessage(formatResult(result), 'assistant', result);
+      if (result.kind === 'deterministic_edit' && result.canApply) {
+        appendMessage('A edição determinística foi aplicada e salva. Reabra o Studio para ouvir a prévia atualizada.', 'assistant');
+      }
+    } else {
+      const remote = await tryRemoteReasoning(message);
+      if (remote) appendMessage(remote.reply, 'assistant', remote);
+      else appendMessage('Ainda não tenho uma ação ou resposta remota segura para esse pedido. Não alterei o projeto.', 'assistant');
     }
   } catch (error) {
     appendMessage(error?.message || 'Não consegui executar esse pedido com segurança.', 'assistant', { error: true });
@@ -137,7 +198,7 @@ function injectConversationBox() {
   box.dataset.pabloConversation = 'true';
   box.className = 'pv-conversation';
   box.innerHTML = `<div class="pv-conversation-log" data-pablo-log>
-    <div class="pv-msg assistant">Pode falar do seu jeito: “deixa minha voz mais na frente”, “suaviza minhas respirações” ou “transforma isso em instrumento”.<small>análise local + preview seguro</small></div>
+    <div class="pv-msg assistant">Pode falar do seu jeito: “deixa minha voz mais na frente”, “suaviza minhas respirações”, “transforma isso em instrumento” ou me peça uma direção criativa.<small>ações locais primeiro · IA remota opcional</small></div>
   </div>
   <form class="pv-compose-row" data-pablo-form>
     <input class="pv-field" name="message" autocomplete="off" placeholder="O que você quer fazer com o som?" aria-label="Falar com Pablo sobre o áudio">
@@ -156,11 +217,13 @@ function appendMessage(text, role, result = null) {
   if (!log) return;
   const message = document.createElement('div');
   message.className = `pv-msg ${role}`;
-  const small = result?.data?.decision ? ` · confiança: ${Math.round((result.data.confidence || 0) * 100)}% · ${result.data.decision}` : '';
   message.textContent = text;
-  if (small) {
+  let metaText = '';
+  if (result?.data?.decision) metaText = `confiança: ${Math.round((result.data.confidence || 0) * 100)}% · ${result.data.decision}`;
+  else if (result?.kind === 'remote_reasoning') metaText = `IA remota · ${result.provider}${result.model ? ` · ${result.model}` : ''}`;
+  if (metaText) {
     const meta = document.createElement('small');
-    meta.textContent = small.slice(3);
+    meta.textContent = metaText;
     message.appendChild(meta);
   }
   log.appendChild(message);
