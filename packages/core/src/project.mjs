@@ -1,4 +1,4 @@
-export const PROJECT_SCHEMA_VERSION = 4;
+export const PROJECT_SCHEMA_VERSION = 5;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -34,6 +34,7 @@ export function createProject(name = 'Minha ideia', now = Date.now()) {
     lyrics: '',
     notes: '',
     preset: 'demo',
+    authorialMemory: normalizeAuthorialMemory(null),
     revisions: [],
     appVersion: '2.4.0-rc.1',
   };
@@ -80,6 +81,7 @@ export function migrateProject(input) {
   project.lyrics = String(project.lyrics || '');
   project.notes = String(project.notes || '');
   project.preset = ['music', 'demo', 'podcast', 'video', 'streaming'].includes(project.preset) ? project.preset : 'demo';
+  project.authorialMemory = normalizeAuthorialMemory(project.authorialMemory);
   return project;
 }
 
@@ -120,6 +122,7 @@ export function snapshotProject(project, label = 'Salvamento') {
     })),
     lyrics: clean.lyrics,
     preset: clean.preset,
+    authorialMemory: structuredClone(clean.authorialMemory),
   };
   clean.revisions = [...clean.revisions, revision].slice(-40);
   clean.updatedAt = revision.at;
@@ -137,6 +140,21 @@ export function validateProject(input) {
     if (finite(track.trimStart, 0) > finite(track.trimEnd, 0)) errors.push(`Trim invertido em ${track.name || track.id}.`);
   }
   return { valid: errors.length === 0, errors };
+}
+
+function normalizeAuthorialMemory(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const list = (value) => [...new Set((Array.isArray(value) ? value : []).map((item) => String(item || '').trim().slice(0, 160)).filter(Boolean))].slice(-100);
+  return {
+    schema: 'pmi_authorial_memory_v1',
+    vocabulary: list(source.vocabulary),
+    preferredStructures: list(source.preferredStructures),
+    preferredImages: list(source.preferredImages),
+    avoid: list(source.avoid),
+    acceptedPatterns: list(source.acceptedPatterns),
+    rejectedPatterns: list(source.rejectedPatterns),
+    evidenceCount: Math.max(0, Math.min(10000, finite(source.evidenceCount, 0))),
+  };
 }
 
 function normalizeRegionAutomation(input, duration) {
