@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { encodeWav, normalizationFactor, wavHeader } from '../../packages/audio/src/presets.mjs';
+import { regionGainEnvelope } from '../../packages/audio/src/automation/region-gain.mjs';
 import { breathPlanToRegionAutomation, replaceBreathAutomation } from '../../packages/audio/src/voice/breath-intelligence.mjs';
-import { regionGainEnvelope } from '../../packages/app/audio-engine.mjs';
 
 function fakeBuffer(channels = [[0, .5, -1, 1]], sampleRate = 48000) {
   const data = channels.map((values) => Float32Array.from(values));
