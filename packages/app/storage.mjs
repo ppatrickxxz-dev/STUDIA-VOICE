@@ -2,6 +2,7 @@ import { migrateProject } from './core/src/project.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
 const DB_VERSION = 3;
+const ACTIVE_PROJECT_SESSION_KEY = 'pablovoice.activeProjectId';
 let openPromise;
 
 export function openDatabase() {
@@ -21,6 +22,17 @@ export function openDatabase() {
   return openPromise;
 }
 
+export function rememberActiveProject(id) {
+  if (!id) return;
+  try { globalThis.sessionStorage?.setItem(ACTIVE_PROJECT_SESSION_KEY, String(id)); }
+  catch { /* session storage can be unavailable in privacy/file contexts */ }
+}
+
+export function activeProjectSessionId() {
+  try { return globalThis.sessionStorage?.getItem(ACTIVE_PROJECT_SESSION_KEY) || null; }
+  catch { return null; }
+}
+
 export async function saveProject(project) {
   const clean = migrateProject(project);
   await put('projects', clean);
@@ -38,12 +50,19 @@ export async function getProject(id) {
 
 export async function listProjects() {
   const values = await all('projects');
+  const activeId = activeProjectSessionId();
   return values.map((raw) => {
     const project = migrateProject(raw);
     if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
     if (raw.settings) project.legacySettings = raw.settings;
     return project;
-  }).sort((a, b) => b.updatedAt - a.updatedAt);
+  }).sort((a, b) => {
+    if (activeId) {
+      if (a.id === activeId && b.id !== activeId) return -1;
+      if (b.id === activeId && a.id !== activeId) return 1;
+    }
+    return b.updatedAt - a.updatedAt;
+  });
 }
 
 export async function deleteProject(id) {
@@ -108,4 +127,3 @@ async function all(store) {
     request.onerror = () => reject(request.error);
   });
 }
-
