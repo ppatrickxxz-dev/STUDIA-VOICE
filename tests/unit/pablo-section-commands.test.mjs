@@ -40,7 +40,7 @@ test('mark_section persists confirmed timing even before Sampler exists', async 
   assert.equal(result.project.revisions.at(-1).label, 'Refrão marcado na timeline');
 });
 
-test('fill before chorus recognizes confirmed timing but still refuses unqualified scheduling', async () => {
+test('fill before chorus turns confirmed timing into a real-audio render plan without mutating yet', async () => {
   const project = createProject('Virada segura');
   const marked = await applyPabloBeatOperation(project, {
     action: 'mark_section',
@@ -50,6 +50,7 @@ test('fill before chorus recognizes confirmed timing but still refuses unqualifi
     ...marked.project,
     sampler: {
       sourceAssetId: 'asset-1',
+      grooveTemplate: { ready: false, bpm: 120, stepsPerBar: 16, offsetsBeats: [], accents: [] },
       pads: [{
         id: 'pad-1', sliceId: 'slice-1', sourceAssetId: 'asset-1', label: 'Caixa',
         start: 0, end: 0.2, gain: 1, fadeIn: 0.005, fadeOut: 0.01, playbackRate: 1,
@@ -63,9 +64,12 @@ test('fill before chorus recognizes confirmed timing but still refuses unqualifi
     args: { section: 'chorus', occurrence: 1, intensity: 0.65 },
   });
 
-  assert.equal(result.ok, false);
+  assert.equal(result.ok, true);
   assert.equal(result.mutated, false);
-  assert.equal(result.reason, 'section_fill_runtime_required');
-  assert.equal(result.targetSection.startSeconds, 45);
+  assert.equal(result.requiresAudioRender, true);
+  assert.equal(result.timelineRender.kind, 'beat_fill_track');
+  assert.equal(result.timelineRender.targetStartSeconds, 45);
+  assert.equal(result.timelineRender.endSeconds, 45);
+  assert.ok(result.timelineRender.startSeconds < 45);
   assert.equal(result.targetSection.timingStatus, 'confirmed');
 });

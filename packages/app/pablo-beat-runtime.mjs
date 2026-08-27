@@ -15,6 +15,31 @@ export async function executePersistedPabloBeatOperation(operation = {}, context
   if (!project) project = (await listProjects())[0] || null;
 
   const result = await applyPabloBeatOperation(project, operation);
+  if (result?.ok && result?.requiresAudioRender === true && result?.timelineRender) {
+    const renderer = await loadTimelineRenderer();
+    if (!renderer) {
+      return {
+        ...result,
+        ok: false,
+        mutated: false,
+        reason: 'timeline_render_runtime_unavailable',
+        reply: 'O plano da virada está pronto, mas o renderizador de timeline não está disponível nesta versão. Não alterei o projeto.',
+      };
+    }
+    const rendered = await renderer.renderPabloBeatTimeline(project, result.timelineRender);
+    return {
+      ...result,
+      ...rendered,
+      action: result.action || rendered?.action || operation?.action || null,
+      timelineRender: result.timelineRender,
+      targetSection: result.targetSection || null,
+      data: {
+        ...(result.data || {}),
+        ...(rendered?.data || {}),
+        projectId: rendered?.project?.id || rendered?.data?.projectId || projectId || null,
+      },
+    };
+  }
   if (!result?.ok || !result?.mutated || !result?.project) return result;
 
   const saved = await saveProject(result.project);
@@ -26,4 +51,14 @@ export async function executePersistedPabloBeatOperation(operation = {}, context
       projectId: saved?.id || result.data?.projectId || projectId || null,
     },
   };
+}
+
+async function loadTimelineRenderer() {
+  try {
+    const module = await import('./beat-timeline-runtime.mjs');
+    if (typeof module.renderPabloBeatTimeline === 'function') return module;
+  } catch {
+    // Fail closed: conversational planning must never pretend a render happened.
+  }
+  return null;
 }

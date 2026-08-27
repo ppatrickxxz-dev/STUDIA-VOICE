@@ -8,6 +8,7 @@ import {
   setBeatGrooveAmount,
   setBeatHumanize,
 } from './beat-lab-engine.mjs';
+import { buildBeatFillPlan, placeFillBeforeSection } from './beat-fill-plan.mjs';
 
 export async function applyPabloBeatOperation(project, operation = {}) {
   if (!project || typeof project !== 'object') return blocked('project_required', 'Crie ou abra um projeto primeiro.');
@@ -69,11 +70,51 @@ export async function applyPabloBeatOperation(project, operation = {}) {
         { action },
       );
     }
-    return blocked(
-      'section_fill_runtime_required',
-      `${target.label} está confirmado em ${formatSeconds(target.startSeconds)}. O mapa temporal já está pronto, mas o agendamento da virada nessa posição ainda não foi promovido; mantive o beat intacto.`,
-      { action, targetSection: target },
-    );
+
+    const preferredBpm = project.instrumentLab?.bpm || sampler.grooveTemplate?.bpm || 120;
+    const beat = project.beatLab
+      ? normalizeBeatLabState(project.beatLab, sampler)
+      : createBeatLabState(sampler, { bpm: preferredBpm });
+    const intensity = clamp(Number(operation.args?.intensity ?? 0.65), 0, 1);
+    const fillPlan = buildBeatFillPlan(beat, { intensity });
+    if (!fillPlan.ok) {
+      const reason = fillPlan.reason === 'no_percussive_lane' ? 'no_percussive_lane' : 'fill_plan_unavailable';
+      return blocked(
+        reason,
+        reason === 'no_percussive_lane'
+          ? 'Ainda não há uma lane percussiva adequada para eu criar uma virada antes dessa seção. Não alterei o projeto.'
+          : 'Não consegui montar uma virada segura com o padrão atual. Mantive o projeto intacto.',
+        { action, targetSection: target },
+      );
+    }
+    const placement = placeFillBeforeSection(fillPlan, target);
+    if (!placement.ok) {
+      return blocked(
+        placement.reason || 'timeline_placement_unavailable',
+        placement.reason === 'insufficient_lead_time'
+          ? `${target.label} começa cedo demais para caber a virada gerada sem atravessar o início da seção. Não alterei o projeto.`
+          : 'Não consegui confirmar uma janela segura para a virada. Mantive o projeto intacto.',
+        { action, targetSection: target },
+      );
+    }
+
+    return {
+      ok: true,
+      mutated: false,
+      action,
+      requiresAudioRender: true,
+      timelineRender: placement,
+      targetSection: target,
+      reply: `A virada está planejada para terminar exatamente no início de ${target.label}, em ${formatSeconds(target.startSeconds)}.`,
+      data: {
+        projectId: project.id,
+        targetSectionId: target.id,
+        targetStartSeconds: target.startSeconds,
+        fillStartSeconds: placement.startSeconds,
+        fillDurationSeconds: placement.durationSeconds,
+        intensity,
+      },
+    };
   }
   if (action === 'genre_pattern') {
     return blocked(

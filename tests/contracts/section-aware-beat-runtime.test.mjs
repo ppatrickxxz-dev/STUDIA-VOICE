@@ -25,7 +25,10 @@ test('section execution requires confirmed timing and never derives timeline fro
   assert.match(sections, /section\.confidence >= 0\.8/);
   assert.match(operations, /findConfirmedSection/);
   assert.match(operations, /section_mapping_required/);
-  assert.match(operations, /section_fill_runtime_required/);
+  assert.match(operations, /buildBeatFillPlan/);
+  assert.match(operations, /placeFillBeforeSection/);
+  assert.match(operations, /requiresAudioRender: true/);
+  assert.doesNotMatch(operations, /section_fill_runtime_required/);
   assert.doesNotMatch(operations, /analyzeLyrics|classifyStructure/);
   assert.doesNotMatch(sections, /analyzeLyrics|classifyStructure/);
   assert.match(conversation, /parseSectionMarker/);
