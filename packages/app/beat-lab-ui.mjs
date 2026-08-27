@@ -197,7 +197,6 @@ function renderBeatLab() {
   </section>`;
   document.body.appendChild(overlay);
 }
-
 function renderRows(state) {
   return state.lanes.map((lane) => {
     const steps = lane.steps.map((step, index) => {
@@ -391,5 +390,5 @@ function toast(message, kind = '') {
 }
 
 function escapeHtml(value = '') {
-  return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;' })[char]);
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[char]);
 }
