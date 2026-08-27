@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createProject } from '../../packages/app/core/src/project.mjs';
+import { createProject } from '../../packages/core/src/project.mjs';
 import { applyPabloBeatOperation } from '../../packages/app/pablo-beat-operations.mjs';
 
 function sampler({ grooveReady = true } = {}) {
@@ -30,9 +30,9 @@ function projectWithSampler(options) {
   return project;
 }
 
-test('humanize creates a reversible Beat Lab revision with bounded amount', () => {
+test('humanize creates a reversible Beat Lab revision with bounded amount', async () => {
   const project = projectWithSampler();
-  const result = applyPabloBeatOperation(project, { action: 'humanize', args: { amount: 0.65 } });
+  const result = await applyPabloBeatOperation(project, { action: 'humanize', args: { amount: 0.65 } });
   assert.equal(result.ok, true);
   assert.equal(result.mutated, true);
   assert.equal(result.project.beatLab.humanize, 0.65);
@@ -40,41 +40,41 @@ test('humanize creates a reversible Beat Lab revision with bounded amount', () =
   assert.equal(project.beatLab, undefined);
 });
 
-test('reference groove only applies when the sampler has sufficient evidence', () => {
-  const allowed = applyPabloBeatOperation(projectWithSampler(), { action: 'apply_groove', args: { amount: 0.85 } });
+test('reference groove only applies when the sampler has sufficient evidence', async () => {
+  const allowed = await applyPabloBeatOperation(projectWithSampler(), { action: 'apply_groove', args: { amount: 0.85 } });
   assert.equal(allowed.ok, true);
   assert.equal(allowed.project.beatLab.grooveAmount, 0.85);
 
-  const blocked = applyPabloBeatOperation(projectWithSampler({ grooveReady: false }), { action: 'apply_groove', args: { amount: 0.65 } });
+  const blocked = await applyPabloBeatOperation(projectWithSampler({ grooveReady: false }), { action: 'apply_groove', args: { amount: 0.65 } });
   assert.equal(blocked.ok, false);
   assert.equal(blocked.mutated, false);
   assert.equal(blocked.reason, 'groove_evidence_unavailable');
 });
 
-test('fill uses an existing percussive lane and never fabricates a missing sound', () => {
-  const result = applyPabloBeatOperation(projectWithSampler(), { action: 'fill', args: { intensity: 0.65 } });
+test('fill uses an existing percussive lane and never fabricates a missing sound', async () => {
+  const result = await applyPabloBeatOperation(projectWithSampler(), { action: 'fill', args: { intensity: 0.65 } });
   assert.equal(result.ok, true);
   assert.equal(result.project.beatLab.lastOperation.ok, true);
   assert.equal(result.project.beatLab.lastOperation.category, 'snare');
   assert.ok(result.data.activeSteps > 0);
 });
 
-test('section placement and genre patterns stay blocked until their own gates exist', () => {
+test('section placement and genre patterns stay blocked until their own gates exist', async () => {
   const project = projectWithSampler();
-  const section = applyPabloBeatOperation(project, { action: 'fill_before_section', args: { section: 'chorus' } });
+  const section = await applyPabloBeatOperation(project, { action: 'fill_before_section', args: { section: 'chorus' } });
   assert.equal(section.ok, false);
   assert.equal(section.reason, 'section_mapping_required');
   assert.equal(section.mutated, false);
 
-  const genre = applyPabloBeatOperation(project, { action: 'genre_pattern', args: { genre: 'funk' } });
+  const genre = await applyPabloBeatOperation(project, { action: 'genre_pattern', args: { genre: 'funk' } });
   assert.equal(genre.ok, false);
   assert.equal(genre.reason, 'genre_pattern_preview_only');
   assert.equal(genre.mutated, false);
 });
 
-test('operations require real sampler pads before touching Beat Lab state', () => {
+test('operations require real sampler pads before touching Beat Lab state', async () => {
   const project = createProject('No pads', 1000);
-  const result = applyPabloBeatOperation(project, { action: 'humanize', args: { amount: 0.4 } });
+  const result = await applyPabloBeatOperation(project, { action: 'humanize', args: { amount: 0.4 } });
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'sampler_required');
   assert.equal(result.mutated, false);
