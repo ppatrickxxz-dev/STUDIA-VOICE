@@ -1,6 +1,7 @@
 import { activeProjectSessionId, getAudioAsset, getProject, listProjects, saveProject } from './storage.mjs';
-import { analyzeAudioTrack } from './audio-analysis-runtime.mjs';
+import { analyzeDecodedAudio } from './audio-analysis-runtime.mjs';
 import { buildAudioToInstrumentPlan } from './audio/src/sampler/audio-to-instrument.mjs';
+import { classifySamplerPads, padCategoryLabel } from './pad-acoustics.mjs';
 import {
   createSamplerState,
   normalizeSamplerState,
@@ -82,6 +83,7 @@ async function onChange(event) {
   if (field === 'start' && value >= pad.end) patch.start = Math.max(0, pad.end - 0.01);
   if (field === 'end' && value <= pad.start) patch.end = pad.start + 0.01;
   samplerState = updateSamplerPad(samplerState, pad.id, patch);
+  if (field === 'start' || field === 'end') await classifyCurrentPads();
   activeProject.sampler = samplerState;
   activeProject.updatedAt = Date.now();
   await saveProject(activeProject);
@@ -99,6 +101,12 @@ async function openSampler(button) {
     if (!activeProject) throw new Error('Crie ou abra um projeto antes de usar o Sampler.');
     samplerState = activeProject.sampler ? normalizeSamplerState(activeProject.sampler) : null;
     if (!samplerState?.pads?.length) await rebuildSamplerState();
+    else if (samplerState.pads.some((pad) => !pad.categorySource)) {
+      await classifyCurrentPads();
+      activeProject.sampler = samplerState;
+      activeProject.updatedAt = Date.now();
+      await saveProject(activeProject);
+    }
     ensurePanel();
     renderSampler();
   } catch (error) {
@@ -121,7 +129,8 @@ async function rebuildFromActiveTrack(button) {
     if (!activeProject) throw new Error('Abra um projeto primeiro.');
     await rebuildSamplerState();
     renderSampler();
-    toast(`${samplerState.pads.length} pad(s) preparados a partir dos transientes.`, 'ok');
+    const recognized = samplerState.pads.filter((pad) => pad.category !== 'unknown' && pad.categoryConfidence >= 0.45).length;
+    toast(`${samplerState.pads.length} pad(s) preparados · ${recognized} com função provável.`, 'ok');
   } catch (error) {
     console.error('SAMPLER_RESLICE_FAILED', error);
     toast(error?.message || 'Não consegui recortar essa faixa.', 'error');
@@ -135,15 +144,24 @@ async function rebuildFromActiveTrack(button) {
 async function rebuildSamplerState() {
   const track = activeProject.tracks?.find((item) => item.id === activeProject.activeTrackId) || activeProject.tracks?.[0];
   if (!track?.assetId) throw new Error('Escolha uma faixa de áudio primeiro.');
-  const analysis = await analyzeAudioTrack(track);
+  const buffer = await decodedAudio(track.assetId);
+  const analysis = analyzeDecodedAudio(buffer, { assetId: track.assetId });
   const plan = buildAudioToInstrumentPlan(analysis, { minConfidence: 0.45, minSliceSeconds: 0.04 });
   samplerState = createSamplerState(plan, { maxPads: 16 });
   if (!samplerState.pads.length) {
     throw new Error('Não encontrei cortes confiáveis nessa faixa. Tente um áudio com ataques mais definidos.');
   }
+  samplerState = classifySamplerPads(samplerState, buffer.getChannelData(0), buffer.sampleRate);
   activeProject.sampler = samplerState;
   activeProject.updatedAt = Date.now();
   await saveProject(activeProject);
+}
+
+async function classifyCurrentPads() {
+  const assetId = samplerState?.sourceAssetId || samplerState?.pads?.find((pad) => pad.sourceAssetId)?.sourceAssetId;
+  if (!assetId || !samplerState?.pads?.length) return;
+  const buffer = await decodedAudio(assetId);
+  samplerState = normalizeSamplerState(classifySamplerPads(samplerState, buffer.getChannelData(0), buffer.sampleRate));
 }
 
 function ensurePanel() {
@@ -159,7 +177,7 @@ function ensurePanel() {
       </header>
       <div class="pv-sampler-tools">
         <button class="pv-btn" type="button" data-sampler-reslice>↻ Recortar faixa ativa</button>
-        <span>Toque nos pads para ouvir cada corte.</span>
+        <span>Toque nos pads para ouvir cada corte. As funções são sugestões acústicas, não rótulos obrigatórios.</span>
       </div>
       <div class="pv-sampler-grid" data-sampler-grid></div>
       <div class="pv-sampler-edit" data-sampler-edit></div>
@@ -171,8 +189,10 @@ function renderSampler() {
   ensurePanel();
   const state = normalizeSamplerState(samplerState || {});
   samplerState = state;
+  const recognized = state.pads.filter((pad) => pad.category !== 'unknown' && pad.categoryConfidence >= 0.45).length;
+  const groove = state.grooveTemplate?.ready ? ` · groove ${Math.round(state.grooveTemplate.confidence * 100)}%` : '';
   const summary = document.querySelector('[data-sampler-summary]');
-  if (summary) summary.textContent = `${state.pads.length} pads · cortes do áudio do projeto`;
+  if (summary) summary.textContent = `${state.pads.length} pads · ${recognized} funções prováveis${groove}`;
   const grid = document.querySelector('[data-sampler-grid]');
   if (grid) {
     grid.replaceChildren();
@@ -186,7 +206,8 @@ function renderSampler() {
       const name = document.createElement('b');
       name.textContent = pad.label;
       const info = document.createElement('small');
-      info.textContent = `${index + 1} · ${samplerPadDuration(pad).toFixed(2)}s`;
+      const category = pad.category !== 'unknown' ? `${padCategoryLabel(pad.category)} ${Math.round(pad.categoryConfidence * 100)}% · ` : '';
+      info.textContent = `${category}${index + 1} · ${samplerPadDuration(pad).toFixed(2)}s`;
       button.append(name, info);
       grid.appendChild(button);
     });
@@ -205,7 +226,10 @@ function renderEditor(state) {
   }
   const title = document.createElement('div');
   title.className = 'pv-sampler-edit-title';
-  title.textContent = `${pad.label} · ajuste sem alterar o áudio original`;
+  const category = pad.category === 'unknown'
+    ? 'função acústica incerta'
+    : `provável ${padCategoryLabel(pad.category)} · confiança ${Math.round(pad.categoryConfidence * 100)}%`;
+  title.textContent = `${pad.label} · ${category} · ajuste sem alterar o áudio original`;
   edit.appendChild(title);
   const fields = [
     ['start', 'Começo', pad.start, 0, Math.max(pad.end - 0.01, 0), 0.01],
