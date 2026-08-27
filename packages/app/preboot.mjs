@@ -25,6 +25,8 @@ function fallbackShell() {
 
 try {
   await import('./app.js');
+  const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
+  installPabloConversationUI();
   fallbackShell();
 } catch (error) {
   console.error('PABLOVOICE_BOOT_IMPORT_FAILED', error);
