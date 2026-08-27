@@ -43,6 +43,7 @@ try {
   const { installVoiceIdentityReferenceUI } = await import('./voice-identity-reference-ui.mjs');
   const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
   const { installRemoteAuthUI } = await import('./remote-auth-ui.mjs');
+  const { installInstrumentLab } = await import('./instrument-integration.mjs');
   installPabloConversationUI();
   installBreathReviewUI();
   installAdvancedAIStudio();
@@ -50,6 +51,7 @@ try {
   installVoiceIdentityReferenceUI();
   installRuntimeCapabilityStatus();
   installRemoteAuthUI();
+  installInstrumentLab();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
