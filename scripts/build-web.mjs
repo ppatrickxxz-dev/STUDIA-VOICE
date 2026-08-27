@@ -8,7 +8,7 @@ const packages = resolve(root, 'packages');
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
-for (const name of ['core', 'audio', 'songwriting']) {
+for (const name of ['core', 'audio', 'songwriting', 'providers']) {
   await cp(resolve(packages, name), resolve(out, name), { recursive: true });
 }
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
@@ -18,4 +18,3 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   builtAt: new Date().toISOString(),
 }, null, 2)}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
-
