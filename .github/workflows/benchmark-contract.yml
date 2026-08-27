@@ -21,4 +21,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Validate locked benchmark contract
-        run: python benchmarks/validate_benchmark.py
+        run: |
+          python benchmarks/validate_benchmark.py
+          python benchmarks/validate_b06.py
