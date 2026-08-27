@@ -17,13 +17,17 @@ test('Pablo conversation routes explicit beat commands before creative PMI', asy
   assert.ok(conversation.indexOf("kind === 'beat_operation'") < conversation.indexOf('const music = await tryMusicIntelligence'));
 });
 
-test('canonical beat runtime persists only successful mutations', async () => {
+test('canonical beat runtime persists only successful mutations and never falls into another project', async () => {
   const runtime = await read('packages/app/pablo-beat-runtime.mjs');
   const operations = await read('packages/app/pablo-beat-operations.mjs');
   assert.match(runtime, /applyPabloBeatOperation/);
   assert.match(runtime, /await applyPabloBeatOperation/);
   assert.match(runtime, /saveProject\(result\.project\)/);
   assert.match(runtime, /!result\?\.ok \|\| !result\?\.mutated/);
+  assert.match(runtime, /projectId && !project/);
+  assert.match(runtime, /reason: 'project_not_found'/);
+  assert.match(runtime, /Não mexi em outro projeto como fallback/);
+  assert.ok(runtime.indexOf('projectId && !project') < runtime.indexOf('listProjects())[0]'));
   assert.match(operations, /section_mapping_required/);
   assert.match(operations, /genre_pattern_preview_only/);
   assert.match(operations, /groove_evidence_unavailable/);
