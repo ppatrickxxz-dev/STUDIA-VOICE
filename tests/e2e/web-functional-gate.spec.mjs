@@ -246,9 +246,9 @@ test('WEB SECTION MAP UI GATE: current cursor can mark, persist, edit and remove
 
   await page.locator('[data-action="play"]').click();
   await page.waitForTimeout(360);
+  await expect(page.locator('#current-time')).not.toHaveText('0:00.0');
   await page.locator('[data-action="stop"]').click();
-  const stoppedAt = await page.locator('#current-time').textContent();
-  expect(stoppedAt).not.toBe('0:00.0');
+  await expect(page.locator('#current-time')).toHaveText('0:00.0');
 
   await page.locator('[data-section-map-open]').click();
   await expect(page.getByRole('heading', { name: 'Seções' })).toBeVisible();
