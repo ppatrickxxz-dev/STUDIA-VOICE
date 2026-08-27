@@ -1,5 +1,3 @@
-import { interpretNaturalLanguageEdit } from '../core/src/natural-language-edit.mjs';
-
 export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   voice_forward: 'bring_voice_forward',
   make_vocal_space: 'make_vocal_space',
@@ -54,15 +52,13 @@ export function interpretPabloAudioMessage(message, context = {}) {
     return tool('inspect_mix', { projectId }, 'read_only');
   }
 
-  const deterministic = interpretNaturalLanguageEdit(message);
-  if (deterministic.supported) {
+  if (looksLikeDeterministicEdit(text)) {
     return {
       supported: true,
       kind: 'deterministic_edit',
       command: message,
       trackId,
       previewPolicy: 'preview_then_apply',
-      intent: deterministic,
     };
   }
 
@@ -90,6 +86,10 @@ export async function executePabloAudioMessage(message, context, { audioToolRunt
 
   const result = await executeDeterministicEdit(message, parsed.trackId);
   return { ...parsed, result, execution: 'allowed', canApply: true };
+}
+
+function looksLikeDeterministicEdit(text) {
+  return /\b(limpa|limpar|limpeza|presente|presenca|quente|calor|sibilancia|sibilante|de-?esser|centraliza|centralizado|centro|fade)\b/.test(text);
 }
 
 function tool(name, args, previewPolicy) {
