@@ -13,6 +13,7 @@ export function planPendingDraftRevision(message = '', context = {}) {
     return Object.freeze({ supported: false });
   }
 
+  const remoteTask = `Revise somente o rascunho pendente em context_pack.pending_draft. Pedido do usuário: ${task}`.slice(0, 4000);
   return Object.freeze({
     supported: true,
     blocked: false,
@@ -24,11 +25,12 @@ export function planPendingDraftRevision(message = '', context = {}) {
     task: task.slice(0, 4000),
     request: Object.freeze({
       command: 'rewrite',
-      task: task.slice(0, 4000),
+      task: remoteTask,
       targetSection: pending.targetSection,
       targetGenre: pending.targetGenre,
       contextPack: Object.freeze({
         source: 'pablovoice-pmi-draft-revision',
+        user_request: task.slice(0, 4000),
         pending_draft: pending.text,
         pending_draft_version: pending.version,
         pending_draft_command: pending.command,
