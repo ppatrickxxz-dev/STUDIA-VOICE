@@ -34,6 +34,14 @@ test('canonical beat runtime persists only successful mutations and never falls 
   assert.match(operations, /snapshotProjectCompat/);
 });
 
+test('unified chat shows Beat Lab-specific result and safe-preview reason instead of generic analysis text', async () => {
+  const ui = await read('packages/app/pablo-conversation-ui.mjs');
+  assert.match(ui, /result\?\.domain === 'beat_lab'/);
+  assert.match(ui, /Beat Lab · \$\{result\.canApply \? 'salvo' : 'prévia segura'\}/);
+  assert.match(ui, /result\.domain === 'beat_lab' && String\(result\.reply \|\| ''\)\.trim\(\)/);
+  assert.match(ui, /A alteração do Beat Lab foi salva como revisão reversível/);
+});
+
 test('beat commands do not depend on random generation or remote providers', async () => {
   const [conversation, operations, runtime] = await Promise.all([
     read('packages/app/pablo-conversation-audio.mjs'),
