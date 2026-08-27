@@ -1,4 +1,4 @@
-import { listProjects, getAudioAsset, persistProject } from './storage.mjs';
+import { listProjects, getAudioAsset, saveProject as persistProject } from './storage.mjs';
 import { executeNaturalLanguageEdit } from '../core/src/natural-language-edit.mjs';
 import { analyzeWaveform } from '../audio/src/analyzers/waveform-basic.mjs';
 import { detectOnsets } from '../audio/src/analyzers/onset-basic.mjs';
