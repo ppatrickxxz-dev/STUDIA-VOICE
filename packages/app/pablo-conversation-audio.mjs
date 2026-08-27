@@ -128,6 +128,7 @@ export async function executePabloAudioMessage(message, context, {
         command: music.command,
         targetSection: music.targetSection,
         targetGenre: music.targetGenre,
+        baseLyrics: context?.lyrics,
       });
       return generatedDraftResult(music, generated, pending);
     }
@@ -167,7 +168,12 @@ async function tryMusicIntelligence(message, context = {}) {
   const projectId = String(context.projectId || '');
   let enrichedContext = { ...context };
   if (projectId && pmiSessionCache.has(projectId)) enrichedContext.pmiSession = pmiSessionCache.get(projectId);
-  if (projectId && pmiPendingDraftCache.has(projectId)) enrichedContext.pendingDraft = pmiPendingDraftCache.get(projectId);
+  if (projectId && pmiPendingDraftCache.has(projectId)) {
+    const pending = pmiPendingDraftCache.get(projectId);
+    const currentLyrics = boundedLyrics(context.lyrics);
+    if (pending.baseLyrics !== currentLyrics) pmiPendingDraftCache.delete(projectId);
+    else enrichedContext.pendingDraft = pending;
+  }
 
   const feedback = intelligence.respondToAuthorialFeedback(message, enrichedContext);
   if (feedback?.supported) return feedback;
@@ -202,6 +208,7 @@ function rememberPendingDraft(projectId, draft = {}, { revision = false } = {}) 
     command: String(draft.command || prior?.command || '').slice(0, 64) || null,
     targetSection: String(draft.targetSection || prior?.targetSection || '').slice(0, 64) || null,
     targetGenre: String(draft.targetGenre || prior?.targetGenre || '').slice(0, 64) || null,
+    baseLyrics: revision ? String(prior?.baseLyrics ?? '').slice(0, 12000) : boundedLyrics(draft.baseLyrics),
   });
   if (key && text) pmiPendingDraftCache.set(key, pending);
   return pending;
@@ -209,6 +216,7 @@ function rememberPendingDraft(projectId, draft = {}, { revision = false } = {}) 
 
 function generatedDraftResult(music, generated, pending, { revisionOfPending = false } = {}) {
   const text = String(generated?.text || '').trim();
+  const version = pending?.version || 1;
   return {
     supported: true,
     kind: 'pmi_generated_draft',
@@ -217,12 +225,12 @@ function generatedDraftResult(music, generated, pending, { revisionOfPending = f
     targetGenre: music.targetGenre,
     session: music.session || null,
     text,
-    reply: text,
+    reply: `Rascunho v${version} · revise antes de aplicar.\n\n${text}`,
     provider: generated?.provider || null,
     model: generated?.model || null,
-    draftVersion: pending?.version || 1,
+    draftVersion: version,
     revisionOfPending,
-    previousDraftVersion: revisionOfPending ? Math.max(1, (pending?.version || 2) - 1) : null,
+    previousDraftVersion: revisionOfPending ? Math.max(1, version - 1) : null,
     execution: 'preview_only',
     canApply: false,
     reviewRequired: true,
@@ -254,6 +262,10 @@ function unsupported(reason) {
 
 function matches(text, phrases) {
   return phrases.some((phrase) => text.includes(phrase));
+}
+
+function boundedLyrics(value = '') {
+  return String(value || '').slice(0, 12000);
 }
 
 function normalize(value = '') {
