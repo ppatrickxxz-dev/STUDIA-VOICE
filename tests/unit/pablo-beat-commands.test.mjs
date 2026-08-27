@@ -39,7 +39,7 @@ test('section placement and genre generation abstain instead of inventing struct
   assert.equal(creative.reason, 'no_safe_audio_intent');
 });
 
-test('qualified beat operation executes before PMI through an injectable local executor', async () => {
+test('qualified beat operation executes before PMI and surfaces as a reversible deterministic edit', async () => {
   const seen = [];
   const result = await executePabloAudioMessage('Deixa essa bateria menos reta', { projectId: 'project_beat' }, {
     executeBeatOperation: async (operation, context) => {
@@ -56,13 +56,16 @@ test('qualified beat operation executes before PMI through an injectable local e
   assert.equal(seen.length, 1);
   assert.equal(seen[0].operation.action, 'humanize');
   assert.equal(seen[0].context.projectId, 'project_beat');
-  assert.equal(result.kind, 'beat_operation');
+  assert.equal(result.kind, 'deterministic_edit');
+  assert.equal(result.originalKind, 'beat_operation');
+  assert.equal(result.domain, 'beat_lab');
+  assert.equal(result.beatAction, 'humanize');
   assert.equal(result.canApply, true);
   assert.equal(result.execution, 'allowed');
   assert.equal(result.reply, 'Beat humanizado.');
 });
 
-test('blocked beat operation stays preview-only and preserves the reason', async () => {
+test('blocked beat operation stays preview-only and preserves Beat Lab provenance', async () => {
   const result = await executePabloAudioMessage('Usa o groove desse áudio', { projectId: 'p' }, {
     executeBeatOperation: async () => ({
       ok: false,
@@ -72,8 +75,22 @@ test('blocked beat operation stays preview-only and preserves the reason', async
     }),
   });
 
+  assert.equal(result.kind, 'deterministic_edit');
+  assert.equal(result.originalKind, 'beat_operation');
+  assert.equal(result.domain, 'beat_lab');
+  assert.equal(result.beatAction, 'apply_groove');
   assert.equal(result.canApply, false);
   assert.equal(result.execution, 'preview_only');
   assert.equal(result.result.reason, 'groove_evidence_unavailable');
   assert.equal(result.reply, 'Sem groove confiável.');
+});
+
+test('genre-pattern planning uses the same chat-safe deterministic preview contract', async () => {
+  const result = await executePabloAudioMessage('Faz bateria funk aqui', { projectId: 'p' });
+  assert.equal(result.kind, 'deterministic_edit');
+  assert.equal(result.originalKind, 'beat_generation_plan');
+  assert.equal(result.domain, 'beat_lab');
+  assert.equal(result.beatAction, 'genre_pattern');
+  assert.equal(result.canApply, false);
+  assert.equal(result.execution, 'preview_only');
 });
