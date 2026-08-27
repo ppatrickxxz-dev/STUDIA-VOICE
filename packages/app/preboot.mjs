@@ -40,10 +40,12 @@ try {
   const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
   const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
+  const { installRemoteAuthUI } = await import('./remote-auth-ui.mjs');
   installPabloConversationUI();
   installBreathReviewUI();
   installAdvancedAIStudio();
   installRuntimeCapabilityStatus();
+  installRemoteAuthUI();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {

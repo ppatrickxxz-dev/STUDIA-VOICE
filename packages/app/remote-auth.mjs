@@ -19,10 +19,7 @@ function decodeJwtPayload(token = '') {
 }
 
 function authHeaders(accessToken = '') {
-  const headers = {
-    apikey: PUBLISHABLE_KEY,
-    'content-type': 'application/json',
-  };
+  const headers = { apikey: PUBLISHABLE_KEY, 'content-type': 'application/json' };
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
   return headers;
 }
@@ -32,12 +29,7 @@ function sessionFromPayload(payload = {}) {
   const refreshToken = String(payload.refresh_token || '');
   if (!accessToken || !refreshToken) return null;
   const expiresIn = Math.max(30, Number(payload.expires_in || 3600));
-  return {
-    accessToken,
-    refreshToken,
-    tokenType: String(payload.token_type || 'bearer'),
-    expiresAt: Date.now() + expiresIn * 1000,
-  };
+  return { accessToken, refreshToken, tokenType: String(payload.token_type || 'bearer'), expiresAt: Date.now() + expiresIn * 1000 };
 }
 
 export class RemoteAuthAdapter {
@@ -89,11 +81,7 @@ export class RemoteAuthAdapter {
   async refreshSession() {
     if (!this.session?.refreshToken) return null;
     try {
-      const response = await this.fetch(`${PROJECT_URL}/auth/v1/token?grant_type=refresh_token`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ refresh_token: this.session.refreshToken }),
-      });
+      const response = await this.fetch(`${PROJECT_URL}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ refresh_token: this.session.refreshToken }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(String(data?.error_description || data?.msg || `auth_refresh_${response.status}`));
       const next = sessionFromPayload(data);
@@ -110,11 +98,7 @@ export class RemoteAuthAdapter {
   async loginWithDevice() {
     if (!this.deviceToken) return null;
     try {
-      const response = await this.fetch(DEVICE_AUTH_URL, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ action: 'login', device_token: this.deviceToken }),
-      });
+      const response = await this.fetch(DEVICE_AUTH_URL, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'login', device_token: this.deviceToken }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) throw new Error(String(data?.error || `device_login_${response.status}`));
       const next = sessionFromPayload(data.session || {});
@@ -127,6 +111,20 @@ export class RemoteAuthAdapter {
       this.clearSession({ keepDevice: false });
       return null;
     }
+  }
+
+  async loginWithBootstrapCode(code) {
+    const value = String(code || '').trim().replace(/\s+/g, '');
+    if (value.length < 6 || value.length > 64) throw new Error('Código de conexão inválido.');
+    const response = await this.fetch(DEVICE_AUTH_URL, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'bootstrap', code: value, label: 'PabloVoice Android' }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) throw new Error(String(data?.human_message || data?.error || `device_bootstrap_${response.status}`));
+    const next = sessionFromPayload(data.session || {});
+    if (!next) throw new Error('Sessão de conexão inválida.');
+    this.setSession(next);
+    if (data.device_token) this.setDeviceToken(data.device_token);
+    this.status = 'authenticated';
+    return next;
   }
 
   async ensureSession() {
@@ -147,20 +145,13 @@ export class RemoteAuthAdapter {
     if (!subject) return { ok: false, error: 'invalid_session', fallback_allowed: true };
     const filter = encodeURIComponent(JSON.stringify({ local_project_id: localId }));
     try {
-      const lookup = await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at&metadata=cs.${filter}&limit=1`, {
-        headers: authHeaders(accessToken),
-      });
+      const lookup = await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at&metadata=cs.${filter}&limit=1`, { headers: authHeaders(accessToken) });
       const matches = await lookup.json().catch(() => []);
       if (!lookup.ok) throw new Error(`project_lookup_${lookup.status}`);
       if (Array.isArray(matches) && matches[0]?.id) return { ok: true, created: false, project: matches[0] };
       const response = await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at`, {
-        method: 'POST',
-        headers: { ...authHeaders(accessToken), prefer: 'return=representation' },
-        body: JSON.stringify({
-          user_id: subject,
-          title,
-          metadata: { local_project_id: localId, source: 'pablovoice-local-first', linked_at: new Date().toISOString() },
-        }),
+        method: 'POST', headers: { ...authHeaders(accessToken), prefer: 'return=representation' },
+        body: JSON.stringify({ user_id: subject, title, metadata: { local_project_id: localId, source: 'pablovoice-local-first', linked_at: new Date().toISOString() } }),
       });
       const created = await response.json().catch(() => []);
       if (!response.ok || !Array.isArray(created) || !created[0]?.id) throw new Error(`project_create_${response.status}`);
@@ -185,11 +176,7 @@ export class RemoteAuthAdapter {
     const session = await this.ensureSession();
     if (!session?.accessToken) return { ok: false, error: 'auth_required', fallback_allowed: true };
     const request = async () => {
-      const response = await this.fetch(AGENT_URL, {
-        method: 'POST',
-        headers: authHeaders(this.session?.accessToken || ''),
-        body: JSON.stringify(payload),
-      });
+      const response = await this.fetch(AGENT_URL, { method: 'POST', headers: authHeaders(this.session?.accessToken || ''), body: JSON.stringify(payload) });
       return { response, data: await response.json().catch(() => ({})) };
     };
     let result = await request();
