@@ -1,0 +1,30 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "B11 continuity under repeated edits",
+  "frozen_before_first_provider_output": true,
+  "target": "active_vocal_track",
+  "commands": [
+    "Deixa minha voz mais limpa, sem mexer no fim.",
+    "Deixa ela mais presente e centraliza.",
+    "Coloca um fade bem curto no começo, sem mexer no fim."
+  ],
+  "expected_step_operations": [
+    [{"type":"set_effect","key":"clean","value":true}],
+    [
+      {"type":"set_effect","key":"presence","value":true},
+      {"type":"set_track","key":"pan","value":0}
+    ],
+    [{"type":"set_effect","key":"fadeIn","value":0.25}]
+  ],
+  "must_preserve_across_all_steps": [
+    "project identity",
+    "lyrics",
+    "track order",
+    "non-selected tracks",
+    "selected source asset identity",
+    "selected duration/sample-rate/channel layout",
+    "selected offset/trim/gain/mute/solo"
+  ],
+  "score_requires_acoustic_evidence": true,
+  "implementation_readiness_is_not_pass": true
+}
