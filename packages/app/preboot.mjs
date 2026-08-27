@@ -35,9 +35,11 @@ function fallbackShell() {
 try {
   await import('./app.js');
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
+  const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
   const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
   installPabloConversationUI();
+  installBreathReviewUI();
   installAdvancedAIStudio();
   installRuntimeCapabilityStatus();
   fallbackShell();
