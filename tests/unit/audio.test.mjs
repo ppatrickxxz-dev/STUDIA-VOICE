@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { encodeWav, normalizationFactor, wavHeader } from '../../packages/audio/src/presets.mjs';
+import { regionGainEnvelope } from '../../packages/app/audio-engine.mjs';
 
 function fakeBuffer(channels = [[0, .5, -1, 1]], sampleRate = 48000) {
   const data = channels.map((values) => Float32Array.from(values));
@@ -21,9 +22,23 @@ test('normalization is bounded to protect extreme gain changes', () => {
   assert.equal(normalizationFactor(fakeBuffer([[0, 1]]), .5), .5);
 });
 
+test('regional gain envelope lowers only the requested interval and returns to unity', () => {
+  const points = regionGainEnvelope([{ startSeconds: 1, endSeconds: 1.4, gainDb: -6, enabled: true }], 0, 3);
+  assert.equal(points.length, 4);
+  assert.ok(points[0].time < 1);
+  assert.ok(Math.abs(points[1].value - 0.501187) < 0.00001);
+  assert.equal(points.at(-1).time, 1.4);
+  assert.equal(points.at(-1).value, 1);
+});
+
+test('regional gain envelope skips disabled and out-of-window events', () => {
+  assert.deepEqual(regionGainEnvelope([{ startSeconds: 1, endSeconds: 2, gainDb: -6, enabled: false }], 0, 3), []);
+  assert.deepEqual(regionGainEnvelope([{ startSeconds: 1, endSeconds: 2, gainDb: -6 }], 2.1, 3), []);
+});
+
 test('audio engine source exposes aligned per-track rendering for stem export', async () => {
   const source = await readFile(new URL('../../packages/app/audio-engine.mjs', import.meta.url), 'utf8');
-  assert.match(source, /async renderTrack\(project, trackId, presetName = 'demo'\)/);
-  assert.match(source, /new OfflineAudioContext\(2, frames, preset\.sampleRate\)/);
+  assert.match(source, /async renderTrack\(project,trackId,presetName='demo'\)/);
+  assert.match(source, /new OfflineAudioContext\(2,Math\.ceil\(duration\*preset\.sampleRate\),preset\.sampleRate\)/);
   assert.match(source, /ultrapassa 0 dBFS/);
 });
