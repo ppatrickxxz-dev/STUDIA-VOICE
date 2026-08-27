@@ -19,6 +19,12 @@ test('Pablo remote turn is advice-only and has local fallback', () => {
   assert.match(remote, /sugestões locais continuam ativas/);
 });
 
+test('Pablo follows the project explicitly opened by the user', () => {
+  assert.match(remote, /activeLocalProjectId/);
+  assert.match(remote, /\[data-action="open-project"\]\[data-id\]/);
+  assert.match(remote, /projects\.find\(\(project\) => project\.id === remoteState\.activeLocalProjectId\)/);
+});
+
 test('CSP only adds the canonical Supabase project origin', () => {
   assert.match(html, /connect-src 'self' https:\/\/yokmhqoncdwvxmzzybqa\.supabase\.co/);
 });
