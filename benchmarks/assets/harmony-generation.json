@@ -1,0 +1,38 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "B07 harmony generation execution plan",
+  "frozen_before_first_b07_benchmark_output": true,
+  "input_domain": "edit_reference",
+  "layers": [
+    {"voice":"high","mode":"adaptive_partial"},
+    {"voice":"low","mode":"adaptive_partial"}
+  ],
+  "requirements": {
+    "both_layers_required": true,
+    "timing_alignment_required": true,
+    "formant_preservation_required": true,
+    "lead_must_remain_unmodified": true,
+    "discreet_blend_required": true,
+    "unsupported_or_missing_layer_is_non_promotable": true
+  },
+  "route_evidence": {
+    "endpoint": "progress-kaggle-harmony-v73",
+    "deployed_function_sha256": "b4dcc26669395ee4c9f07b8d525cf81805b2b6d75bbe7ab8a6a8a0134551def1",
+    "engine": "Rubber Band + librosa",
+    "worker_version": "7.5.2",
+    "supports_high": true,
+    "supports_low": true,
+    "supports_formant_preservation": true
+  },
+  "observed_execution": {
+    "high": {
+      "job_id": "022aee73-a3a2-4602-923d-5e054ede08ea",
+      "verified": true,
+      "source_sha256": "78b4c5e5728a8beb3b0e288699eb6aa5882e9ed580823a168c833bf9455701ac",
+      "output_sha256": "d3898083ab24f0bf9d26ea9a3cb094333c140d15bb3ec67bc4be560c9737a0fe",
+      "coverage": 0.1241
+    },
+    "low": null
+  },
+  "readiness_rule": "Route implementation can be ready before execution, but B07 cannot be scored or passed until both frozen layers are executed and retained against benchmark inputs."
+}
