@@ -2,13 +2,13 @@ const REVISION = /\b(mas|deixa|deixe|torna|torne|menos|mais|troca|troque|muda|mu
 const DRAFT_TARGET = /\b(rascunho|vers[aã]o|refr[aã]o|verso|ponte|trecho|letra|texto|parte|hook)\b/i;
 const FOLLOW_UP = /\b(gostei|curti|ficou|mas|agora|essa|esse|isso|dessa|desse)\b/i;
 const NEW_VARIANT = /\b(outro|outra|novo|nova|do zero|uma nova vers[aã]o|outra vers[aã]o)\b/i;
-const AUDIO_DOMAIN = /\b(voz|vocal|mix|[aá]udio|faixa|volume|grave|agudo|baixo|bateria|instrumental|respira[cç][aã]o|sibil[aâ]ncia|compress[aã]o|compressor|equaliza[cç][aã]o|\beq\b|reverb|delay|pan|est[eé]reo)\b/i;
+const AUDIO_DOMAIN = /\b(voz|vocal|mix|audio|faixa|volume|grave|agudo|baixo|bateria|instrumental|respiracao|sibilancia|compressao|compressor|equalizacao|eq|reverb|delay|pan|estereo)\b/i;
 
 export function planPendingDraftRevision(message = '', context = {}) {
   const task = String(message || '').trim();
   const pending = normalizePendingDraft(context.pendingDraft);
   if (!task || !pending) return Object.freeze({ supported: false });
-  if (AUDIO_DOMAIN.test(task) || NEW_VARIANT.test(task)) return Object.freeze({ supported: false });
+  if (AUDIO_DOMAIN.test(normalizeWords(task)) || NEW_VARIANT.test(task)) return Object.freeze({ supported: false });
   if (!REVISION.test(task) || (!DRAFT_TARGET.test(task) && !FOLLOW_UP.test(task))) {
     return Object.freeze({ supported: false });
   }
@@ -70,4 +70,11 @@ export function normalizePendingDraft(value) {
 function cleanOptional(value) {
   const text = String(value || '').trim().slice(0, 64);
   return text || null;
+}
+
+function normalizeWords(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
