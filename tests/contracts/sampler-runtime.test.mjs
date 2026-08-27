@@ -44,3 +44,13 @@ test('sampler audition uses source offsets for real slice playback', async () =>
   assert.match(sampler, /source\.start\(0, Math\.max\(0, pad\.start\), duration\)/);
   assert.match(sampler, /linearRampToValueAtTime/);
 });
+
+test('sampler styling stays compatible with the canonical CSP', async () => {
+  const [sampler, css] = await Promise.all([
+    read('packages/app/sampler-ui.mjs'),
+    read('packages/app/sampler.css'),
+  ]);
+  assert.match(sampler, /href = '\.\/sampler\.css'/);
+  assert.doesNotMatch(sampler, /createElement\(['"]style['"]\)/);
+  assert.match(css, /\.pv-sampler-grid/);
+});
