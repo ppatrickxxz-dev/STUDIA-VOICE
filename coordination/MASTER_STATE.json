@@ -11,7 +11,7 @@
     "doNotReplaceApprovedIdentity": true
   },
   "activeWorkstreams": [
-    {"pr":37,"area":"B09 standalone stems","status":"active-current-main-candidate","notes":"Current-main replacement for PR #31; fixes auth-fragment timing and visible-project identity P1 findings. routeValidated remains false until authenticated canary persists two independent stems."},
+    {"pr":null,"mergedPR":37,"area":"B09 standalone stems","status":"merged-awaiting-live-canary","notes":"Current-main canary implementation passed Web, contracts, Android build and emulator gates and was merged. routeValidated remains false until a live authenticated standalone job persists two independent stems."},
     {"pr":32,"area":"B11 sequential edit continuity","status":"implementation-ready-unexecuted","notes":"Sequential PT-BR edit guard exists; acoustic continuity/identity drift gate still requires retained execution evidence."},
     {"pr":24,"area":"Pablo remote conversation","status":"active-needs-reconciliation","notes":"Remote conversation layer remains relevant but branch predates current main and must be reconciled before promotion."}
   ],
@@ -39,7 +39,7 @@
     {"id":"studio-life","name":"Pocket Studio / Studio Life","priority":"P3","status":"canonical-concept","validated":false,"notes":"Character/Pocket/Room/Eras/Memories/companions support creation and must not become punitive gamification."},
     {"id":"web","name":"PabloVoice Web","priority":"P0","status":"candidate","validated":false,"notes":"CI/browser gates exist; public production promotion remains blocked until final functional evidence."},
     {"id":"android","name":"PabloVoice Android","priority":"P0","status":"candidate","validated":false,"notes":"Build and emulator gates pass in current lineage; physical-device gate remains distinct and required."},
-    {"id":"b09-standalone-stems","name":"B09 Standalone Stems","priority":"P0","status":"candidate","validated":false,"currentPR":37,"nextGate":"CI/browser/emulator green -> authenticated standalone canary -> two persisted stems -> reconcile hashes/provenance -> set routeValidated=true"},
+    {"id":"b09-standalone-stems","name":"B09 Standalone Stems","priority":"P0","status":"merged-awaiting-live-canary","validated":false,"mergedPR":37,"nextGate":"main deployment must serve stems-canary -> authenticated standalone canary -> two persisted stems -> reconcile hashes/provenance -> set routeValidated=true"},
     {"id":"b11-edit-continuity","name":"B11 Sequential Edit Continuity","priority":"P1","status":"implementation-ready-unexecuted","validated":false,"currentPR":32,"nextGate":"execute frozen sequence on retained audio -> measure continuity/identity drift/mix drift/boundary cleanliness"}
   ],
   "globalBlockers": [
