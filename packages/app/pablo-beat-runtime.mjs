@@ -6,7 +6,7 @@ export async function executePersistedPabloBeatOperation(operation = {}, context
   let project = projectId ? await getProject(projectId) : null;
   if (!project) project = (await listProjects())[0] || null;
 
-  const result = applyPabloBeatOperation(project, operation);
+  const result = await applyPabloBeatOperation(project, operation);
   if (!result?.ok || !result?.mutated || !result?.project) return result;
 
   const saved = await saveProject(result.project);
