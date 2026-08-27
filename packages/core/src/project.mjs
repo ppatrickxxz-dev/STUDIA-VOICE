@@ -1,4 +1,6 @@
-export const PROJECT_SCHEMA_VERSION = 5;
+import { createArrangementMap, normalizeArrangementMap } from './section-map.mjs';
+
+export const PROJECT_SCHEMA_VERSION = 6;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -35,6 +37,7 @@ export function createProject(name = 'Minha ideia', now = Date.now()) {
     notes: '',
     preset: 'demo',
     authorialMemory: null,
+    arrangementMap: createArrangementMap(now),
     revisions: [],
     appVersion: '2.4.0-rc.1',
   };
@@ -82,6 +85,7 @@ export function migrateProject(input) {
   project.notes = String(project.notes || '');
   project.preset = ['music', 'demo', 'podcast', 'video', 'streaming'].includes(project.preset) ? project.preset : 'demo';
   project.authorialMemory = normalizeAuthorialMemory(project.authorialMemory);
+  project.arrangementMap = normalizeArrangementMap(project.arrangementMap || createArrangementMap(project.createdAt));
   return project;
 }
 
@@ -123,6 +127,8 @@ export function snapshotProject(project, label = 'Salvamento') {
     lyrics: clean.lyrics,
     preset: clean.preset,
     authorialMemory: clean.authorialMemory ? structuredClone(clean.authorialMemory) : null,
+    arrangementMap: structuredClone(clean.arrangementMap),
+    beatLab: clean.beatLab ? structuredClone(clean.beatLab) : null,
   };
   clean.revisions = [...clean.revisions, revision].slice(-40);
   clean.updatedAt = revision.at;
@@ -136,6 +142,7 @@ export function validateProject(input) {
   if (!input.name) errors.push('Nome do projeto ausente.');
   if (!Array.isArray(input.tracks)) errors.push('Tracks inválidas.');
   if (input.authorialMemory != null && typeof input.authorialMemory !== 'object') errors.push('Memória autoral inválida.');
+  if (input.arrangementMap != null && typeof input.arrangementMap !== 'object') errors.push('Mapa de seções inválido.');
   for (const track of input.tracks || []) {
     if (!track.id || !track.assetId) errors.push('Track sem ID ou arquivo.');
     if (finite(track.trimStart, 0) > finite(track.trimEnd, 0)) errors.push(`Trim invertido em ${track.name || track.id}.`);
