@@ -54,11 +54,11 @@ function status(text,kind=''){const el=document.querySelector('#pv-stems-canary-
 function buttonDisabled(value){const b=document.querySelector('#pv-stems-canary-run');if(b)b.disabled=value}
 function ensureUi(){
   const studio=document.querySelector('.pv-studio-actions');if(!studio||document.querySelector('#pv-stems-canary'))return;
-  const wrap=document.createElement('div');wrap.id='pv-stems-canary';wrap.className='pv-stems-canary';wrap.innerHTML='<button id="pv-stems-canary-run" class="pv-btn" type="button">Separar voz + instrumental <small>candidate</small></button><span id="pv-stems-canary-status" class="pv-stems-canary-status">Demucs validado; rota standalone em canário.</span>';
+  const wrap=document.createElement('div');wrap.id='pv-stems-canary';wrap.className='pv-studio-actions';wrap.setAttribute('data-candidate','stems');
+  wrap.innerHTML='<button id="pv-stems-canary-run" class="pv-btn" type="button">Separar voz + instrumental · candidate</button><span id="pv-stems-canary-status" class="pv-health">Demucs validado; rota standalone em canário.</span>';
   studio.insertAdjacentElement('afterend',wrap);document.querySelector('#pv-stems-canary-run')?.addEventListener('click',runCanary);
 }
 
-const style=document.createElement('style');style.textContent='.pv-stems-canary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px}.pv-stems-canary .pv-btn{border-style:dashed}.pv-stems-canary small{opacity:.65;margin-left:5px}.pv-stems-canary-status{font-size:10px;color:#9aa1b3}.pv-stems-canary-status[data-kind="ok"]{color:#60dfa0}.pv-stems-canary-status[data-kind="warn"]{color:#e8c765}.pv-stems-canary-status[data-kind="error"]{color:#ff8298}';document.head.appendChild(style);
 new MutationObserver(ensureUi).observe(document.documentElement,{subtree:true,childList:true});ensureUi();
 
 export const STANDALONE_STEMS_CANARY=Object.freeze({dispatcher:DISPATCHER,engine:'Demucs',model:'htdemucs',routeValidated:false});
