@@ -1,4 +1,5 @@
 import { EXPORT_PRESETS, normalizationFactor, peakOf } from './audio/src/presets.mjs';
+import { regionGainEnvelope } from './audio/src/automation/region-gain.mjs';
 
 export class PabloAudioEngine {
   constructor() {
@@ -214,6 +215,12 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
   automateGain(gain.gain, level, mode === 'processed' ? effects : {}, when, localCursor, duration);
   node.connect(gain);
   node = gain;
+  if (mode === 'processed' && Array.isArray(track.regionAutomation) && track.regionAutomation.length) {
+    const regional = context.createGain();
+    automateRegions(regional.gain, track.regionAutomation, when, localCursor, duration);
+    node.connect(regional);
+    node = regional;
+  }
   if (context.createStereoPanner) {
     const pan = context.createStereoPanner();
     pan.pan.value = Math.max(-1, Math.min(1, Number(track.pan || 0)));
@@ -270,6 +277,14 @@ function automateGain(param, level, effects, when, cursor, duration) {
       param.setValueAtTime(level * Math.max(0, (duration - cursor) / fadeOut), when);
       param.linearRampToValueAtTime(0, when + Math.max(0.001, duration - cursor));
     }
+  }
+}
+
+function automateRegions(param, events, when, cursor, duration) {
+  param.setValueAtTime(1, when);
+  for (const point of regionGainEnvelope(events, cursor, duration)) {
+    const at = when + Math.max(0, point.time - cursor);
+    param.linearRampToValueAtTime(point.value, at);
   }
 }
 

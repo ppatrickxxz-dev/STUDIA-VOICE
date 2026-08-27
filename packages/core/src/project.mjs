@@ -1,4 +1,4 @@
-export const PROJECT_SCHEMA_VERSION = 3;
+export const PROJECT_SCHEMA_VERSION = 4;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -60,6 +60,7 @@ export function createTrack({ name, assetId, type = 'audio/wav', duration = 0, s
     muted: false,
     solo: false,
     effects: { ...DEFAULT_EFFECTS },
+    regionAutomation: [],
   };
 }
 
@@ -104,6 +105,7 @@ export function migrateTrack(input) {
     muted: Boolean(input?.muted),
     solo: Boolean(input?.solo),
     effects: { ...DEFAULT_EFFECTS, ...(input?.effects || {}) },
+    regionAutomation: normalizeRegionAutomation(input?.regionAutomation, duration),
   };
 }
 
@@ -113,8 +115,8 @@ export function snapshotProject(project, label = 'Salvamento') {
     id: createId('revision'),
     at: Date.now(),
     label: String(label).slice(0, 80),
-    tracks: clean.tracks.map(({ id, name, trimStart, trimEnd, gain, pan, muted, solo, effects }) => ({
-      id, name, trimStart, trimEnd, gain, pan, muted, solo, effects: { ...effects },
+    tracks: clean.tracks.map(({ id, name, trimStart, trimEnd, gain, pan, muted, solo, effects, regionAutomation }) => ({
+      id, name, trimStart, trimEnd, gain, pan, muted, solo, effects: { ...effects }, regionAutomation: structuredClone(regionAutomation),
     })),
     lyrics: clean.lyrics,
     preset: clean.preset,
@@ -137,6 +139,24 @@ export function validateProject(input) {
   return { valid: errors.length === 0, errors };
 }
 
+function normalizeRegionAutomation(input, duration) {
+  if (!Array.isArray(input)) return [];
+  return input.map((event, index) => {
+    const start = clamp(finite(event?.startSeconds ?? event?.start, 0), 0, duration);
+    const end = clamp(finite(event?.endSeconds ?? event?.end, start), start, duration);
+    return {
+      id: String(event?.id || `region_${index}`),
+      kind: String(event?.kind || 'gain'),
+      startSeconds: start,
+      endSeconds: end,
+      gainDb: clamp(finite(event?.gainDb ?? event?.reductionDb, 0), -60, 12),
+      confidence: clamp(finite(event?.confidence, 0), 0, 1),
+      source: String(event?.source || 'manual'),
+      enabled: event?.enabled !== false,
+    };
+  }).filter((event) => event.endSeconds > event.startSeconds);
+}
+
 function finite(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -145,4 +165,3 @@ function finite(value, fallback) {
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
-
