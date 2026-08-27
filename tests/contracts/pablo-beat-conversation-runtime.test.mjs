@@ -11,6 +11,9 @@ test('Pablo conversation routes explicit beat commands before creative PMI', asy
   assert.match(conversation, /executeDefaultBeatOperation/);
   assert.match(conversation, /pablo-beat-runtime\.mjs/);
   assert.match(conversation, /const music = await tryMusicIntelligence/);
+  assert.match(conversation, /domain: 'beat_lab'/);
+  assert.match(conversation, /originalKind: direct\.kind/);
+  assert.match(conversation, /kind: 'deterministic_edit'/);
   assert.ok(conversation.indexOf("kind === 'beat_operation'") < conversation.indexOf('const music = await tryMusicIntelligence'));
 });
 
@@ -18,12 +21,13 @@ test('canonical beat runtime persists only successful mutations', async () => {
   const runtime = await read('packages/app/pablo-beat-runtime.mjs');
   const operations = await read('packages/app/pablo-beat-operations.mjs');
   assert.match(runtime, /applyPabloBeatOperation/);
+  assert.match(runtime, /await applyPabloBeatOperation/);
   assert.match(runtime, /saveProject\(result\.project\)/);
   assert.match(runtime, /!result\?\.ok \|\| !result\?\.mutated/);
   assert.match(operations, /section_mapping_required/);
   assert.match(operations, /genre_pattern_preview_only/);
   assert.match(operations, /groove_evidence_unavailable/);
-  assert.match(operations, /snapshotProject/);
+  assert.match(operations, /snapshotProjectCompat/);
 });
 
 test('beat commands do not depend on random generation or remote providers', async () => {
