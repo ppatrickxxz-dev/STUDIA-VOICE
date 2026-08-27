@@ -68,6 +68,14 @@
     "ticket": "voice-ab-ticket-v70",
     "worker": "kaggle-voice-worker-v71",
     "complete": "complete-kaggle-voice-v70",
+    "authenticated_dispatch_required": true,
+    "localized_region_guard_deployed": true,
+    "identity_reference_guard_deployed": true,
+    "exact_guide_and_model_hash_guard_deployed": true,
+    "compute_sha256": "2969d50b9404b8d5b64eab631d1211d4dec698a3edb86a6ee3956c08db9aeca4",
+    "ticket_sha256": "dfe9b61f5c67f716949fbe3aaaeeac50b8e41df36c0bab0a3ea752fa789d4af5",
+    "worker_sha256": "556fa48bc2edc02da42a800d236be34677cfd99fb3399717baaaaadbd8f5b5ea",
+    "complete_sha256": "eaa57aabfb261feb9a0abf472c88f8dc04ce1a112c8f8e47355b82ccdc6e55bb",
     "compute_sha256_before_b04_locality_upgrade": "8b9584eabdc393e332c3f9aefb5315bd5304940f4a034a38d53ecac523a2660a",
     "ticket_sha256_before_b04_locality_upgrade": "db5c12886f34d528cf08ba4b8ff29712d049916c1aca0cafd12d0af70a76326e",
     "worker_sha256_before_b04_locality_upgrade": "dcff01646c13328f9d3358857aeb6a01f653817fa0cd833ccb49aa9486113614",
@@ -75,5 +83,5 @@
   },
   "engineering_smoke_evidence": "benchmarks/results/b04-rvc-v71-smokes.json",
   "observed_execution": null,
-  "readiness_rule": "B04 becomes implementation-ready only when the live route enforces the exact guide, selected region and active frozen identity reference. It remains unscored until a retained localized output is produced and reviewed against the frozen benchmark."
+  "readiness_rule": "B04 implementation can be ready before execution, but it cannot be scored or passed until the frozen provider-input identity reference is ingested privately, activated for the frozen model, the exact 64-72 second phrase is rendered and retained, and timbre/formant/performance/speaker metrics plus blind review are complete."
 }
