@@ -1,3 +1,5 @@
+const pmiSessionCache = new Map();
+
 export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   voice_forward: 'bring_voice_forward',
   make_vocal_space: 'make_vocal_space',
@@ -69,6 +71,7 @@ export async function executePabloAudioMessage(message, context, {
   audioToolRuntime,
   executeDeterministicEdit,
   persistAuthorialMemory,
+  generateMusicDraft,
 } = {}) {
   const music = await tryMusicIntelligence(message, context);
   if (music?.supported) {
@@ -78,6 +81,43 @@ export async function executePabloAudioMessage(message, context, {
       }
       const persistence = await persistAuthorialMemory(music.authorialMemory, music.feedback);
       return { ...music, persistence, execution: 'allowed', canApply: true };
+    }
+    if (music.kind === 'pmi_generation_request') {
+      if (music.blocked) {
+        return {
+          ...music,
+          kind: 'pmi_generation_blocked',
+          reply: music.reason === 'lyrics_required'
+            ? 'Esse pedido precisa de uma letra ou trecho no projeto primeiro. Não gerei nada por fora do seu contexto.'
+            : 'Esse pedido ainda não está pronto para geração.',
+          execution: 'none',
+          canApply: false,
+        };
+      }
+      if (typeof generateMusicDraft !== 'function') {
+        return {
+          ...music,
+          reply: 'O plano criativo está pronto, mas a geração online não está disponível nesta sessão. Não alterei sua letra.',
+          execution: 'preview_only',
+          canApply: false,
+        };
+      }
+      const generated = await generateMusicDraft(music.request);
+      return {
+        supported: true,
+        kind: 'pmi_generated_draft',
+        command: music.command,
+        targetSection: music.targetSection,
+        targetGenre: music.targetGenre,
+        session: music.session,
+        text: String(generated?.text || '').trim(),
+        reply: String(generated?.text || '').trim(),
+        provider: generated?.provider || null,
+        model: generated?.model || null,
+        execution: 'preview_only',
+        canApply: false,
+        reviewRequired: true,
+      };
     }
     return { ...music, execution: 'read_only', canApply: false };
   }
@@ -104,12 +144,31 @@ export async function executePabloAudioMessage(message, context, {
   return { ...parsed, result, execution: 'allowed', canApply: true };
 }
 
-async function tryMusicIntelligence(message, context) {
+async function tryMusicIntelligence(message, context = {}) {
   const intelligence = await loadMusicIntelligence();
   if (!intelligence) return null;
-  const feedback = intelligence.respondToAuthorialFeedback(message, context);
+  const projectId = String(context.projectId || '');
+  const enrichedContext = projectId && pmiSessionCache.has(projectId)
+    ? { ...context, pmiSession: pmiSessionCache.get(projectId) }
+    : context;
+
+  const feedback = intelligence.respondToAuthorialFeedback(message, enrichedContext);
   if (feedback?.supported) return feedback;
-  return intelligence.respondToMusicCreation(message, context);
+
+  const generation = intelligence.planComposerGeneration(message, enrichedContext);
+  if (generation?.supported) {
+    rememberPmiSession(projectId, generation.session);
+    return generation;
+  }
+
+  const planning = intelligence.respondToMusicCreation(message, enrichedContext);
+  if (planning?.supported) rememberPmiSession(projectId, planning.session);
+  return planning;
+}
+
+function rememberPmiSession(projectId, session) {
+  if (!projectId || !session || session.schema !== 'pmi_music_session_v1') return;
+  pmiSessionCache.set(projectId, session);
 }
 
 async function loadMusicIntelligence() {

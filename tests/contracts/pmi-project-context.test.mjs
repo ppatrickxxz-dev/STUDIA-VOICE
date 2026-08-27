@@ -36,8 +36,11 @@ test('conversation UI forwards bounded creative project context and persists onl
   assert.match(source, /project\.authorialMemory = authorialMemory \? structuredClone\(authorialMemory\) : null/);
 });
 
-test('PMI replies render directly instead of falling through the audio-analysis formatter', async () => {
+test('all PMI reply kinds render directly instead of falling through the audio-analysis formatter', async () => {
   const source = await readFile(new URL('../../packages/app/pablo-conversation-ui.mjs', import.meta.url), 'utf8');
-  assert.match(source, /result\.kind === 'pmi_music_session' \|\| result\.kind === 'pmi_authorial_feedback'/);
-  assert.match(source, /return result\.reply \|\| 'Entendi sua direção criativa\.'/);
+  for (const kind of ['pmi_music_session', 'pmi_authorial_feedback', 'pmi_generation_request', 'pmi_generation_blocked', 'pmi_generated_draft']) {
+    assert.match(source, new RegExp(`['"]${kind}['"]`));
+  }
+  assert.match(source, /\.includes\(result\.kind\)/);
+  assert.match(source, /return result\.reply \|\| result\.text \|\| 'Entendi sua direção criativa\.'/);
 });

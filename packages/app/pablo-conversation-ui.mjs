@@ -12,6 +12,7 @@ import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
 
 const analysisCache = new Map();
 const remoteAuth = new RemoteAuthAdapter();
+const REVIEWED_SONG_COMMANDS = new Set(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
 let injecting = false;
 
 remoteAuth.consumeBootstrapFragment();
@@ -128,6 +129,54 @@ async function persistAuthorialMemoryState(authorialMemory, feedback) {
   };
 }
 
+async function generateMusicDraft(request) {
+  const project = await activeProject();
+  if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+  if (!REVIEWED_SONG_COMMANDS.has(request?.command)) throw new Error('Esse tipo de geração ainda não foi liberado no Composer.');
+
+  const health = await remoteAuth.agentHealth();
+  if (!health?.available) throw new Error('O Composer online não está disponível agora. Seu projeto local continua intacto.');
+  const linked = await remoteAuth.ensureRemoteProject(project);
+  if (!linked?.ok || !linked.project?.id) throw new Error('Não consegui ligar este projeto ao Composer agora.');
+
+  const result = await remoteAuth.agentTurn({
+    command: request.command,
+    project_id: linked.project.id,
+    task: String(request.task || '').slice(0, 4000),
+    context_pack: {
+      ...(request.contextPack || {}),
+      local_project_id: project.id,
+      project_title: project.name,
+      preset: project.preset,
+    },
+    author_samples: Array.isArray(request.authorSamples) ? request.authorSamples.slice(0, 3) : [],
+    constraints: { ...(request.constraints || {}), review_before_apply: true },
+    best_of_n: 1,
+  });
+  const text = String(result?.reply || result?.text || '').trim();
+  if (!result?.ok || !text) throw new Error(composerError(result?.error));
+  return {
+    text,
+    provider: result.provider || health.provider || 'remote',
+    model: result.model || health.model || null,
+  };
+}
+
+async function applyPmiGeneratedDraft(text, mode = 'replace') {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  const project = await activeProject();
+  if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+  const current = String(project.lyrics || '').trimEnd();
+  project.lyrics = mode === 'append' && current ? `${current}\n\n${value}` : value;
+  const label = mode === 'append' ? 'Rascunho PMI adicionado à letra' : 'Rascunho PMI usado como letra';
+  const saved = snapshotProject(project, label);
+  await persistProject(saved);
+  const lyrics = document.querySelector('#lyrics');
+  if (lyrics) lyrics.value = saved.lyrics;
+  return true;
+}
+
 async function contextForMessage() {
   const project = await activeProject();
   const active = project?.tracks?.find((track) => track.id === project.activeTrackId) || project?.tracks?.[0] || null;
@@ -209,6 +258,7 @@ async function submitMessage(form) {
       audioToolRuntime,
       executeDeterministicEdit,
       persistAuthorialMemory: persistAuthorialMemoryState,
+      generateMusicDraft,
     });
     if (result?.supported) {
       appendMessage(formatResult(result), 'assistant', result);
@@ -240,7 +290,7 @@ function injectConversationBox() {
   box.dataset.pabloConversation = 'true';
   box.className = 'pv-conversation';
   box.innerHTML = `<div class="pv-conversation-log" data-pablo-log>
-    <div class="pv-msg assistant">Pode falar do seu jeito: “quero criar uma música sobre…”, “não use essa palavra”, “deixa minha voz mais na frente” ou “suaviza minhas respirações”.<small>PMI local · ações seguras · IA remota opcional</small></div>
+    <div class="pv-msg assistant">Pode falar do seu jeito: “quero criar uma música sobre…”, “escreve um refrão dessa ideia”, “não use essa palavra” ou “deixa minha voz mais na frente”.<small>PMI local · Composer sob pedido · revisão antes de aplicar</small></div>
   </div>
   <form class="pv-compose-row" data-pablo-form>
     <input class="pv-field" name="message" autocomplete="off" placeholder="O que você quer criar ou fazer com o som?" aria-label="Falar com Pablo sobre música e áudio">
@@ -264,11 +314,36 @@ function appendMessage(text, role, result = null) {
   if (result?.data?.decision) metaText = `confiança: ${Math.round((result.data.confidence || 0) * 100)}% · ${result.data.decision}`;
   else if (result?.kind === 'pmi_music_session') metaText = 'PMI Music 1.0 · direção criativa local';
   else if (result?.kind === 'pmi_authorial_feedback') metaText = `PMI · memória autoral${result.canApply ? ' salva' : ' em prévia'}`;
+  else if (result?.kind === 'pmi_generated_draft') metaText = `PMI → Composer · ${result.provider || 'IA remota'}${result.model ? ` · ${result.model}` : ''} · revisar antes de usar`;
+  else if (result?.kind === 'pmi_generation_blocked') metaText = 'PMI · geração não executada';
   else if (result?.kind === 'remote_reasoning') metaText = `IA remota · ${result.provider}${result.model ? ` · ${result.model}` : ''}`;
   if (metaText) {
     const meta = document.createElement('small');
     meta.textContent = metaText;
     message.appendChild(meta);
+  }
+  if (result?.kind === 'pmi_generated_draft' && String(result.text || '').trim()) {
+    const actions = document.createElement('div');
+    actions.className = 'pv-actions';
+    for (const [mode, label] of [['replace', 'Usar como letra'], ['append', 'Adicionar à letra']]) {
+      const button = document.createElement('button');
+      button.className = 'pv-btn';
+      button.type = 'button';
+      button.textContent = label;
+      button.addEventListener('click', async () => {
+        const buttons = [...actions.querySelectorAll('button')];
+        buttons.forEach((item) => { item.disabled = true; });
+        try {
+          await applyPmiGeneratedDraft(result.text, mode);
+          appendMessage(mode === 'append' ? 'Adicionei o rascunho à letra e salvei uma revisão.' : 'Usei o rascunho como letra e salvei uma revisão.', 'assistant');
+        } catch (error) {
+          appendMessage(error?.message || 'Não consegui aplicar esse rascunho.', 'assistant', { error: true });
+          buttons.forEach((item) => { item.disabled = false; });
+        }
+      });
+      actions.appendChild(button);
+    }
+    message.appendChild(actions);
   }
   log.appendChild(message);
   message.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -276,7 +351,9 @@ function appendMessage(text, role, result = null) {
 
 function formatResult(result) {
   if (!result?.supported) return 'Ainda não tenho uma ação segura para esse pedido. Não alterei o projeto.';
-  if (result.kind === 'pmi_music_session' || result.kind === 'pmi_authorial_feedback') return result.reply || 'Entendi sua direção criativa.';
+  if (['pmi_music_session', 'pmi_authorial_feedback', 'pmi_generation_request', 'pmi_generation_blocked', 'pmi_generated_draft'].includes(result.kind)) {
+    return result.reply || result.text || 'Entendi sua direção criativa.';
+  }
   if (result.kind === 'deterministic_edit') return result.canApply ? 'Entendi e apliquei a edição reversível no projeto.' : 'Entendi a edição, mas mantive somente como prévia.';
   if (!result.result?.ok) return `Não consegui usar essa análise: ${result.result?.reason || 'dados insuficientes'}.`;
   const data = result.result.data || {};
@@ -291,6 +368,18 @@ function formatResult(result) {
   if (result.tool === 'align_vocals') return Number.isFinite(data.offsetMs) ? `O vocal secundário está deslocado em cerca de ${Math.round(data.offsetMs)} ms. ${data.execution === 'allowed' ? 'A correção está elegível para prévia.' : 'Vou manter como sugestão.'}` : 'Não encontrei evidência suficiente para alinhar automaticamente.';
   if (result.tool === 'audio_to_instrument') return data.chromatic?.ready ? `O áudio pode virar instrumento cromático a partir da nota MIDI ${data.chromatic.rootMidi}.` : 'Ainda não há pitch confiável o suficiente para transformar este áudio em instrumento automaticamente.';
   return 'Análise concluída. Mantive o resultado como preview seguro.';
+}
+
+function composerError(code) {
+  const known = {
+    auth_required: 'Entre no PabloVoice para usar o Composer online.',
+    invalid_session: 'Sua sessão do PabloVoice expirou. Entre novamente.',
+    project_not_found: 'Não consegui confirmar este projeto no Composer.',
+    composer_key_unavailable: 'O Composer online ainda não está configurado no servidor.',
+    remote_provider_failed: 'O Composer online falhou agora. Sua letra local foi preservada.',
+    remote_empty_response: 'O Composer não devolveu um rascunho utilizável. Sua letra local foi preservada.',
+  };
+  return known[code] || 'Não consegui gerar esse rascunho agora. Sua letra local foi preservada.';
 }
 
 function coarseSpectrum(samples, sampleRate, bands = 8) {

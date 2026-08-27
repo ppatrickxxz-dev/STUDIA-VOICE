@@ -14,6 +14,10 @@ export {
   respondToAuthorialFeedback,
 } from './authorial-feedback.mjs';
 export {
+  planComposerGeneration,
+  isExplicitGenerationRequest,
+} from './generator-adapter.mjs';
+export {
   startCompositionSession,
   critiqueDraft,
   isMusicCreationRequest,
@@ -28,5 +32,6 @@ export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'draft_critic',
   'authorial_memory',
   'authorial_feedback',
+  'composer_generator_adapter',
   'conversational_entrypoint',
 ]);
