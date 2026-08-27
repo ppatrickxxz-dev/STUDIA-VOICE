@@ -19,12 +19,14 @@ test('creates reusable pads from canonical onset slices without duplicating audi
     ],
   });
 
-  assert.equal(state.schema, 'pablovoice_sampler_v1');
+  assert.equal(state.schema, 'pablovoice_sampler_v2');
   assert.equal(state.pads.length, 2);
   assert.equal(state.pads[0].sourceAssetId, 'asset_voice_1');
   assert.equal(state.pads[1].sourceAssetId, 'asset_voice_1');
   assert.equal(state.pads[1].start, 0.4);
   assert.equal(samplerPadDuration(state.pads[1]), 0.5);
+  assert.equal(state.pads[0].category, 'unknown');
+  assert.equal(state.grooveTemplate.ready, false);
 });
 
 test('sampler is capped to a touch-friendly 16 pad bank by default', () => {
