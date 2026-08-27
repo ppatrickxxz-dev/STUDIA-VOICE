@@ -10,10 +10,12 @@ const SECTION_HINTS = Object.freeze([
   ['rap', /\b(rap|barra|barras)\b/i],
 ]);
 
-const REWRITE = /\b(reescrev\w*|refaz\w*|reescreva|reescrever|reformula\w*|melhora esse|melhore esse)\b/i;
-const CONTINUE = /\b(continua\w*|continue|completa\w*|complete|termina\w*|termine|pr[oó]ximo verso|pr[oó]xima parte)\b/i;
-const ADAPT = /\b(adapta\w*|adapte|leva\w* (?:isso|essa|esse)|transforma\w* (?:isso|essa|esse)).{0,32}\b(funk|r&b|rnb|rap|hip.?hop|pop|mpb|pagode|edm|k-?pop|trap)\b/i;
-const GENERATE = /\b(escreve\w*|escreva|gera\w*|gere|cria\w*|crie|faz\w*|faça)\b.{0,40}\b(refr[aã]o|hook|verso|estrofe|ponte|letra|rap|parte|m[uú]sica)\b/i;
+const SONG_CONTENT = /\b(refr[aã]o|hook|verso|estrofe|ponte|letra|texto|trecho|rap|parte)\b/i;
+const REWRITE = /\b(reescreve|reescreva|reescrever|refaz|refaça|reformula|reformule|melhora esse|melhore esse)\b/i;
+const CONTINUE = /\b(continua|continue|continuar|completa|complete|completar|termina|termine|terminar|pr[oó]ximo verso|pr[oó]xima parte)\b/i;
+const ADAPT = /\b(adapta|adapte|adaptar|leva (?:isso|essa|esse)|transforma (?:isso|essa|esse)).{0,40}\b(funk|r&b|rnb|rap|hip.?hop|pop|mpb|pagode|edm|k-?pop|trap)\b/i;
+const DIRECT_GENERATE = /\b(escreve|escreva|gera|gere|cria|crie|faz|faça)\b.{0,40}\b(refr[aã]o|hook|verso|estrofe|ponte|letra|rap|parte)\b/i;
+const POLITE_GENERATE = /\b(pode|consegue|vamos)\s+(?:me\s+)?(gerar|escrever|fazer|criar)\b.{0,40}\b(refr[aã]o|hook|verso|estrofe|ponte|letra|rap|parte)\b/i;
 
 export function planComposerGeneration(message = '', context = {}) {
   const source = String(message || '').trim();
@@ -23,7 +25,15 @@ export function planComposerGeneration(message = '', context = {}) {
 
   const lyrics = String(context.lyrics || '').slice(0, 12000);
   if ((command === 'rewrite' || command === 'continue_section' || command === 'adapt_genre') && !lyrics.trim()) {
-    return Object.freeze({ supported: true, blocked: true, reason: 'lyrics_required', command });
+    return Object.freeze({
+      supported: true,
+      blocked: true,
+      kind: 'pmi_generation_request',
+      reason: 'lyrics_required',
+      command,
+      targetSection: inferSection(source),
+      targetGenre: command === 'adapt_genre' ? inferGenre(source) : null,
+    });
   }
 
   const memory = createAuthorialMemory(context.authorialMemory || {});
@@ -82,10 +92,10 @@ export function isExplicitGenerationRequest(message = '') {
 }
 
 function inferCommand(text) {
-  if (REWRITE.test(text)) return 'rewrite';
-  if (CONTINUE.test(text)) return 'continue_section';
-  if (ADAPT.test(text)) return 'adapt_genre';
-  if (GENERATE.test(text)) return 'generate';
+  if (REWRITE.test(text) && SONG_CONTENT.test(text)) return 'rewrite';
+  if (CONTINUE.test(text) && SONG_CONTENT.test(text)) return 'continue_section';
+  if (ADAPT.test(text) && SONG_CONTENT.test(text)) return 'adapt_genre';
+  if (DIRECT_GENERATE.test(text) || POLITE_GENERATE.test(text)) return 'generate';
   return null;
 }
 
