@@ -1,5 +1,6 @@
 import { EXPORT_PRESETS, normalizationFactor, peakOf } from './audio/src/presets.mjs';
 import { regionGainEnvelope } from './audio/src/automation/region-gain.mjs';
+import { sourceRegionsToTrackTime } from './audio/src/automation/region-time.mjs';
 
 export class PabloAudioEngine {
   constructor() {
@@ -217,7 +218,8 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
   node = gain;
   if (mode === 'processed' && Array.isArray(track.regionAutomation) && track.regionAutomation.length) {
     const regional = context.createGain();
-    automateRegions(regional.gain, track.regionAutomation, when, localCursor, duration);
+    const localRegions = sourceRegionsToTrackTime(track, track.regionAutomation);
+    automateRegions(regional.gain, localRegions, when, localCursor, duration);
     node.connect(regional);
     node = regional;
   }
