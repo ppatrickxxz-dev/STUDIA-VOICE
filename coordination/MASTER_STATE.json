@@ -1,0 +1,38 @@
+{
+  "product": "PabloVoice",
+  "sourceOfTruth": "ppatrickxxz-dev/STUDIA-VOICE",
+  "updatedAt": "2026-08-27",
+  "rules": {
+    "singleCanonicalSource": true,
+    "webAndAndroidShareCore": true,
+    "buildIsNotFunctionalProof": true,
+    "capabilityRequiresEvidence": true,
+    "doNotRestartProduct": true,
+    "doNotReplaceApprovedIdentity": true
+  },
+  "modules": [
+    {"id":"project-core","name":"Project Core","priority":"P0","status":"implemented","validated":true,"notes":"Projects, versions, assets, tracks/clips, local persistence and shared Web/Android source exist in canonical repo."},
+    {"id":"audio-analysis-bus","name":"Audio Analysis Bus","priority":"P1","status":"implemented","validated":true,"notes":"Canonical shared analysis record exists; deterministic waveform analyzer measures only real PCM facts and leaves MIR fields unmeasured until analyzers exist."},
+    {"id":"stem-engine","name":"StemEngine","priority":"P1","status":"candidate","engineValidated":true,"routeValidated":false,"provider":"Demucs htdemucs","notes":"Demucs has historical verified E2E evidence. Current standalone route is deployed but requires authenticated canary evidence before promotion."},
+    {"id":"voice-lab","name":"Voice Lab","priority":"P1","status":"partial","validated":false,"notes":"Local WebAudio treatment exists. Advanced RVC/Applio, formant, natural voice preservation, alignment and neural cleanup require modular recovery and evidence."},
+    {"id":"breath-alignment","name":"Breath / Alignment Intelligence","priority":"P1","status":"planned","validated":false,"dependsOn":["audio-analysis-bus","voice-lab"]},
+    {"id":"mix-intelligence","name":"Mix Intelligence Graph","priority":"P1","status":"planned","validated":false,"dependsOn":["audio-analysis-bus"]},
+    {"id":"audio-to-instrument","name":"Audio-to-Instrument / Sampler","priority":"P2","status":"planned","validated":false,"dependsOn":["audio-analysis-bus"]},
+    {"id":"songwriting","name":"Songwriting Engine","priority":"P2","status":"partial","validated":false,"notes":"PT-BR deterministic analysis exists. Prosody, Authorial Voice Guard, constrained rewrite and generation remain mastery candidates until blind review/real evaluation."},
+    {"id":"pablo-ai","name":"Pablo AI","priority":"P1","status":"partial","validated":false,"notes":"Remote auth and agent contracts exist; product must combine project state, real audio analysis and PMI retrieval without inventing measurements."},
+    {"id":"pmi","name":"PMI Knowledge Service","priority":"P1","status":"implemented-partial","validated":true,"notes":"Use as retrieval/knowledge layer, not separate product. Music, audio, visual and industry knowledge should retain provenance and confidence."},
+    {"id":"instrument-lab","name":"Instrument Lab","priority":"P2","status":"recovery-candidate","validated":false,"notes":"Historical runtime contains WebAudio/MIDI/render implementation; migrate module-by-module into canonical source."},
+    {"id":"podcast-cleanup","name":"Podcast Cleanup","priority":"P2","status":"recovery-candidate","validated":false,"notes":"Historical runtime contains silence analysis/preview/persistence. ASR/final export still need validation."},
+    {"id":"video-audio","name":"Video Audio","priority":"P2","status":"recovery-candidate","validated":false,"notes":"Historical remux/audio replacement evidence exists; current canonical integration still candidate."},
+    {"id":"studio-life","name":"Pocket Studio / Studio Life","priority":"P3","status":"canonical-concept","validated":false,"notes":"Character/Pocket/Room/Eras/Memories/companions support creation and must not become punitive gamification."},
+    {"id":"web","name":"PabloVoice Web","priority":"P0","status":"candidate","validated":false,"notes":"CI/browser gates exist; public production promotion remains blocked until final functional evidence."},
+    {"id":"android","name":"PabloVoice Android","priority":"P0","status":"candidate","validated":false,"notes":"Build and emulator gates pass in current lineage; physical-device gate remains distinct and required."},
+    {"id":"b09-standalone-stems","name":"B09 Standalone Stems","priority":"P0","status":"candidate","validated":false,"currentPR":29,"nextGate":"authenticated standalone canary -> two persisted stems -> reconcile hashes/provenance -> set routeValidated=true"}
+  ],
+  "globalBlockers": [
+    "Physical Android gate not yet approved",
+    "B09 standalone route still lacks current authenticated canary proof",
+    "Advanced voice conversion/naturalness not yet promoted in current canonical runtime",
+    "Several recovered historical modules still require modular migration and current gates"
+  ]
+}

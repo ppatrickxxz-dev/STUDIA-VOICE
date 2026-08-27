@@ -1,0 +1,19 @@
+{
+  "product":"PabloVoice",
+  "purpose":"Prevent parallel chats from redefining or duplicating modules.",
+  "statusValues":["canonical","implemented","partial","candidate","planned","recovery-candidate","blocked","deprecated"],
+  "modules":[
+    {"module":"Project Core","canonicalPaths":["packages/core","packages/app/storage.mjs"],"coordinationRule":"All features persist through shared project/assets/tracks model; do not create parallel project formats."},
+    {"module":"Audio Analysis Bus","canonicalPaths":["packages/audio/src/analysis-bus.mjs","packages/audio/src/waveform-analyzer.mjs"],"coordinationRule":"Pitch/BPM/onsets/loudness/transients/confidence must converge here instead of per-feature duplicate analyzers."},
+    {"module":"StemEngine","canonicalPaths":["packages/audio/src/stem-engine.mjs","services/providers/kaggle-demucs.mjs","services/providers/kaggle-stems-client.mjs"],"coordinationRule":"Providers are hidden until available + validated; preserve Demucs as validated engine while route validation is independent."},
+    {"module":"Voice Lab","canonicalPaths":["packages/app/audio-engine.mjs"],"coordinationRule":"Do not label local EQ/compression as neural cleanup or voice conversion. Recover advanced engines behind explicit provider contracts."},
+    {"module":"Songwriting","canonicalPaths":["packages/songwriting","packages/core/src/natural-language-edit.mjs"],"coordinationRule":"Preserve author intent; blind review is required before mastery claims for prosody/authorial voice constrained generation."},
+    {"module":"Pablo AI / PMI","canonicalPaths":["packages/app/remote-auth.mjs"],"coordinationRule":"Use retrieval + project state + measured analysis. Never invent audio measurements or claim provider capability when unavailable."},
+    {"module":"Instrument Lab","canonicalPaths":[],"coordinationRule":"Historical implementation is recovery input, not current proof. Migrate to shared Audio/Project Core."},
+    {"module":"Podcast Cleanup","canonicalPaths":[],"coordinationRule":"Historical implementation is recovery input. Keep podcast UX separate from core DSP primitives."},
+    {"module":"Video Audio","canonicalPaths":[],"coordinationRule":"Historical remux evidence may be reused but current integration must pass canonical gates."},
+    {"module":"Studio Life","canonicalPaths":[],"coordinationRule":"Character identity, Pocket/Room/Eras and companions support creative retention; no streak punishment or infantilization."},
+    {"module":"Web","canonicalPaths":["apps/web","packages/app"],"coordinationRule":"Web is a delivery target of the same source, not a separate product."},
+    {"module":"Android","canonicalPaths":["apps/android","packages/app"],"coordinationRule":"Android is a delivery target of the same source; emulator success never replaces physical-device evidence."}
+  ]
+}
