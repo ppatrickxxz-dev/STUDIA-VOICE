@@ -129,6 +129,109 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
   expect(unexpectedErrors(errors)).toEqual([]);
 });
 
+test('WEB BEAT TIMELINE GATE: confirmed chorus renders and replaces a real beat-fill track at canonical offset', async ({ page }) => {
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Beat Timeline');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('#audio-picker').setInputFiles({ name: 'beat-source.wav', mimeType: 'audio/wav', buffer: wavFixture({ seconds: 1.5, frequency: 180 }) });
+  await expect(page.getByText('beat-source.wav').first()).toBeVisible();
+
+  const evidence = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const sections = await import('./core/src/section-map.mjs');
+    const runtime = await import('./pablo-beat-runtime.mjs');
+    const projectId = storage.activeProjectSessionId();
+    const project = await storage.getProject(projectId);
+    const sourceTrack = project.tracks.find((track) => track.name === 'beat-source.wav') || project.tracks[0];
+    if (!sourceTrack?.assetId) throw new Error('Gate source track missing.');
+
+    project.sampler = {
+      schema: 'pablovoice_sampler_v2',
+      sourceAssetId: sourceTrack.assetId,
+      grooveTemplate: { ready: false, bpm: 120, stepsPerBar: 16, offsetsBeats: [], accents: [] },
+      pads: [{
+        id: 'gate-snare',
+        sliceId: 'gate-slice',
+        sourceAssetId: sourceTrack.assetId,
+        label: 'Caixa gate',
+        start: 0.1,
+        end: 0.32,
+        gain: 1,
+        fadeIn: 0.005,
+        fadeOut: 0.01,
+        playbackRate: 1,
+        source: 'audio_onset',
+        category: 'snare',
+        categoryConfidence: 0.95,
+      }],
+    };
+    project.arrangementMap = sections.upsertConfirmedSection(project.arrangementMap, {
+      kind: 'chorus',
+      startSeconds: 1,
+      source: 'user_manual',
+      confidence: 1,
+    });
+    await storage.saveProject(project);
+
+    const operation = { action: 'fill_before_section', args: { section: 'chorus', occurrence: 1, intensity: 0.65 } };
+    const first = await runtime.executePersistedPabloBeatOperation(operation, { projectId });
+    const afterFirst = await storage.getProject(projectId);
+    const firstFill = afterFirst.tracks.find((track) => track.kind === 'beat-fill');
+    const firstAsset = firstFill ? await storage.getAudioAsset(firstFill.assetId) : null;
+    const firstAssetId = firstFill?.assetId || null;
+
+    const second = await runtime.executePersistedPabloBeatOperation(operation, { projectId });
+    const afterSecond = await storage.getProject(projectId);
+    const fills = afterSecond.tracks.filter((track) => track.kind === 'beat-fill');
+    const secondFill = fills[0] || null;
+    const secondAsset = secondFill ? await storage.getAudioAsset(secondFill.assetId) : null;
+    const staleAsset = firstAssetId ? await storage.getAudioAsset(firstAssetId) : null;
+
+    return {
+      firstOk: first?.ok === true,
+      firstMutated: first?.mutated === true,
+      firstKind: firstFill?.kind || null,
+      firstOffset: firstFill?.offset ?? null,
+      firstTarget: firstFill?.beatTimeline?.targetStartSeconds ?? null,
+      firstAssetType: firstAsset?.type || null,
+      firstAssetSize: firstAsset?.blob?.size || 0,
+      secondOk: second?.ok === true,
+      secondMutated: second?.mutated === true,
+      replacedPriorFill: second?.data?.replacedPriorFill === true,
+      fillCount: fills.length,
+      secondOffset: secondFill?.offset ?? null,
+      secondTarget: secondFill?.beatTimeline?.targetStartSeconds ?? null,
+      secondAssetSize: secondAsset?.blob?.size || 0,
+      assetRotated: Boolean(firstAssetId && secondFill?.assetId && firstAssetId !== secondFill.assetId),
+      staleAssetDeleted: staleAsset == null,
+      sourceTrackPreserved: afterSecond.tracks.some((track) => track.id === sourceTrack.id),
+    };
+  });
+
+  expect(evidence.firstOk).toBe(true);
+  expect(evidence.firstMutated).toBe(true);
+  expect(evidence.firstKind).toBe('beat-fill');
+  expect(evidence.firstOffset).toBeCloseTo(0.5, 3);
+  expect(evidence.firstTarget).toBe(1);
+  expect(evidence.firstAssetType).toBe('audio/wav');
+  expect(evidence.firstAssetSize).toBeGreaterThan(44);
+  expect(evidence.secondOk).toBe(true);
+  expect(evidence.secondMutated).toBe(true);
+  expect(evidence.replacedPriorFill).toBe(true);
+  expect(evidence.fillCount).toBe(1);
+  expect(evidence.secondOffset).toBeCloseTo(0.5, 3);
+  expect(evidence.secondTarget).toBe(1);
+  expect(evidence.secondAssetSize).toBeGreaterThan(44);
+  expect(evidence.assetRotated).toBe(true);
+  expect(evidence.staleAssetDeleted).toBe(true);
+  expect(evidence.sourceTrackPreserved).toBe(true);
+  expect(unexpectedErrors(errors)).toEqual([]);
+});
+
 test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async ({ page }) => {
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
