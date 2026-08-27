@@ -112,14 +112,36 @@ export async function executePabloAudioMessage(message, context, {
 } = {}) {
   const direct = interpretPabloAudioMessage(message, context);
   if (direct.supported && direct.kind === 'beat_generation_plan') {
-    return { ...direct, execution: 'preview_only', canApply: false };
+    return {
+      ...direct,
+      originalKind: direct.kind,
+      kind: 'deterministic_edit',
+      domain: 'beat_lab',
+      beatAction: direct.action,
+      execution: 'preview_only',
+      canApply: false,
+    };
   }
   if (direct.supported && direct.kind === 'beat_operation') {
     const executor = typeof executeBeatOperation === 'function' ? executeBeatOperation : executeDefaultBeatOperation;
     const result = await executor(direct, context);
-    if (!result) return { ...direct, execution: 'preview_only', canApply: false };
+    if (!result) {
+      return {
+        ...direct,
+        originalKind: direct.kind,
+        kind: 'deterministic_edit',
+        domain: 'beat_lab',
+        beatAction: direct.action,
+        execution: 'preview_only',
+        canApply: false,
+      };
+    }
     return {
       ...direct,
+      originalKind: direct.kind,
+      kind: 'deterministic_edit',
+      domain: 'beat_lab',
+      beatAction: direct.action,
       result,
       reply: result?.reply || direct.reply || null,
       execution: result?.ok === true ? 'allowed' : 'preview_only',
