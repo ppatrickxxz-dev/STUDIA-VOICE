@@ -5,6 +5,28 @@ import { BREATH_AUTOMATION_SOURCE } from './audio/src/voice/breath-intelligence.
 
 const previewEngine = new PabloAudioEngine();
 let previewTimer = 0;
+let reviewBusy = false;
+
+export function installBreathReviewUI() {
+  const observer = new MutationObserver(() => scheduleReview());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  scheduleReview();
+  return () => observer.disconnect();
+}
+
+async function scheduleReview() {
+  if (reviewBusy) return;
+  const log = document.querySelector('[data-pablo-log]');
+  if (!log || log.querySelector('[data-breath-review]')) return;
+  reviewBusy = true;
+  try {
+    const project = await activeProject();
+    const track = project?.tracks?.find((item) => item.id === project.activeTrackId) || project?.tracks?.[0];
+    if (track && pabloRegions(track).length) await appendBreathReview(track.id);
+  } finally {
+    reviewBusy = false;
+  }
+}
 
 export async function appendBreathReview(trackId) {
   const log = document.querySelector('[data-pablo-log]');
@@ -29,9 +51,7 @@ export async function appendBreathReview(trackId) {
   help.textContent = 'A = original · B = suavizada. Você pode ignorar uma região ou desfazer todas.';
   panel.appendChild(help);
 
-  for (const [index, region] of regions.entries()) {
-    panel.appendChild(reviewRow(track, region, index));
-  }
+  for (const [index, region] of regions.entries()) panel.appendChild(reviewRow(track, region, index));
 
   const undo = button('Desfazer tudo', async () => {
     await mutateTrack(trackId, (target) => {
@@ -51,6 +71,7 @@ function reviewRow(track, region, index) {
   const row = document.createElement('div');
   row.className = 'pv-breath-review-row';
   row.dataset.regionId = region.id;
+  row.dataset.reviewState = region.enabled === false ? 'ignored' : 'kept';
 
   const label = document.createElement('small');
   label.textContent = `Respiração ${index + 1} · ${formatTime(region.startSeconds)}–${formatTime(region.endSeconds)} · ${Math.round(Number(region.confidence || 0) * 100)}%`;
