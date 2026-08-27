@@ -45,6 +45,7 @@ try {
   const { installRemoteAuthUI } = await import('./remote-auth-ui.mjs');
   const { installInstrumentLab } = await import('./instrument-integration.mjs');
   const { installPianoRoll } = await import('./piano-roll-ui.mjs');
+  const { installAudioToPianoRoll } = await import('./audio-to-piano-roll-ui.mjs');
   installPabloConversationUI();
   installBreathReviewUI();
   installAdvancedAIStudio();
@@ -54,6 +55,7 @@ try {
   installRemoteAuthUI();
   installInstrumentLab();
   installPianoRoll();
+  installAudioToPianoRoll();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
