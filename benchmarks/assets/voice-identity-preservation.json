@@ -1,0 +1,87 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "B04 localized vocal identity preservation",
+  "frozen_before_first_b04_benchmark_output": true,
+  "input_domain": "edit_reference",
+  "scope": "selected_phrase_voice_conversion",
+  "region": {
+    "id": "R3_voice_identity",
+    "start_seconds": 64.0,
+    "end_seconds": 72.0,
+    "duration_seconds": 8.0
+  },
+  "guide": {
+    "asset_id": "549ff71f-7cce-414d-a77d-7021a7fc208e",
+    "sha256": "ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816",
+    "derived_by": "Demucs htdemucs lossless guide extraction",
+    "derived_from_source_asset_id": "a5bc5f31-a546-4ded-99fb-9a0867980202",
+    "derived_from_source_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d"
+  },
+  "identity_reference": {
+    "required": true,
+    "frozen_provider_input_sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+    "derived_from_canonical_vocal_sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
+    "must_be_owned": true,
+    "must_be_sha_verified": true,
+    "must_be_active_for_voice_model": true
+  },
+  "voice_model": {
+    "id": "5c0976b2-bd2c-44d7-8720-a2dc013fd4b5",
+    "name": "PabloVoice Principal",
+    "engine": "rvc",
+    "pth_sha256": "58f0354124a4a18a0a5bd1f8c74bd95b6147713dcb23b98d9060a5bc63bda56a",
+    "index_sha256": "814feab12db225c2e1e0a43a661238dc587a7d1554343ca7223103be16fd930f"
+  },
+  "recipe": {
+    "profile": "identity",
+    "pitch": 0,
+    "index_rate": 0.70,
+    "protect": 0.50,
+    "f0_method": "rmvpe",
+    "embedder_model": "contentvec",
+    "split_audio": true,
+    "f0_autotune": false,
+    "clean_audio": false,
+    "formant_shifting": false,
+    "applio_commit": "085197e738ce9dd4c0bae1e0a74df5de25b89444"
+  },
+  "requirements": {
+    "exact_guide_asset_and_sha_required": true,
+    "exact_region_required": true,
+    "full_guide_conversion_not_score_eligible": true,
+    "exact_voice_model_hashes_required": true,
+    "exact_identity_reference_sha_required": true,
+    "identity_reference_must_be_active_and_owned": true,
+    "pitch_shift_forbidden": true,
+    "autotune_forbidden": true,
+    "formant_shift_forbidden": true,
+    "output_pcm_must_differ_from_guide_pcm": true,
+    "private_retained_flac_required": true,
+    "timbre_similarity_review_required": true,
+    "formant_stability_review_required": true,
+    "performance_naturalness_review_required": true,
+    "speaker_consistency_review_required": true,
+    "human_blind_review_required_for_score": true
+  },
+  "route_evidence": {
+    "compute": "compute-kaggle-voice-v70",
+    "ticket": "voice-ab-ticket-v70",
+    "worker": "kaggle-voice-worker-v71",
+    "complete": "complete-kaggle-voice-v70",
+    "authenticated_dispatch_required": true,
+    "localized_region_guard_deployed": true,
+    "identity_reference_guard_deployed": true,
+    "exact_guide_and_model_hash_guard_deployed": true,
+    "compute_sha256": "2969d50b9404b8d5b64eab631d1211d4dec698a3edb86a6ee3956c08db9aeca4",
+    "ticket_sha256": "dfe9b61f5c67f716949fbe3aaaeeac50b8e41df36c0bab0a3ea752fa789d4af5",
+    "worker_sha256": "556fa48bc2edc02da42a800d236be34677cfd99fb3399717baaaaadbd8f5b5ea",
+    "complete_sha256": "eaa57aabfb261feb9a0abf472c88f8dc04ce1a112c8f8e47355b82ccdc6e55bb",
+    "compute_sha256_before_b04_locality_upgrade": "8b9584eabdc393e332c3f9aefb5315bd5304940f4a034a38d53ecac523a2660a",
+    "ticket_sha256_before_b04_locality_upgrade": "db5c12886f34d528cf08ba4b8ff29712d049916c1aca0cafd12d0af70a76326e",
+    "worker_sha256_before_b04_locality_upgrade": "dcff01646c13328f9d3358857aeb6a01f653817fa0cd833ccb49aa9486113614",
+    "complete_sha256_before_b04_locality_upgrade": "b9aa837146b3ac2f702775f88d26be1fb603ddde865a887d85aa51cb4ad37511"
+  },
+  "engineering_smoke_evidence": "benchmarks/results/b04-rvc-v71-smokes.json",
+  "observed_execution": null,
+  "readiness_rule": "B04 implementation can be ready before execution, but it cannot be scored or passed until the frozen provider-input identity reference is ingested privately, activated for the frozen model, the exact 64-72 second phrase is rendered and retained, and timbre/formant/performance/speaker metrics plus blind review are complete."
+}
