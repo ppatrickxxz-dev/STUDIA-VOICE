@@ -1,0 +1,78 @@
+import { RemoteAuthAdapter } from './remote-auth.mjs';
+
+const auth = new RemoteAuthAdapter();
+let agentHealth = null;
+let observer;
+let healthRequested = false;
+
+export function installRuntimeCapabilityStatus() {
+  if (observer) return () => observer.disconnect();
+  observer = new MutationObserver(() => patchCapabilityUi());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  patchCapabilityUi();
+  requestAgentHealth();
+  return () => { observer?.disconnect(); observer = null; };
+}
+
+async function requestAgentHealth() {
+  if (healthRequested) return;
+  healthRequested = true;
+  agentHealth = await auth.agentHealth().catch(() => ({ available: false, authenticated: false }));
+  patchCapabilityUi();
+}
+
+function setText(node, value) {
+  if (!node) return;
+  const next = String(value || '');
+  if (node.textContent !== next) node.textContent = next;
+}
+
+function setClass(node, value) {
+  if (!node) return;
+  if (node.className !== value) node.className = value;
+}
+
+function patchCapabilityUi() {
+  for (const chip of document.querySelectorAll('.pv-chip')) {
+    const text = chip.textContent || '';
+    if (text.includes('IA generativa')) {
+      chip.classList.remove('off');
+      chip.classList.toggle('on', Boolean(agentHealth?.available));
+      setText(chip, agentHealth?.available ? '✓ IA generativa · provider online' : '◐ IA generativa · provider gated');
+    } else if (text.includes('Separação de stems')) {
+      chip.classList.remove('off');
+      setText(chip, '◐ Separação de stems · Demucs candidate');
+    } else if (text.includes('Conversão vocal')) {
+      chip.classList.remove('off');
+      setText(chip, '◐ Conversão vocal · RVC/Applio gated');
+    }
+  }
+
+  for (const row of document.querySelectorAll('.pv-cap-table > div')) {
+    const name = row.querySelector('b')?.textContent?.trim();
+    const engine = row.querySelector('span');
+    const status = row.querySelector('em');
+    if (!engine || !status) continue;
+    if (name === 'IA generativa') {
+      setText(engine, agentHealth?.available ? `${agentHealth.provider || 'provider'} · ${agentHealth.model || 'modelo remoto'}` : 'Generator Adapter remoto');
+      setText(status, agentHealth?.available ? 'ONLINE' : 'GATED');
+      setClass(status, agentHealth?.available ? 'ok' : 'off');
+    } else if (name === 'Separação de stems') {
+      setText(engine, 'Demucs htdemucs · rota standalone');
+      setText(status, 'CANDIDATE');
+      setClass(status, 'off');
+    } else if (name === 'Conversão vocal') {
+      setText(engine, 'RVC/Applio · Natural / Identity / Smooth');
+      setText(status, 'GATED');
+      setClass(status, 'off');
+    }
+  }
+}
+
+export const CAPABILITY_STATUS_POLICY = Object.freeze({
+  buildDoesNotEqualFunctionalProof: true,
+  remoteGenerationRequiresHealthyProvider: true,
+  stemsRequiresLiveRouteCanaryForPromotion: true,
+  voiceConversionRequiresVerifiedGuideAndVoiceModel: true,
+  domUpdatesAreIdempotent: true,
+});
