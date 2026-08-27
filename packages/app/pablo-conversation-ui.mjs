@@ -1,10 +1,10 @@
 import { listProjects, getAudioAsset, saveProject as persistProject } from './storage.mjs';
-import { executeNaturalLanguageEdit } from '../core/src/natural-language-edit.mjs';
-import { analyzeWaveform } from '../audio/src/analyzers/waveform-basic.mjs';
-import { detectOnsets } from '../audio/src/analyzers/onset-basic.mjs';
-import { analyzeMusicalAudio } from '../audio/src/analyzers/pipeline.mjs';
-import { buildProjectMixState } from '../audio/src/mix/mix-intelligence-graph.mjs';
-import { createPabloVoiceAudioToolRuntime } from '../providers/src/pablovoice-audio-tools.mjs';
+import { executeNaturalLanguageEdit } from './core/src/natural-language-edit.mjs';
+import { analyzeWaveform } from './audio/src/analyzers/waveform-basic.mjs';
+import { detectOnsets } from './audio/src/analyzers/onset-basic.mjs';
+import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
+import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
+import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
 import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
 
 const analysisCache = new Map();
