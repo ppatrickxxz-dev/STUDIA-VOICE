@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source = fs.readFileSync('api/pablo-agent.mjs', 'utf8');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
-test('Vercel composer bridge uses short-lived platform auth instead of client provider secrets', () => {
-  assert.match(source, /process\.env\.VERCEL_OIDC_TOKEN/);
+test('Vercel composer bridge resolves short-lived platform auth at runtime', () => {
+  assert.equal(pkg.dependencies?.['@vercel/oidc'], '3.8.5');
+  assert.match(source, /getVercelOidcToken/);
+  assert.match(source, /resolveGatewayToken/);
+  assert.match(source, /expirationBufferMs:\s*30_000/);
   assert.match(source, /process\.env\.AI_GATEWAY_API_KEY \|\| process\.env\.VERCEL_OIDC_TOKEN/);
   assert.doesNotMatch(source, /sk-[A-Za-z0-9_-]{20,}/);
   assert.match(source, /credential_exposed:\s*false/);
