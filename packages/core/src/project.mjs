@@ -1,4 +1,4 @@
-export const PROJECT_SCHEMA_VERSION = 4;
+export const PROJECT_SCHEMA_VERSION = 5;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -34,6 +34,7 @@ export function createProject(name = 'Minha ideia', now = Date.now()) {
     lyrics: '',
     notes: '',
     preset: 'demo',
+    authorialMemory: null,
     revisions: [],
     appVersion: '2.4.0-rc.1',
   };
@@ -80,6 +81,7 @@ export function migrateProject(input) {
   project.lyrics = String(project.lyrics || '');
   project.notes = String(project.notes || '');
   project.preset = ['music', 'demo', 'podcast', 'video', 'streaming'].includes(project.preset) ? project.preset : 'demo';
+  project.authorialMemory = normalizeAuthorialMemory(project.authorialMemory);
   return project;
 }
 
@@ -120,6 +122,7 @@ export function snapshotProject(project, label = 'Salvamento') {
     })),
     lyrics: clean.lyrics,
     preset: clean.preset,
+    authorialMemory: clean.authorialMemory ? structuredClone(clean.authorialMemory) : null,
   };
   clean.revisions = [...clean.revisions, revision].slice(-40);
   clean.updatedAt = revision.at;
@@ -132,11 +135,34 @@ export function validateProject(input) {
   if (!input.id) errors.push('ID do projeto ausente.');
   if (!input.name) errors.push('Nome do projeto ausente.');
   if (!Array.isArray(input.tracks)) errors.push('Tracks inválidas.');
+  if (input.authorialMemory != null && typeof input.authorialMemory !== 'object') errors.push('Memória autoral inválida.');
   for (const track of input.tracks || []) {
     if (!track.id || !track.assetId) errors.push('Track sem ID ou arquivo.');
     if (finite(track.trimStart, 0) > finite(track.trimEnd, 0)) errors.push(`Trim invertido em ${track.name || track.id}.`);
   }
   return { valid: errors.length === 0, errors };
+}
+
+function normalizeAuthorialMemory(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const memory = {
+    schema: 'pmi_authorial_memory_v1',
+    vocabulary: boundedStrings(input.vocabulary),
+    preferredStructures: boundedStrings(input.preferredStructures),
+    preferredImages: boundedStrings(input.preferredImages),
+    avoid: boundedStrings(input.avoid),
+    acceptedPatterns: boundedStrings(input.acceptedPatterns),
+    rejectedPatterns: boundedStrings(input.rejectedPatterns),
+    evidenceCount: clamp(Math.floor(finite(input.evidenceCount, 0)), 0, 10000),
+  };
+  const lastReason = String(input.lastReason || '').trim().slice(0, 300);
+  if (lastReason) memory.lastReason = lastReason;
+  return memory;
+}
+
+function boundedStrings(input) {
+  if (!Array.isArray(input)) return [];
+  return [...new Set(input.map((value) => String(value || '').trim().slice(0, 160)).filter(Boolean))].slice(0, 80);
 }
 
 function normalizeRegionAutomation(input, duration) {

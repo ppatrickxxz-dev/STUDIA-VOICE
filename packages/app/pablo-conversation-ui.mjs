@@ -113,6 +113,21 @@ async function applyBreathAutomation(result, trackId) {
   return automatic;
 }
 
+async function persistAuthorialMemoryState(authorialMemory, feedback) {
+  const project = await activeProject();
+  if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+  project.authorialMemory = authorialMemory ? structuredClone(authorialMemory) : null;
+  const action = feedback?.decision === 'rejected' ? 'evitar' : 'priorizar';
+  const value = String(feedback?.value || '').slice(0, 48);
+  const saved = snapshotProject(project, `Preferência autoral: ${action}${value ? ` ${value}` : ''}`);
+  await persistProject(saved);
+  return {
+    ok: true,
+    projectId: saved.id,
+    evidenceCount: Number(saved.authorialMemory?.evidenceCount || 0),
+  };
+}
+
 async function contextForMessage() {
   const project = await activeProject();
   const active = project?.tracks?.find((track) => track.id === project.activeTrackId) || project?.tracks?.[0] || null;
@@ -123,6 +138,10 @@ async function contextForMessage() {
     assetId: active?.assetId || null,
     referenceAssetId: active?.assetId || null,
     targetAssetId: other?.assetId || null,
+    lyrics: String(project?.lyrics || '').slice(0, 12000),
+    notes: String(project?.notes || '').slice(0, 4000),
+    preset: project?.preset || null,
+    authorialMemory: project?.authorialMemory ? structuredClone(project.authorialMemory) : null,
   };
 }
 
@@ -186,7 +205,11 @@ async function submitMessage(form) {
   setBusy(form, true);
   try {
     const context = await contextForMessage();
-    const result = await executePabloAudioMessage(message, context, { audioToolRuntime, executeDeterministicEdit });
+    const result = await executePabloAudioMessage(message, context, {
+      audioToolRuntime,
+      executeDeterministicEdit,
+      persistAuthorialMemory: persistAuthorialMemoryState,
+    });
     if (result?.supported) {
       appendMessage(formatResult(result), 'assistant', result);
       if (result.kind === 'deterministic_edit' && result.canApply) {
@@ -217,10 +240,10 @@ function injectConversationBox() {
   box.dataset.pabloConversation = 'true';
   box.className = 'pv-conversation';
   box.innerHTML = `<div class="pv-conversation-log" data-pablo-log>
-    <div class="pv-msg assistant">Pode falar do seu jeito: “deixa minha voz mais na frente”, “suaviza minhas respirações”, “transforma isso em instrumento” ou me peça uma direção criativa.<small>ações locais primeiro · IA remota opcional</small></div>
+    <div class="pv-msg assistant">Pode falar do seu jeito: “quero criar uma música sobre…”, “não use essa palavra”, “deixa minha voz mais na frente” ou “suaviza minhas respirações”.<small>PMI local · ações seguras · IA remota opcional</small></div>
   </div>
   <form class="pv-compose-row" data-pablo-form>
-    <input class="pv-field" name="message" autocomplete="off" placeholder="O que você quer fazer com o som?" aria-label="Falar com Pablo sobre o áudio">
+    <input class="pv-field" name="message" autocomplete="off" placeholder="O que você quer criar ou fazer com o som?" aria-label="Falar com Pablo sobre música e áudio">
     <button class="pv-btn primary" type="submit">Enviar</button>
   </form>`;
   shell.appendChild(box);
@@ -239,6 +262,8 @@ function appendMessage(text, role, result = null) {
   message.textContent = text;
   let metaText = '';
   if (result?.data?.decision) metaText = `confiança: ${Math.round((result.data.confidence || 0) * 100)}% · ${result.data.decision}`;
+  else if (result?.kind === 'pmi_music_session') metaText = 'PMI Music 1.0 · direção criativa local';
+  else if (result?.kind === 'pmi_authorial_feedback') metaText = `PMI · memória autoral${result.canApply ? ' salva' : ' em prévia'}`;
   else if (result?.kind === 'remote_reasoning') metaText = `IA remota · ${result.provider}${result.model ? ` · ${result.model}` : ''}`;
   if (metaText) {
     const meta = document.createElement('small');
@@ -251,6 +276,7 @@ function appendMessage(text, role, result = null) {
 
 function formatResult(result) {
   if (!result?.supported) return 'Ainda não tenho uma ação segura para esse pedido. Não alterei o projeto.';
+  if (result.kind === 'pmi_music_session' || result.kind === 'pmi_authorial_feedback') return result.reply || 'Entendi sua direção criativa.';
   if (result.kind === 'deterministic_edit') return result.canApply ? 'Entendi e apliquei a edição reversível no projeto.' : 'Entendi a edição, mas mantive somente como prévia.';
   if (!result.result?.ok) return `Não consegui usar essa análise: ${result.result?.reason || 'dados insuficientes'}.`;
   const data = result.result.data || {};
