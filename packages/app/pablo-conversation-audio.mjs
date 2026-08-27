@@ -1,3 +1,5 @@
+const pmiSessionCache = new Map();
+
 export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   voice_forward: 'bring_voice_forward',
   make_vocal_space: 'make_vocal_space',
@@ -142,14 +144,31 @@ export async function executePabloAudioMessage(message, context, {
   return { ...parsed, result, execution: 'allowed', canApply: true };
 }
 
-async function tryMusicIntelligence(message, context) {
+async function tryMusicIntelligence(message, context = {}) {
   const intelligence = await loadMusicIntelligence();
   if (!intelligence) return null;
-  const feedback = intelligence.respondToAuthorialFeedback(message, context);
+  const projectId = String(context.projectId || '');
+  const enrichedContext = projectId && pmiSessionCache.has(projectId)
+    ? { ...context, pmiSession: pmiSessionCache.get(projectId) }
+    : context;
+
+  const feedback = intelligence.respondToAuthorialFeedback(message, enrichedContext);
   if (feedback?.supported) return feedback;
-  const generation = intelligence.planComposerGeneration(message, context);
-  if (generation?.supported) return generation;
-  return intelligence.respondToMusicCreation(message, context);
+
+  const generation = intelligence.planComposerGeneration(message, enrichedContext);
+  if (generation?.supported) {
+    rememberPmiSession(projectId, generation.session);
+    return generation;
+  }
+
+  const planning = intelligence.respondToMusicCreation(message, enrichedContext);
+  if (planning?.supported) rememberPmiSession(projectId, planning.session);
+  return planning;
+}
+
+function rememberPmiSession(projectId, session) {
+  if (!projectId || !session || session.schema !== 'pmi_music_session_v1') return;
+  pmiSessionCache.set(projectId, session);
 }
 
 async function loadMusicIntelligence() {
