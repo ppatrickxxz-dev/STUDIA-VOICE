@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { detectBreathAndSibilance } from '../../packages/audio/src/analyzers/breath-sibilance.mjs';
 import { analyzeMusicalAudio } from '../../packages/audio/src/analyzers/pipeline.mjs';
+import { planBreathEdits } from '../../packages/audio/src/voice/breath-intelligence.mjs';
+import { createPabloVoiceAudioToolRuntime } from '../../packages/providers/src/pablovoice-audio-tools.mjs';
 
 const sampleRate = 16000;
 
@@ -63,4 +65,38 @@ test('shared pipeline auto-detects events but respects explicitly provided event
   assert.equal(provided.voice.eventDetection.source, 'provided');
   assert.equal(provided.voice.breathEvents.length, 0);
   assert.equal(provided.voice.sibilanceEvents.length, 0);
+});
+
+test('breath plan preserves normalized start/end time coordinates', () => {
+  const analysis = {
+    voice: {
+      breathEvents: [{ start: 1.25, end: 1.58, intensity: 0.8, confidence: 0.91 }],
+    },
+  };
+  const plan = planBreathEdits(analysis, { mode: 'soften' });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].startSeconds, 1.25);
+  assert.equal(plan[0].endSeconds, 1.58);
+  assert.equal(plan[0].action, 'soften');
+});
+
+test('Pablo breath tool exposes a backward-compatible total count', async () => {
+  const analysis = {
+    assetId: 'asset-voice',
+    voice: {
+      breathEvents: [
+        { start: 0.4, end: 0.62, intensity: 0.9, confidence: 0.9 },
+        { start: 1.2, end: 1.42, intensity: 0.7, confidence: 0.7 },
+      ],
+    },
+  };
+  const runtime = createPabloVoiceAudioToolRuntime({
+    getAnalysis: async () => analysis,
+    getMixState: async () => null,
+  });
+  const result = await runtime('soften_breaths', { assetId: 'asset-voice', mode: 'soften' });
+  assert.equal(result.ok, true);
+  assert.equal(result.data.events.length, 2);
+  assert.equal(result.data.summary.total, 2);
+  assert.equal(result.data.total, 2);
 });
