@@ -52,7 +52,7 @@ export function createPabloVoiceAudioToolRuntime({ getAnalysis, getMixState } = 
       const edits = planBreathEdits(analysis, { mode: args.mode || 'soften' });
       const summary = summarizeBreathPlan(edits);
       const confidence = average(edits.map((event) => event.confidence));
-      return guarded({ events: edits, summary }, confidence);
+      return guarded({ events: edits, summary, total: summary.total }, confidence);
     }
 
     if (name === 'align_vocals') {
