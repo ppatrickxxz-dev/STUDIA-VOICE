@@ -1,0 +1,42 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "B06 guarded pitch and target-note correction plan",
+  "frozen_before_first_b06_benchmark_output": true,
+  "input_domain": "edit_reference",
+  "target_strategy": "explicit_or_nearest_chromatic",
+  "policy": {
+    "min_event_seconds": 0.18,
+    "min_confidence": 0.72,
+    "deadband_cents": 12,
+    "max_correction_cents": 45,
+    "crossfade_seconds": 0.035,
+    "preserve_formants": true,
+    "preserve_relative_vibrato": true
+  },
+  "requirements": {
+    "note_aware_detection_required": true,
+    "constant_median_shift_per_stable_note": true,
+    "framewise_hard_snap_forbidden": true,
+    "low_confidence_regions_must_remain_unmodified": true,
+    "within_deadband_regions_must_remain_unmodified": true,
+    "over_guard_corrections_must_fail_closed": true,
+    "boundary_crossfade_required": true,
+    "formant_preservation_required": true,
+    "relative_vibrato_preservation_required": true,
+    "retained_acoustic_output_required_for_score": true
+  },
+  "route_evidence": {
+    "endpoint": "diagnose-voice-v70-once",
+    "legacy_slot_reused": true,
+    "legacy_slot_previous_role": "consumed one-shot voice-v70 diagnostic",
+    "legacy_one_shot_used_at": "2026-08-23T05:32:33.016Z",
+    "deployed_function_sha256": "f008b139bc9e4022f497e04c3a52fd91e7d4a9ba3e16ddb32962e4fb2b1fbca1",
+    "engine": "Rubber Band + librosa pYIN",
+    "worker_version": "b06-1.0",
+    "source_asset_must_be_owned_and_sha_verified": true,
+    "authenticated_dispatch_required": true,
+    "callback_uses_expiring_hashed_token": true
+  },
+  "observed_execution": null,
+  "readiness_rule": "B06 implementation can be ready before execution, but it cannot be scored or passed until the frozen benchmark input produces retained corrected audio with verified hashes and acoustic metrics."
+}
