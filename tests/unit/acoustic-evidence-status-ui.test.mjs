@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { acousticEvidenceStatusModel } from '../../packages/app/acoustic-evidence-status-ui.mjs';
+import { acousticEvidenceStatusModel } from '../../packages/providers/src/acoustic-evidence-status.mjs';
 
 const validated = { state: 'validated', promotable: true };
 
