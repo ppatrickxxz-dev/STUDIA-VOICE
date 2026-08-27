@@ -19,10 +19,7 @@ function bearer(req) {
 async function authenticatedUser(jwt) {
   if (!jwt) return null;
   const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      authorization: `Bearer ${jwt}`,
-    },
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: `Bearer ${jwt}` },
   });
   if (!response.ok) return null;
   const user = await response.json().catch(() => null);
@@ -32,10 +29,7 @@ async function authenticatedUser(jwt) {
 async function ownedProject(jwt, projectId) {
   if (!/^[0-9a-f-]{36}$/i.test(String(projectId || ''))) return null;
   const response = await fetch(`${SUPABASE_URL}/rest/v1/projects?id=eq.${encodeURIComponent(projectId)}&select=id,title,bpm,musical_key&limit=1`, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      authorization: `Bearer ${jwt}`,
-    },
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: `Bearer ${jwt}` },
   });
   if (!response.ok) return null;
   const rows = await response.json().catch(() => []);
@@ -47,9 +41,7 @@ function compact(value, max = 24000) {
   try {
     const text = JSON.stringify(value);
     return text.length <= max ? value : { truncated: true, json: text.slice(0, max) };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function outputText(data) {
@@ -63,12 +55,26 @@ function outputText(data) {
   return parts.join('\n').trim();
 }
 
+async function runtimeGatewayToken() {
+  if (process.env.AI_GATEWAY_API_KEY) return process.env.AI_GATEWAY_API_KEY;
+  if (process.env.VERCEL_OIDC_TOKEN) return process.env.VERCEL_OIDC_TOKEN;
+  try {
+    const oidc = await import('@vercel/oidc');
+    const token = await oidc.getVercelOidcToken();
+    return typeof token === 'string' ? token.trim() : '';
+  } catch (error) {
+    console.error('PabloVoice OIDC token resolution failed', String(error?.message || error).slice(0, 240));
+    return '';
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    const gatewayToken = await runtimeGatewayToken();
     return send(res, 200, {
       ok: true,
       service: 'pablovoice-vercel-oidc-agent',
-      configured: Boolean(process.env.VERCEL_OIDC_TOKEN || process.env.AI_GATEWAY_API_KEY),
+      configured: Boolean(gatewayToken),
       model: MODEL,
       credential_exposed: false,
       auth_for_turns: 'required',
@@ -90,7 +96,7 @@ export default async function handler(req, res) {
   const project = await ownedProject(jwt, String(body.project_id || '')).catch(() => null);
   if (!project) return send(res, 404, { ok: false, error: 'project_not_found' });
 
-  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '';
+  const gatewayToken = await runtimeGatewayToken();
   if (!gatewayToken) return send(res, 503, { ok: false, error: 'gateway_unavailable', fallback_allowed: true });
 
   const instructions = [
@@ -105,9 +111,7 @@ export default async function handler(req, res) {
   ].join(' ');
 
   const input = JSON.stringify({
-    command,
-    task,
-    project,
+    command, task, project,
     context_pack: compact(body.context_pack, 28000),
     constraints: compact(body.constraints, 6000),
     author_samples: compact(body.author_samples, 10000),
@@ -117,19 +121,13 @@ export default async function handler(req, res) {
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
     const upstream = await fetch(GATEWAY_URL, {
-      method: 'POST',
-      signal: controller.signal,
+      method: 'POST', signal: controller.signal,
       headers: {
         authorization: `Bearer ${gatewayToken}`,
         'content-type': 'application/json',
         'user-agent': 'PabloVoice-Studio/8.1',
       },
-      body: JSON.stringify({
-        model: MODEL,
-        instructions,
-        input,
-        max_output_tokens: 1800,
-      }),
+      body: JSON.stringify({ model: MODEL, instructions, input, max_output_tokens: 1800 }),
     });
     const raw = await upstream.text();
     let data = {};
@@ -141,19 +139,11 @@ export default async function handler(req, res) {
     const text = outputText(data);
     if (!text) return send(res, 200, { ok: false, error: 'remote_empty_response', fallback_allowed: true });
     return send(res, 200, {
-      ok: true,
-      service: 'pablovoice-vercel-oidc-agent',
-      provider: 'vercel_ai_gateway_oidc',
-      model: String(data?.model || MODEL),
-      command,
-      project_id: project.id,
-      reply: text,
-      text,
+      ok: true, service: 'pablovoice-vercel-oidc-agent', provider: 'vercel_ai_gateway_oidc',
+      model: String(data?.model || MODEL), command, project_id: project.id, reply: text, text,
     });
   } catch (error) {
     const message = String(error?.message || error);
     return send(res, 200, { ok: false, error: message.includes('Abort') ? 'remote_timeout' : 'agent_backend_error', fallback_allowed: true });
-  } finally {
-    clearTimeout(timer);
-  }
+  } finally { clearTimeout(timer); }
 }
