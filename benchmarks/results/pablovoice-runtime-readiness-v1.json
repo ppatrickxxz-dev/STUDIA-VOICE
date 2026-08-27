@@ -19,9 +19,14 @@
     "b07_observed_high_output_sha256": "d3898083ab24f0bf9d26ea9a3cb094333c140d15bb3ec67bc4be560c9737a0fe",
     "b06_pitch_analyzer_sha": "fbaa8aca84e93916991e7281a1ea1883a6c30f8e",
     "b06_note_correction_planner_sha": "a6446bab9fce35954ce9a7ac5d6d016c861a002c",
-    "b06_frozen_plan_sha": "6f8f9e7cf812f7ed544dc4ff780f09167bac87f6",
+    "b06_frozen_plan_sha_before_smoke_evidence": "6f8f9e7cf812f7ed544dc4ff780f09167bac87f6",
     "b06_deployed_function_sha256": "f008b139bc9e4022f497e04c3a52fd91e7d4a9ba3e16ddb32962e4fb2b1fbca1",
-    "b06_legacy_edge_slot": "diagnose-voice-v70-once"
+    "b06_legacy_edge_slot": "diagnose-voice-v70-once",
+    "b06_smoke_job_id": "81c74a6f-012f-47b8-a013-67f018445a0c",
+    "b06_smoke_output_asset_id": "1963a8de-3f1d-46cd-af31-57ec82a3e095",
+    "b06_smoke_output_sha256": "87177efef84078709bd46bed625e991168338ddc969da05d8727b23fed4b85b1",
+    "b06_smoke_benchmark_score_eligible": false,
+    "b06_smoke_evidence_file": "benchmarks/results/b06-smoke-81c74a6f.json"
   },
   "summary": {
     "scored_tests": [],
@@ -36,7 +41,7 @@
     "B03": {"status":"blocked","reason":"Lyrics can be edited as text, but there is no local audio lyric replacement operation."},
     "B04": {"status":"blocked","reason":"Runtime explicitly marks vocal conversion unavailable; no identity-preserving regeneration exists."},
     "B05": {"status":"blocked","reason":"PT-BR lyric analysis exists, but no sung-vocal generation exists locally."},
-    "B06": {"status":"implementation_ready_unexecuted","reason":"A dedicated note-aware correction path now exists: the shared pitch analyzer produces note events; a guarded planner applies one constant median correction per stable note with deadband/confidence/max-shift fail-closed rules; and a deployed Kaggle renderer uses Rubber Band formant-preserving segment shifts plus crossfade boundary repair and re-analysis metrics. The renderer reuses a consumed legacy one-shot Edge Function slot because the Supabase project is at its function limit. B06 remains unscored until the frozen benchmark vocal is ingested as a verified project asset, rendered, retained, hashed, and acoustically reviewed."},
+    "B06": {"status":"implementation_ready_unexecuted","reason":"The dedicated note-aware correction path is implemented and has now completed one retained engineering smoke on a verified non-benchmark Pablo Voice variant. That smoke reduced median absolute pitch error from 17.5 to 12.5 cents while preserving median relative vibrato at 0.998, but corrected only 0.56% of the source under the locked conservative guards. Because the smoke source is not the frozen benchmark vocal, it is explicitly non-scoring and does not promote B06. Official B06 still requires the frozen benchmark vocal to be ingested privately, rendered, retained, hashed, and acoustically reviewed."},
     "B07": {"status":"implementation_ready_unexecuted","reason":"Canonical authenticated high/low harmony provider targets the deployed Rubber Band + librosa v7.5.2 route with formant preservation. The high adaptive-partial path has one verified historical execution; the low path is implemented but deliberately marked unexecuted. B07 remains unscored and non-promotable until both frozen high and low layers are rendered against benchmark inputs and retained."},
     "B08": {"status":"blocked","reason":"Mixer and effects can change presentation, but no arrangement-generation operation preserves melody/lyrics/identity under benchmark constraints."},
     "B09": {"status":"blocked","reason":"Runtime explicitly marks stem separation unavailable. Demucs engine evidence exists, but no completed standalone stems render_job exists yet; per-track export is not counted as source separation."},
