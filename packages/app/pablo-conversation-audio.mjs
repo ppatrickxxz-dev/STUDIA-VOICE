@@ -1,3 +1,5 @@
+import { respondToMusicCreation } from './music-intelligence/src/index.mjs';
+
 export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   voice_forward: 'bring_voice_forward',
   make_vocal_space: 'make_vocal_space',
@@ -10,6 +12,9 @@ export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
 });
 
 export function interpretPabloAudioMessage(message, context = {}) {
+  const music = respondToMusicCreation(message, context);
+  if (music.supported) return music;
+
   const text = normalize(message);
   if (!text) return unsupported('empty_message');
 
@@ -68,6 +73,7 @@ export function interpretPabloAudioMessage(message, context = {}) {
 export async function executePabloAudioMessage(message, context, { audioToolRuntime, executeDeterministicEdit } = {}) {
   const parsed = interpretPabloAudioMessage(message, context);
   if (!parsed.supported) return parsed;
+  if (parsed.kind === 'pmi_music_session') return { ...parsed, execution: 'read_only', canApply: false };
 
   if (parsed.kind === 'tool_call') {
     if (typeof audioToolRuntime !== 'function') throw new TypeError('audioToolRuntime is required for tool calls');
