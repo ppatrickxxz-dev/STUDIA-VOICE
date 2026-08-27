@@ -5,11 +5,19 @@ ROOT = Path(__file__).parent
 MANIFEST = ROOT / "pablovoice-benchmark-v1.json"
 GENERATION_BRIEF = ROOT / "assets" / "frozen-brief.json"
 REFERENCE_ANALYSIS = ROOT / "assets" / "reference-analysis.json"
+NATURAL_LANGUAGE_EDITS = ROOT / "assets" / "natural-language-edits.json"
 
 REQUIRED_TEST_IDS = {f"B{i:02d}" for i in range(1, 13)}
 REQUIRED_HARD_GATES = {"section_replacement","vocal_identity","pt_br_prosody","continuity","artifact_rate"}
 GENERATION_TESTS = {"B01", "B05"}
 EDIT_REFERENCE_TESTS = REQUIRED_TEST_IDS - GENERATION_TESTS
+B10_FROZEN_COMMAND = "Deixa minha voz mais limpa e presente, centraliza ela e coloca um fade bem curto no começo, sem mexer no fim."
+B10_EXPECTED_OPERATIONS = [
+    {"type": "set_effect", "key": "clean", "value": True},
+    {"type": "set_effect", "key": "presence", "value": True},
+    {"type": "set_track", "key": "pan", "value": 0},
+    {"type": "set_effect", "key": "fadeIn", "value": 0.25},
+]
 
 
 def fail(message: str) -> None:
@@ -24,6 +32,7 @@ def main() -> None:
     data = load(MANIFEST)
     brief = load(GENERATION_BRIEF)
     reference = load(REFERENCE_ANALYSIS)
+    conversational = load(NATURAL_LANGUAGE_EDITS)
 
     if data.get("benchmark") != "PabloVoice Benchmark v1": fail("unexpected benchmark name")
     tests = data.get("tests", [])
@@ -82,8 +91,21 @@ def main() -> None:
     if reference.get("key", {}).get("status") != "unresolved_not_gate": fail("low-confidence key must not become a gate")
     if reference.get("tempo", {}).get("status") != "supporting_observation_not_gate": fail("supporting tempo must not become a gate")
 
+    if conversational.get("purpose") != "B10 conversational edit execution": fail("B10 conversational purpose changed")
+    if conversational.get("frozen_before_first_provider_output") is not True: fail("B10 case must remain frozen pre-output")
+    cases = conversational.get("cases", [])
+    if len(cases) != 1: fail("B10 v1 must contain exactly one frozen conversational case")
+    case = cases[0]
+    if case.get("id") != "B10_C1_ptbr_local_voice_edit": fail("B10 frozen case id changed")
+    if case.get("language") != "pt-BR": fail("B10 frozen case language changed")
+    if case.get("command") != B10_FROZEN_COMMAND: fail("B10 frozen command changed")
+    if case.get("expected_operations") != B10_EXPECTED_OPERATIONS: fail("B10 expected operations changed")
+    if set(case.get("must_preserve", [])) != {"trimEnd", "fadeOut"}: fail("B10 preservation contract changed")
+    if case.get("must_not_require_daw_terms") is not True: fail("B10 must remain conversational/non-DAW")
+    if case.get("unsupported_extra_actions_are_failure") is not True: fail("B10 fail-closed rule changed")
+
     print("BENCHMARK CONTRACT PASSED")
-    print("12 tests locked; hard gates locked; generation/edit input domains coherent; anti-goalpost rules active.")
+    print("12 tests locked; hard gates locked; generation/edit input domains coherent; B10 conversational case frozen; anti-goalpost rules active.")
 
 
 if __name__ == "__main__":
