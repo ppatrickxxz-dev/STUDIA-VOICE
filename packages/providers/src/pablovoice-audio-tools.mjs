@@ -1,6 +1,6 @@
 import { confidenceDecision } from '../../audio/src/contracts/confidence.mjs';
 import { planMixIntent } from '../../audio/src/mix/mix-intelligence-graph.mjs';
-import { planBreathEdits } from '../../audio/src/voice/breath-intelligence.mjs';
+import { planBreathEdits, summarizeBreathPlan } from '../../audio/src/voice/breath-intelligence.mjs';
 import { analyzeAlignment } from '../../audio/src/voice/alignment-intelligence.mjs';
 import { buildAudioToInstrumentPlan } from '../../audio/src/sampler/audio-to-instrument.mjs';
 
@@ -50,8 +50,9 @@ export function createPabloVoiceAudioToolRuntime({ getAnalysis, getMixState } = 
       const analysis = await getAnalysis(args.assetId);
       if (!analysis) return fail('analysis_not_found');
       const edits = planBreathEdits(analysis, { mode: args.mode || 'soften' });
+      const summary = summarizeBreathPlan(edits);
       const confidence = average(edits.map((event) => event.confidence));
-      return guarded({ events: edits }, confidence);
+      return guarded({ events: edits, summary, total: summary.total }, confidence);
     }
 
     if (name === 'align_vocals') {

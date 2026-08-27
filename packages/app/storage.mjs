@@ -1,4 +1,5 @@
 import { migrateProject } from './core/src/project.mjs';
+import { sortProjectsByContext } from './project-context.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
 const DB_VERSION = 3;
@@ -33,15 +34,7 @@ export function activeProjectSessionId() {
   catch { return null; }
 }
 
-export function sortProjectsByContext(projects = [], activeId = null) {
-  return [...projects].sort((a, b) => {
-    if (activeId) {
-      if (a.id === activeId && b.id !== activeId) return -1;
-      if (b.id === activeId && a.id !== activeId) return 1;
-    }
-    return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
-  });
-}
+export { sortProjectsByContext } from './project-context.mjs';
 
 export async function saveProject(project) {
   const clean = migrateProject(project);
