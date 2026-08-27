@@ -51,7 +51,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export', async ({ page }) => {
+test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export and Pablo audio conversation', async ({ page }) => {
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
@@ -114,6 +114,18 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence and export
   await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
   await page.locator('[data-route="pablo"]').first().click();
   await expect(page.getByText(/assistente local/i).first()).toBeVisible();
+
+  const pabloInput = page.locator('[data-pablo-form] input[name="message"]');
+  await expect(pabloInput).toBeVisible();
+  await pabloInput.fill('Analisa esse áudio');
+  await page.locator('[data-pablo-form]').getByRole('button', { name: 'Enviar' }).click();
+  await expect(page.getByText(/Analisei o áudio/i).last()).toBeVisible({ timeout: 20_000 });
+
+  await pabloInput.fill('Deixa minha voz mais limpa e centraliza ela');
+  await page.locator('[data-pablo-form]').getByRole('button', { name: 'Enviar' }).click();
+  await expect(page.getByText(/Entendi e apliquei a edição reversível no projeto/i).last()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/A edição determinística foi aplicada e salva/i).last()).toBeVisible();
+
   expect(unexpectedErrors(errors)).toEqual([]);
 });
 

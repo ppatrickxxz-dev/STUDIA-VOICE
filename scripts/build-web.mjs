@@ -11,6 +11,7 @@ await cp(resolve(packages, 'app'), out, { recursive: true });
 for (const name of ['core', 'audio', 'songwriting']) {
   await cp(resolve(packages, name), resolve(out, name), { recursive: true });
 }
+await cp(resolve(packages, 'providers'), resolve(out, 'providers'), { recursive: true });
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   product: 'PabloVoice',
   version: process.env.PV_VERSION || '2.4.0-rc.1',
@@ -18,4 +19,3 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   builtAt: new Date().toISOString(),
 }, null, 2)}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
-

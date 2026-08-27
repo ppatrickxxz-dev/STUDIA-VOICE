@@ -1,0 +1,223 @@
+import { listProjects, getAudioAsset, saveProject as persistProject } from './storage.mjs';
+import { executeNaturalLanguageEdit } from './core/src/natural-language-edit.mjs';
+import { analyzeWaveform } from './audio/src/analyzers/waveform-basic.mjs';
+import { detectOnsets } from './audio/src/analyzers/onset-basic.mjs';
+import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
+import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
+import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
+import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
+
+const analysisCache = new Map();
+let injecting = false;
+
+export function installPabloConversationUI() {
+  const observer = new MutationObserver(() => injectConversationBox());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  injectConversationBox();
+  return () => observer.disconnect();
+}
+
+async function activeProject() {
+  const projects = await listProjects();
+  return projects[0] || null;
+}
+
+async function analyzeTrack(track) {
+  if (!track?.assetId) return null;
+  if (analysisCache.has(track.assetId)) return analysisCache.get(track.assetId);
+  const asset = await getAudioAsset(track.assetId);
+  if (!asset?.blob) return null;
+
+  const AudioCtx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AudioCtx) throw new Error('Análise de áudio não é suportada neste navegador.');
+  const context = new AudioCtx();
+  try {
+    const bytes = await asset.blob.arrayBuffer();
+    const buffer = await context.decodeAudioData(bytes.slice(0));
+    const samples = buffer.getChannelData(0);
+    const waveform = analyzeWaveform(samples, { sampleRate: buffer.sampleRate });
+    const onsets = detectOnsets(samples, { sampleRate: buffer.sampleRate });
+    const musical = analyzeMusicalAudio({
+      samples,
+      sampleRate: buffer.sampleRate,
+      onsets,
+      durationSeconds: buffer.duration,
+    });
+    const spectralEnvelope = coarseSpectrum(samples, buffer.sampleRate);
+    const analysis = {
+      schemaVersion: 2,
+      assetId: track.assetId,
+      source: { sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, durationSeconds: buffer.duration },
+      music: musical.music,
+      signal: { ...waveform.signal, onsets, transients: onsets, spectralEnvelope },
+      voice: musical.voice,
+      confidence: musical.confidence,
+      validity: { complete: true, invalidatedRanges: [] },
+    };
+    analysisCache.set(track.assetId, analysis);
+    return analysis;
+  } finally {
+    context.close?.().catch?.(() => {});
+  }
+}
+
+async function getAnalysis(assetId) {
+  const project = await activeProject();
+  const track = project?.tracks?.find((item) => item.assetId === assetId);
+  return track ? analyzeTrack(track) : null;
+}
+
+async function getMixState(projectId) {
+  const project = await activeProject();
+  if (!project || (projectId && project.id !== projectId)) return null;
+  const tracks = [];
+  for (const track of project.tracks || []) {
+    const analysis = await analyzeTrack(track);
+    if (!analysis) continue;
+    tracks.push({
+      trackId: track.id,
+      role: track.kind === 'recording' ? 'lead-vocal' : 'instrumental',
+      analysis,
+      confidence: analysis.confidence?.voice ?? analysis.confidence?.pitch ?? 0,
+    });
+  }
+  return buildProjectMixState({ tracks });
+}
+
+const audioToolRuntime = createPabloVoiceAudioToolRuntime({ getAnalysis, getMixState });
+
+async function executeDeterministicEdit(message, trackId) {
+  const project = await activeProject();
+  if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+  const result = executeNaturalLanguageEdit(project, message, { trackId });
+  await persistProject(result.project);
+  return result;
+}
+
+async function contextForMessage() {
+  const project = await activeProject();
+  const active = project?.tracks?.find((track) => track.id === project.activeTrackId) || project?.tracks?.[0] || null;
+  const other = project?.tracks?.find((track) => track.id !== active?.id) || null;
+  return {
+    projectId: project?.id || null,
+    trackId: active?.id || null,
+    assetId: active?.assetId || null,
+    referenceAssetId: active?.assetId || null,
+    targetAssetId: other?.assetId || null,
+  };
+}
+
+async function submitMessage(form) {
+  const input = form.querySelector('input[name="message"]');
+  const message = input?.value.trim();
+  if (!message) return;
+  input.value = '';
+  appendMessage(message, 'user');
+  setBusy(form, true);
+  try {
+    const context = await contextForMessage();
+    const result = await executePabloAudioMessage(message, context, { audioToolRuntime, executeDeterministicEdit });
+    appendMessage(formatResult(result), 'assistant', result);
+    if (result.kind === 'deterministic_edit' && result.canApply) {
+      appendMessage('A edição determinística foi aplicada e salva. Reabra o Studio para ouvir a prévia atualizada.', 'assistant');
+    }
+  } catch (error) {
+    appendMessage(error?.message || 'Não consegui executar esse pedido com segurança.', 'assistant', { error: true });
+  } finally {
+    setBusy(form, false);
+  }
+}
+
+function injectConversationBox() {
+  if (injecting) return;
+  const shell = document.querySelector('.pv-chat-shell .pv-card.chrome');
+  if (!shell || shell.querySelector('[data-pablo-conversation]')) return;
+  injecting = true;
+  const box = document.createElement('div');
+  box.dataset.pabloConversation = 'true';
+  box.className = 'pv-conversation';
+  box.innerHTML = `<div class="pv-conversation-log" data-pablo-log>
+    <div class="pv-msg assistant">Pode falar do seu jeito: “deixa minha voz mais na frente”, “suaviza minhas respirações” ou “transforma isso em instrumento”.<small>análise local + preview seguro</small></div>
+  </div>
+  <form class="pv-compose-row" data-pablo-form>
+    <input class="pv-field" name="message" autocomplete="off" placeholder="O que você quer fazer com o som?" aria-label="Falar com Pablo sobre o áudio">
+    <button class="pv-btn primary" type="submit">Enviar</button>
+  </form>`;
+  shell.appendChild(box);
+  box.querySelector('form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitMessage(event.currentTarget);
+  });
+  injecting = false;
+}
+
+function appendMessage(text, role, result = null) {
+  const log = document.querySelector('[data-pablo-log]');
+  if (!log) return;
+  const message = document.createElement('div');
+  message.className = `pv-msg ${role}`;
+  const small = result?.data?.decision ? ` · confiança: ${Math.round((result.data.confidence || 0) * 100)}% · ${result.data.decision}` : '';
+  message.textContent = text;
+  if (small) {
+    const meta = document.createElement('small');
+    meta.textContent = small.slice(3);
+    message.appendChild(meta);
+  }
+  log.appendChild(message);
+  message.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function formatResult(result) {
+  if (!result?.supported) return 'Ainda não tenho uma ação segura para esse pedido. Não alterei o projeto.';
+  if (result.kind === 'deterministic_edit') return result.canApply ? 'Entendi e apliquei a edição reversível no projeto.' : 'Entendi a edição, mas mantive somente como prévia.';
+  if (!result.result?.ok) return `Não consegui usar essa análise: ${result.result?.reason || 'dados insuficientes'}.`;
+  const data = result.result.data || {};
+  if (result.tool === 'inspect_audio') {
+    const bpm = featureValue(data.music?.bpm ?? data.music?.bpm?.value);
+    const pitch = featureValue(data.voice?.pitchHz ?? data.voice?.pitchHz?.value);
+    return `Analisei o áudio${bpm ? `: cerca de ${Math.round(bpm)} BPM` : ''}${pitch ? `, pitch central ~${Math.round(pitch)} Hz` : ''}.`;
+  }
+  if (result.tool === 'inspect_mix') return `Analisei ${data.tracks?.length || 0} faixa(s) e ${data.relations?.length || 0} relação(ões) no mix.`;
+  if (result.tool === 'bring_voice_forward' || result.tool === 'make_vocal_space') return data.execution === 'allowed' ? 'Montei um plano seguro para abrir espaço e trazer a voz para frente. Ele está pronto para prévia.' : 'Montei uma sugestão de mix, mas a confiança ainda pede revisão antes de aplicar.';
+  if (result.tool === 'soften_breaths') return `Encontrei ${data.total ?? data.length ?? 0} evento(s) de respiração no plano. Nada de baixa confiança será removido sozinho.`;
+  if (result.tool === 'align_vocals') return Number.isFinite(data.offsetMs) ? `O vocal secundário está deslocado em cerca de ${Math.round(data.offsetMs)} ms. ${data.execution === 'allowed' ? 'A correção está elegível para prévia.' : 'Vou manter como sugestão.'}` : 'Não encontrei evidência suficiente para alinhar automaticamente.';
+  if (result.tool === 'audio_to_instrument') return data.chromatic?.ready ? `O áudio pode virar instrumento cromático a partir da nota MIDI ${data.chromatic.rootMidi}.` : 'Ainda não há pitch confiável o suficiente para transformar este áudio em instrumento automaticamente.';
+  return 'Análise concluída. Mantive o resultado como preview seguro.';
+}
+
+function coarseSpectrum(samples, sampleRate, bands = 8) {
+  const size = Math.min(2048, samples.length);
+  if (size < 64) return [];
+  const start = Math.max(0, Math.floor((samples.length - size) / 2));
+  const frame = samples.subarray(start, start + size);
+  const nyquist = sampleRate / 2;
+  const values = [];
+  for (let band = 0; band < bands; band += 1) {
+    const low = 40 * Math.pow(nyquist / 40, band / bands);
+    const high = 40 * Math.pow(nyquist / 40, (band + 1) / bands);
+    const center = Math.sqrt(low * high);
+    const k = Math.max(1, Math.min(Math.floor(size / 2) - 1, Math.round(center * size / sampleRate)));
+    let re = 0, im = 0;
+    for (let n = 0; n < size; n += 1) {
+      const angle = 2 * Math.PI * k * n / size;
+      const window = 0.5 - 0.5 * Math.cos(2 * Math.PI * n / (size - 1));
+      re += frame[n] * window * Math.cos(angle);
+      im -= frame[n] * window * Math.sin(angle);
+    }
+    values.push(Math.sqrt(re * re + im * im));
+  }
+  const max = Math.max(...values, 1e-9);
+  return values.map((value, index) => ({ band: index, value: value / max }));
+}
+
+function featureValue(value) {
+  const n = Number(value?.value ?? value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function setBusy(form, busy) {
+  const button = form.querySelector('button');
+  const input = form.querySelector('input');
+  if (button) { button.disabled = busy; button.textContent = busy ? 'Analisando…' : 'Enviar'; }
+  if (input) input.disabled = busy;
+}
