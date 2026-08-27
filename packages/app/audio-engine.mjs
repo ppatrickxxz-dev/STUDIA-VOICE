@@ -1,4 +1,5 @@
 import { EXPORT_PRESETS, normalizationFactor, peakOf } from './audio/src/presets.mjs';
+import { regionGainEnvelope } from './audio/src/automation/region-gain.mjs';
 
 export class PabloAudioEngine {
   constructor() {
@@ -279,38 +280,12 @@ function automateGain(param, level, effects, when, cursor, duration) {
   }
 }
 
-export function regionGainEnvelope(events = [], cursor = 0, duration = Infinity, ramp = 0.012) {
-  const points = [];
-  for (const event of events) {
-    if (event?.enabled === false) continue;
-    const start = Number(event?.startSeconds);
-    const end = Number(event?.endSeconds);
-    const db = Number(event?.gainDb);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(db) || end <= start || end <= cursor || start >= duration) continue;
-    const boundedStart = Math.max(cursor, start);
-    const boundedEnd = Math.min(duration, end);
-    const gain = dbToGain(db);
-    const edge = Math.min(ramp, Math.max(0, (boundedEnd - boundedStart) / 3));
-    points.push(
-      { time: Math.max(cursor, boundedStart - edge), value: 1 },
-      { time: boundedStart, value: gain },
-      { time: Math.max(boundedStart, boundedEnd - edge), value: gain },
-      { time: boundedEnd, value: 1 },
-    );
-  }
-  return points.sort((a, b) => a.time - b.time);
-}
-
 function automateRegions(param, events, when, cursor, duration) {
   param.setValueAtTime(1, when);
   for (const point of regionGainEnvelope(events, cursor, duration)) {
     const at = when + Math.max(0, point.time - cursor);
     param.linearRampToValueAtTime(point.value, at);
   }
-}
-
-function dbToGain(db) {
-  return 10 ** (Math.max(-60, Math.min(12, db)) / 20);
 }
 
 function normalizeInPlace(buffer, target) {
