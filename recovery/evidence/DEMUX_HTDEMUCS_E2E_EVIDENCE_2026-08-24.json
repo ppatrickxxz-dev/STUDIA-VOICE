@@ -1,0 +1,66 @@
+{
+  "product": "PabloVoice",
+  "capability": "B09_source_separation",
+  "engine": "Demucs",
+  "model": "htdemucs",
+  "engine_version": "4.0.1",
+  "evidence_status": "ENGINE_E2E_VERIFIED",
+  "transport_status": "STANDALONE_STEMS_ROUTE_NOT_YET_CANARIED",
+  "source": "live Supabase production evidence queried 2026-08-27",
+  "latest_verified_job": {
+    "job_id": "376805de-3d77-4713-83bb-b5c212ed92b7",
+    "project_id": "d64e4de9-791e-41bc-9307-7957389b2499",
+    "job_type": "full_pipeline",
+    "status": "completed",
+    "engine": "kaggle_api_v5_8",
+    "created_at": "2026-08-24T05:52:07.378683Z",
+    "finished_at": "2026-08-24T05:56:28.926Z",
+    "proof_verified": true,
+    "chain": [
+      "demucs_htdemucs",
+      "applio_rvc_natural",
+      "ffmpeg_mix_v4_1",
+      "qa"
+    ],
+    "source_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d",
+    "guide_vocal": {
+      "asset_id": "64dbb20a-48ad-4e8c-b748-3023fbd8c664",
+      "kind": "guide_vocal",
+      "mime_type": "audio/flac",
+      "size_bytes": 16670393,
+      "sha256": "7a5e7f293f4b856a1035390dc87dfff27434e0806e20a4e42391d3fff9656499",
+      "engine": "Demucs",
+      "model": "htdemucs",
+      "lossless": true
+    },
+    "instrumental": {
+      "asset_id": "69ed6a81-07ca-4978-b0c3-adfe82474121",
+      "kind": "instrumental",
+      "mime_type": "audio/flac",
+      "size_bytes": 15893538,
+      "sha256": "163c1cb9cbeb0fe17ad69ca9166f264bbead646e91671fdbe3c7d980ac6d983b",
+      "engine": "Demucs",
+      "model": "htdemucs",
+      "lossless": true
+    },
+    "qa": {
+      "passed": true,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bit_depth": 24,
+      "integrated_lufs": -12.07,
+      "true_peak_db": -0.91,
+      "duration_seconds": 184.96
+    }
+  },
+  "repeatability": {
+    "completed_full_pipeline_jobs_with_verified_demucs_chain_found": 5,
+    "note": "Multiple completed full-pipeline jobs independently persisted guide-vocal and instrumental outputs with distinct SHA-256 proofs."
+  },
+  "promotion_rule": {
+    "engine_validated": true,
+    "standalone_provider_available": false,
+    "standalone_provider_validated": false,
+    "reason": "The Demucs engine itself has real E2E evidence, but the newly canonical standalone create-kaggle-ticket(stems) -> complete-kaggle-stems-job route has no completed job yet."
+  }
+}
