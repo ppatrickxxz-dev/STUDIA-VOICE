@@ -1,4 +1,13 @@
 const app = document.querySelector('#app');
+const ACTIVE_PROJECT_SESSION_KEY = 'pablovoice.activeProjectId';
+
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-action="open-project"][data-id]');
+  const id = target?.dataset.id;
+  if (!id) return;
+  try { sessionStorage.setItem(ACTIVE_PROJECT_SESSION_KEY, id); }
+  catch { /* session storage can be unavailable in privacy/file contexts */ }
+}, true);
 
 function fallbackShell() {
   if (!app || document.querySelector('.pv-nav')) return;
