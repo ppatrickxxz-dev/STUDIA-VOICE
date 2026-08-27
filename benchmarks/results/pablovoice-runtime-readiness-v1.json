@@ -26,13 +26,18 @@
     "b06_smoke_output_asset_id": "1963a8de-3f1d-46cd-af31-57ec82a3e095",
     "b06_smoke_output_sha256": "87177efef84078709bd46bed625e991168338ddc969da05d8727b23fed4b85b1",
     "b06_smoke_benchmark_score_eligible": false,
-    "b06_smoke_evidence_file": "benchmarks/results/b06-smoke-81c74a6f.json"
+    "b06_smoke_evidence_file": "benchmarks/results/b06-smoke-81c74a6f.json",
+    "b08_arrangement_planner_sha": "50507da97f6c5bef4c59384ff679c9051cf932b5",
+    "b08_frozen_plan_sha": "3f4c5f0b7f915a794460aeae0e413bb5a7d5340d",
+    "b08_audio_engine_sha": "7d6ee67ab51082ec33cc479784585372575f44ef",
+    "b08_region_gain_sha": "5ad2688ea1acec70fa5ed7190d3f0449b6da2561",
+    "b08_region_time_sha": "207ce06b8330cd962d73457baf6144c5db80747b"
   },
   "summary": {
     "scored_tests": [],
-    "implementation_ready_unexecuted": ["B06", "B07", "B10", "B11", "B12"],
+    "implementation_ready_unexecuted": ["B06", "B07", "B08", "B10", "B11", "B12"],
     "partial_tests": [],
-    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B08", "B09"],
+    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B09"],
     "score_awarded": false
   },
   "tests": {
@@ -41,10 +46,10 @@
     "B03": {"status":"blocked","reason":"Lyrics can be edited as text, but there is no local audio lyric replacement operation."},
     "B04": {"status":"blocked","reason":"Runtime explicitly marks vocal conversion unavailable; no identity-preserving regeneration exists."},
     "B05": {"status":"blocked","reason":"PT-BR lyric analysis exists, but no sung-vocal generation exists locally."},
-    "B06": {"status":"implementation_ready_unexecuted","reason":"The dedicated note-aware correction path is implemented and has now completed one retained engineering smoke on a verified non-benchmark Pablo Voice variant. That smoke reduced median absolute pitch error from 17.5 to 12.5 cents while preserving median relative vibrato at 0.998, but corrected only 0.56% of the source under the locked conservative guards. Because the smoke source is not the frozen benchmark vocal, it is explicitly non-scoring and does not promote B06. Official B06 still requires the frozen benchmark vocal to be ingested privately, rendered, retained, hashed, and acoustically reviewed."},
+    "B06": {"status":"implementation_ready_unexecuted","reason":"The dedicated note-aware correction path is implemented and has completed one retained engineering smoke on a verified non-benchmark Pablo Voice variant. That smoke reduced median absolute pitch error from 17.5 to 12.5 cents while preserving median relative vibrato at 0.998, but corrected only 0.56% of the source under the locked conservative guards. Because the smoke source is not the frozen benchmark vocal, it is explicitly non-scoring and does not promote B06. Official B06 still requires the frozen benchmark vocal to be ingested privately, rendered, retained, hashed, and acoustically reviewed."},
     "B07": {"status":"implementation_ready_unexecuted","reason":"Canonical authenticated high/low harmony provider targets the deployed Rubber Band + librosa v7.5.2 route with formant preservation. The high adaptive-partial path has one verified historical execution; the low path is implemented but deliberately marked unexecuted. B07 remains unscored and non-promotable until both frozen high and low layers are rendered against benchmark inputs and retained."},
-    "B08": {"status":"blocked","reason":"Mixer and effects can change presentation, but no arrangement-generation operation preserves melody/lyrics/identity under benchmark constraints."},
-    "B09": {"status":"blocked","reason":"Runtime explicitly marks stem separation unavailable. Demucs engine evidence exists, but no completed standalone stems render_job exists yet; per-track export is not counted as source separation."},
+    "B08": {"status":"implementation_ready_unexecuted","reason":"The canonical Studio now has a guarded macro-arrangement density planner that applies persisted time-local gain automation only to explicitly selected accompaniment tracks. The lead vocal, lyrics, track order, asset identities, duration, trims, offsets, gain, pan, mute/solo, effects and non-target automation are protected. The frozen v1 plan is attenuation-only and uses runtime region automation already shared by playback and offline rendering. This is macro-arrangement rather than instrument regeneration, and B08 remains unscored until a frozen-reference render is retained and reviewed for arrangement adherence, melody preservation, vocal identity and continuity."},
+    "B09": {"status":"blocked","reason":"A real authenticated standalone Demucs/Kaggle stems route is implemented, but no completed standalone stems render_job exists yet. Per-track export and stems produced only inside full pipelines do not count as the required B09 source-separation execution."},
     "B10": {"status":"implementation_ready_unexecuted","reason":"A deterministic PT-BR conversational edit engine maps the frozen non-DAW command to exact supported local operations, scopes preservation to the explicit clause, and fails closed on unsupported requests. Retained execution evidence is still required before scoring."},
     "B11": {"status":"implementation_ready_unexecuted","reason":"A guarded three-step conversational edit sequence preserves project identity, lyrics, track order, all non-selected tracks, selected source identity, duration/sample layout, offset/trim/gain/mute/solo while allowing only requested supported effect/pan changes. Acoustic continuity evidence is still required before scoring the hard gate."},
     "B12": {"status":"implementation_ready_unexecuted","reason":"Master WAV render exists; aligned stereo per-track rendering preserves project duration, avoids per-stem normalization, rejects >0 dBFS stems instead of silently clipping, and fixes master channel selection. Benchmark output still must be executed and retained before scoring."}

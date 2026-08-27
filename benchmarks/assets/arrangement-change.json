@@ -1,0 +1,64 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "purpose": "B08 guarded macro-arrangement density change",
+  "frozen_before_first_b08_benchmark_output": true,
+  "input_domain": "edit_reference",
+  "scope": "macro_arrangement_density_only",
+  "scope_boundary": {
+    "regenerates_instruments": false,
+    "changes_notes_or_melody": false,
+    "changes_lyrics": false,
+    "changes_vocal_identity": false,
+    "changes_song_form_or_duration": false,
+    "changes_accompaniment_density_by_time_local_gain": true
+  },
+  "reference": {
+    "duration_seconds": 184.96,
+    "instrumental_asset_id": "b43b4919-6860-49a3-95fc-bb94f2c7561b",
+    "instrumental_sha256": "4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a",
+    "reference_mix_sha256": "4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9"
+  },
+  "policy": {
+    "source": "b08_arrangement_v1",
+    "mode": "attenuation_only",
+    "min_gain_db": -12,
+    "max_gain_db": 0,
+    "max_regions": 12,
+    "preserve_lead_track": true,
+    "preserve_lyrics": true,
+    "preserve_track_order": true,
+    "preserve_asset_identity": true,
+    "preserve_song_duration": true
+  },
+  "regions": [
+    {"id":"A1_opening_space","label":"opening_space","start_seconds":0.0,"end_seconds":12.0,"gain_db":-8.0},
+    {"id":"A2_first_contrast","label":"first_contrast","start_seconds":18.0,"end_seconds":34.0,"gain_db":-3.0},
+    {"id":"A3_mid_break","label":"mid_break","start_seconds":72.0,"end_seconds":88.0,"gain_db":-5.0},
+    {"id":"A4_late_breakdown","label":"late_breakdown","start_seconds":112.0,"end_seconds":128.0,"gain_db":-7.0},
+    {"id":"A5_outro_space","label":"outro_space","start_seconds":168.0,"end_seconds":184.96,"gain_db":-6.0}
+  ],
+  "requirements": {
+    "explicit_instrumental_target_ids_required": true,
+    "lead_vocal_must_never_be_targeted": true,
+    "lead_vocal_track_state_must_remain_identical": true,
+    "lyrics_must_remain_identical": true,
+    "track_order_must_remain_identical": true,
+    "asset_ids_must_remain_identical": true,
+    "trim_offset_gain_pan_mute_solo_effects_must_remain_identical": true,
+    "non_target_region_automation_must_remain_identical": true,
+    "song_duration_must_remain_identical": true,
+    "positive_gain_boost_forbidden": true,
+    "runtime_playback_and_offline_render_must_apply_region_automation": true,
+    "retained_acoustic_output_required_for_score": true
+  },
+  "runtime_evidence": {
+    "audio_engine_sha": "7d6ee67ab51082ec33cc479784585372575f44ef",
+    "region_gain_sha": "5ad2688ea1acec70fa5ed7190d3f0449b6da2561",
+    "region_time_sha": "207ce06b8330cd962d73457baf6144c5db80747b",
+    "region_automation_persisted_in_project_schema": true,
+    "region_automation_used_in_playback": true,
+    "region_automation_used_in_offline_render": true
+  },
+  "observed_execution": null,
+  "readiness_rule": "Macro-arrangement implementation readiness is not a B08 pass. B08 remains unscored until the frozen reference is rendered, retained and reviewed for arrangement adherence, melody preservation, vocal identity and continuity."
+}
