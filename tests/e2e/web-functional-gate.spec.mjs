@@ -232,6 +232,85 @@ test('WEB BEAT TIMELINE GATE: confirmed chorus renders and replaces a real beat-
   expect(unexpectedErrors(errors)).toEqual([]);
 });
 
+test('WEB SECTION MAP UI GATE: current cursor can mark, persist, edit and remove a confirmed chorus', async ({ page }) => {
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Sections');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('#audio-picker').setInputFiles({ name: 'sections-source.wav', mimeType: 'audio/wav', buffer: wavFixture({ seconds: 1.5, frequency: 240 }) });
+  await expect(page.getByText('sections-source.wav').first()).toBeVisible();
+  await expect(page.locator('[data-section-map-open]')).toBeVisible();
+
+  await page.locator('[data-action="play"]').click();
+  await page.waitForTimeout(360);
+  await page.locator('[data-action="stop"]').click();
+  const stoppedAt = await page.locator('#current-time').textContent();
+  expect(stoppedAt).not.toBe('0:00.0');
+
+  await page.locator('[data-section-map-open]').click();
+  await expect(page.getByRole('heading', { name: 'Seções' })).toBeVisible();
+  await page.locator('[data-section-kind]').selectOption('chorus');
+  await page.locator('[data-section-use-cursor]').click();
+  const cursorValue = await page.locator('[data-section-start]').inputValue();
+  expect(cursorValue).not.toBe('0:00');
+  await page.getByRole('button', { name: 'Salvar seção' }).click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(1);
+  await expect(page.locator('[data-section-row]').first()).toContainText('Refrão');
+  await expect(page.locator('[data-section-row]').first()).toContainText('timing confirmado');
+
+  await page.locator('[data-section-map-close]').click();
+  await page.reload({ waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+  await page.locator('[data-route="projects"]').first().click();
+  await expect(page.getByText('Gate Sections').first()).toBeVisible();
+  await page.locator('[data-action="open-project"]').first().click();
+  await expect(page.locator('[data-section-map-open]')).toBeVisible();
+  await page.locator('[data-section-map-open]').click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(1);
+
+  await page.locator('[data-section-edit]').first().click();
+  await page.locator('[data-section-start]').fill('1.0');
+  await page.locator('[data-section-end]').fill('1.2');
+  await page.getByRole('button', { name: 'Atualizar' }).click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(1);
+  await expect(page.locator('[data-section-row]').first()).toContainText('0:01');
+  await expect(page.locator('[data-section-row]').first()).toContainText('0:01.2');
+
+  const persisted = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    return {
+      sectionCount: project.arrangementMap.sections.length,
+      section: project.arrangementMap.sections[0],
+      revisionLabels: project.revisions.map((revision) => revision.label),
+    };
+  });
+  expect(persisted.sectionCount).toBe(1);
+  expect(persisted.section.kind).toBe('chorus');
+  expect(persisted.section.startSeconds).toBe(1);
+  expect(persisted.section.endSeconds).toBe(1.2);
+  expect(persisted.section.timingStatus).toBe('confirmed');
+  expect(persisted.revisionLabels.some((label) => /Refrão atualizado na timeline/.test(label))).toBe(true);
+
+  await page.locator('[data-section-remove]').first().click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(0);
+  await expect(page.getByText(/Nenhuma seção marcada ainda/)).toBeVisible();
+  const remaining = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    return {
+      sections: project.arrangementMap.sections.length,
+      removedRevision: project.revisions.some((revision) => /Refrão removido da timeline/.test(revision.label)),
+    };
+  });
+  expect(remaining.sections).toBe(0);
+  expect(remaining.removedRevision).toBe(true);
+  expect(unexpectedErrors(errors)).toEqual([]);
+});
+
 test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async ({ page }) => {
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
