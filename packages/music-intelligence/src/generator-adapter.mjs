@@ -36,11 +36,15 @@ export function planComposerGeneration(message = '', context = {}) {
     });
   }
 
-  const memory = createAuthorialMemory(context.authorialMemory || {});
+  const previousSession = validPreviousSession(context.pmiSession) ? context.pmiSession : null;
+  const memory = createAuthorialMemory(context.authorialMemory || previousSession?.authorialMemory || {});
+  const creativeBrief = String(previousSession?.concept?.premise || source).trim();
+  const previousStructure = Array.isArray(previousSession?.songPlan?.structure) ? previousSession.songPlan.structure : null;
   const session = startCompositionSession({
-    brief: source,
+    brief: creativeBrief,
     lyrics,
-    notes: String(context.notes || '').slice(0, 4000),
+    notes: String(context.notes || previousSession?.projectNotes || '').slice(0, 4000),
+    preferences: previousStructure ? { structure: previousStructure } : {},
     genre: context.genre || context.preset || '',
     mood: context.mood || '',
     authorialMemory: memory,
@@ -64,6 +68,7 @@ export function planComposerGeneration(message = '', context = {}) {
       contextPack: Object.freeze({
         source: 'pablovoice-pmi-composer',
         pmi_version: '1.0.0',
+        conversational_continuity: Boolean(previousSession),
         target_section: targetSection,
         target_genre: targetGenre,
         concept: session.concept,
@@ -107,4 +112,8 @@ function inferSection(text) {
 function inferGenre(text) {
   const match = String(text).match(/\b(funk|r&b|rnb|rap|hip.?hop|pop|mpb|pagode|edm|k-?pop|trap)\b/i);
   return match ? match[1].toLowerCase() : null;
+}
+
+function validPreviousSession(value) {
+  return Boolean(value && value.schema === 'pmi_music_session_v1' && value.concept?.premise && value.songPlan);
 }
