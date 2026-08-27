@@ -1,0 +1,61 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "test_id": "B06",
+  "kind": "engineering_smoke_not_score",
+  "benchmark_score_eligible": false,
+  "job_id": "81c74a6f-012f-47b8-a013-67f018445a0c",
+  "status": "completed",
+  "finished_at": "2026-08-27T13:10:17.024Z",
+  "source": {
+    "asset_id": "45f2cf70-a2ff-40c6-b544-9e3fc6ad4bae",
+    "kind": "pablo_voice_variant",
+    "profile": "natural",
+    "sha256": "78b4c5e5728a8beb3b0e288699eb6aa5882e9ed580823a168c833bf9455701ac",
+    "is_frozen_benchmark_vocal": false
+  },
+  "output": {
+    "asset_id": "1963a8de-3f1d-46cd-af31-57ec82a3e095",
+    "kind": "pablo_voice_pitch_corrected",
+    "original_name": "Pablo Voice · afinação natural · 81c74a6f.flac",
+    "sha256": "87177efef84078709bd46bed625e991168338ddc969da05d8727b23fed4b85b1",
+    "size_bytes": 15066221,
+    "duration_seconds": 180.999979,
+    "sample_rate_hz": 48000,
+    "channels": 1,
+    "mime_type": "audio/flac"
+  },
+  "engine": {
+    "name": "Rubber Band + librosa pYIN",
+    "worker_version": "b06-1.0",
+    "rubberband_version": "2.0.0",
+    "rubberband_flags": ["-F", "--pitch-hq"],
+    "formant_preserved": true
+  },
+  "policy": {
+    "min_event_seconds": 0.18,
+    "min_confidence": 0.72,
+    "deadband_cents": 12,
+    "max_correction_cents": 45,
+    "crossfade_seconds": 0.035,
+    "preserve_formants": true,
+    "preserve_relative_vibrato": true,
+    "target_strategy": "explicit_or_nearest_chromatic"
+  },
+  "metrics": {
+    "detected_note_events": 647,
+    "corrected_segments": 4,
+    "skipped_segments": 643,
+    "corrected_coverage": 0.0056,
+    "median_abs_cents_before": 17.50000000000025,
+    "median_abs_cents_after": 12.5,
+    "median_vibrato_ratio": 0.9979186111208519
+  },
+  "interpretation": {
+    "pitch_accuracy_improved": true,
+    "relative_vibrato_preserved": true,
+    "coverage_is_intentionally_conservative": true,
+    "coverage_is_too_low_to_treat_as_benchmark_validation": true,
+    "result_may_inform_engineering_but_must_not_change_locked_benchmark_scoring_thresholds": true
+  },
+  "promotion_rule": "This smoke proves the renderer can complete a retained, hashed, formant-preserving note-aware correction. It does not score or pass B06 because the source is not the frozen benchmark vocal."
+}
