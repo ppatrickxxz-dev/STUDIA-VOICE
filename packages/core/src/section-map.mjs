@@ -29,11 +29,11 @@ const SECTION_LABELS = Object.freeze({
   outro: 'Outro',
 });
 
-export function createArrangementMap() {
+export function createArrangementMap(now = Date.now()) {
   return {
     schema: ARRANGEMENT_MAP_SCHEMA,
     sections: [],
-    updatedAt: Date.now(),
+    updatedAt: finite(now, Date.now()),
   };
 }
 
