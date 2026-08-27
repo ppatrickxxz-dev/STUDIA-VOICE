@@ -7,13 +7,15 @@
   "evidence": {
     "app_source_sha": "1bd48ceea1e318ec696cc88d9c0d20c37e4782c0",
     "audio_engine_sha_before_b12_upgrade": "0bc21da5db14a0158a6c9975098ce7539f055fb7",
-    "b12_upgrade_branch": "feat/benchmark-runtime-execution-v1"
+    "b12_upgrade_branch": "feat/benchmark-runtime-execution-v1",
+    "b10_natural_language_engine_sha": "36ced78983c707f1e3d9de6d5e59a07136c23bc0",
+    "b10_frozen_case_sha": "84c3c8d3f828cc60d96bc7af4919a8dd7579b003"
   },
   "summary": {
     "scored_tests": [],
-    "implementation_ready_unexecuted": ["B12"],
+    "implementation_ready_unexecuted": ["B10", "B12"],
     "partial_tests": ["B06", "B07"],
-    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B08", "B09", "B10", "B11"],
+    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B08", "B09", "B11"],
     "score_awarded": false
   },
   "tests": {
@@ -26,7 +28,7 @@
     "B07": {"status":"partial_non_promotable","reason":"A 22 ms / +11 cent double layer exists, but there is no musically generated high/low harmony engine."},
     "B08": {"status":"blocked","reason":"Mixer and effects can change presentation, but no arrangement-generation operation preserves melody/lyrics/identity under benchmark constraints."},
     "B09": {"status":"blocked","reason":"Runtime explicitly marks stem separation unavailable. Per-track export is not counted as source-separation."},
-    "B10": {"status":"blocked","reason":"Pablo reads local state and emits deterministic tips; it does not execute arbitrary natural-language audio edits."},
+    "B10": {"status":"implementation_ready_unexecuted","reason":"A deterministic PT-BR conversational edit engine now maps the frozen non-DAW command to the exact supported local operations, scopes preservation to the explicit conversational clause, preserves trimEnd/fadeOut, and fails closed on unsupported requests. It still requires retained execution evidence before scoring."},
     "B11": {"status":"blocked","reason":"Non-destructive revisions exist, but sequential generative local edits with continuity preservation do not."},
     "B12": {"status":"implementation_ready_unexecuted","reason":"Master WAV render exists; aligned stereo per-track rendering now preserves project duration, avoids per-stem normalization, rejects >0 dBFS stems instead of silently clipping, and fixes master channel selection. Benchmark output still must be executed and retained before scoring."}
   },

@@ -1,6 +1,7 @@
 import { migrateProject } from './project.mjs';
 
 const SHORT_FADE_SECONDS = 0.25;
+const PRESERVATION_CUE = '(?:nao mexe|nao mudar|sem mexer|preserva|mantem)';
 
 function normalizeText(value = '') {
   return String(value)
@@ -9,6 +10,13 @@ function normalizeText(value = '') {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function hasPreservationTarget(text, targets) {
+  const target = `(?:${targets.join('|')})`;
+  const cueBefore = new RegExp(`${PRESERVATION_CUE}[^.!?,;]{0,40}\\b${target}\\b`);
+  const targetBefore = new RegExp(`\\b${target}\\b[^.!?,;]{0,40}${PRESERVATION_CUE}`);
+  return cueBefore.test(text) || targetBefore.test(text);
 }
 
 export function interpretNaturalLanguageEdit(command) {
@@ -36,14 +44,13 @@ export function interpretNaturalLanguageEdit(command) {
   if (/\bfade\b/.test(text) && /\b(comeco|inicio|entrada)\b/.test(text) && /\b(curto|rapidinho|bem curto)\b/.test(text)) {
     operations.push({ type: 'set_effect', key: 'fadeIn', value: SHORT_FADE_SECONDS, evidence: 'short_fade_in' });
   }
-  if (/\bnao mexe|nao mudar|sem mexer|preserva|mantem\b/.test(text)) {
-    if (/\b(fim|final|saida)\b/.test(text)) {
-      preserved.add('trimEnd');
-      preserved.add('fadeOut');
-    }
-    if (/\b(comeco|inicio|entrada)\b/.test(text)) {
-      preserved.add('trimStart');
-    }
+
+  if (hasPreservationTarget(text, ['fim', 'final', 'saida'])) {
+    preserved.add('trimEnd');
+    preserved.add('fadeOut');
+  }
+  if (hasPreservationTarget(text, ['comeco', 'inicio', 'entrada'])) {
+    preserved.add('trimStart');
   }
 
   if (!operations.length) {
