@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sortProjectsByContext } from '../../packages/app/storage.mjs';
+import { sortProjectsByContext } from '../../packages/app/project-context.mjs';
 
 const projects = [
   { id: 'newer', updatedAt: 200 },
