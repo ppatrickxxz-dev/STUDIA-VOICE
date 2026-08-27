@@ -6,6 +6,8 @@ MANIFEST = ROOT / "pablovoice-benchmark-v1.json"
 GENERATION_BRIEF = ROOT / "assets" / "frozen-brief.json"
 REFERENCE_ANALYSIS = ROOT / "assets" / "reference-analysis.json"
 NATURAL_LANGUAGE_EDITS = ROOT / "assets" / "natural-language-edits.json"
+SEQUENTIAL_EDITS = ROOT / "assets" / "sequential-edits.json"
+HARMONY_GENERATION = ROOT / "assets" / "harmony-generation.json"
 
 REQUIRED_TEST_IDS = {f"B{i:02d}" for i in range(1, 13)}
 REQUIRED_HARD_GATES = {"section_replacement","vocal_identity","pt_br_prosody","continuity","artifact_rate"}
@@ -18,6 +20,33 @@ B10_EXPECTED_OPERATIONS = [
     {"type": "set_track", "key": "pan", "value": 0},
     {"type": "set_effect", "key": "fadeIn", "value": 0.25},
 ]
+B11_FROZEN_COMMANDS = [
+    "Deixa minha voz mais limpa, sem mexer no fim.",
+    "Deixa ela mais presente e centraliza.",
+    "Coloca um fade bem curto no começo, sem mexer no fim.",
+]
+B11_EXPECTED_STEP_OPERATIONS = [
+    [{"type": "set_effect", "key": "clean", "value": True}],
+    [
+        {"type": "set_effect", "key": "presence", "value": True},
+        {"type": "set_track", "key": "pan", "value": 0},
+    ],
+    [{"type": "set_effect", "key": "fadeIn", "value": 0.25}],
+]
+B11_REQUIRED_PRESERVATIONS = {
+    "project identity",
+    "lyrics",
+    "track order",
+    "non-selected tracks",
+    "selected source asset identity",
+    "selected duration/sample-rate/channel layout",
+    "selected offset/trim/gain/mute/solo",
+}
+B07_FROZEN_LAYERS = [
+    {"voice": "high", "mode": "adaptive_partial"},
+    {"voice": "low", "mode": "adaptive_partial"},
+]
+B07_DEPLOYED_FUNCTION_SHA256 = "b4dcc26669395ee4c9f07b8d525cf81805b2b6d75bbe7ab8a6a8a0134551def1"
 
 
 def fail(message: str) -> None:
@@ -33,6 +62,8 @@ def main() -> None:
     brief = load(GENERATION_BRIEF)
     reference = load(REFERENCE_ANALYSIS)
     conversational = load(NATURAL_LANGUAGE_EDITS)
+    sequential = load(SEQUENTIAL_EDITS)
+    harmony = load(HARMONY_GENERATION)
 
     if data.get("benchmark") != "PabloVoice Benchmark v1": fail("unexpected benchmark name")
     tests = data.get("tests", [])
@@ -104,8 +135,32 @@ def main() -> None:
     if case.get("must_not_require_daw_terms") is not True: fail("B10 must remain conversational/non-DAW")
     if case.get("unsupported_extra_actions_are_failure") is not True: fail("B10 fail-closed rule changed")
 
+    if sequential.get("purpose") != "B11 continuity under repeated edits": fail("B11 purpose changed")
+    if sequential.get("frozen_before_first_provider_output") is not True: fail("B11 sequence must remain frozen pre-output")
+    if sequential.get("target") != "active_vocal_track": fail("B11 target changed")
+    if sequential.get("commands") != B11_FROZEN_COMMANDS: fail("B11 frozen command sequence changed")
+    if sequential.get("expected_step_operations") != B11_EXPECTED_STEP_OPERATIONS: fail("B11 expected operations changed")
+    if set(sequential.get("must_preserve_across_all_steps", [])) != B11_REQUIRED_PRESERVATIONS: fail("B11 preservation contract changed")
+    if sequential.get("score_requires_acoustic_evidence") is not True: fail("B11 must require acoustic evidence before scoring")
+    if sequential.get("implementation_readiness_is_not_pass") is not True: fail("B11 readiness must not become a pass")
+
+    if harmony.get("purpose") != "B07 harmony generation execution plan": fail("B07 purpose changed")
+    if harmony.get("frozen_before_first_b07_benchmark_output") is not True: fail("B07 plan must remain frozen pre-output")
+    if harmony.get("input_domain") != "edit_reference": fail("B07 must use edit_reference")
+    if harmony.get("layers") != B07_FROZEN_LAYERS: fail("B07 high/low layer plan changed")
+    req = harmony.get("requirements", {})
+    for key in ("both_layers_required", "timing_alignment_required", "formant_preservation_required", "lead_must_remain_unmodified", "discreet_blend_required", "unsupported_or_missing_layer_is_non_promotable"):
+        if req.get(key) is not True: fail(f"B07 requirement {key} must remain true")
+    route = harmony.get("route_evidence", {})
+    if route.get("deployed_function_sha256") != B07_DEPLOYED_FUNCTION_SHA256: fail("B07 deployed function evidence changed")
+    for key in ("supports_high", "supports_low", "supports_formant_preservation"):
+        if route.get(key) is not True: fail(f"B07 route capability {key} removed")
+    observed = harmony.get("observed_execution", {})
+    if observed.get("high", {}).get("verified") is not True: fail("B07 high observed execution must remain verified")
+    if observed.get("low") is not None: fail("B07 low must remain unvalidated until a real retained execution exists")
+
     print("BENCHMARK CONTRACT PASSED")
-    print("12 tests locked; hard gates locked; generation/edit input domains coherent; B10 conversational case frozen; anti-goalpost rules active.")
+    print("12 tests locked; hard gates locked; B07/B10/B11 plans frozen; anti-goalpost rules active.")
 
 
 if __name__ == "__main__":
