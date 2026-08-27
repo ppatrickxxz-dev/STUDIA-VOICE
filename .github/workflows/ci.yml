@@ -77,6 +77,8 @@ jobs:
     needs: android-build
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -104,9 +106,11 @@ jobs:
           fi
       - name: Create and boot Android emulator deterministically
         run: |
-          echo no | avdmanager create avd --force -n pablovoice-ci --package 'system-images;android-35;default;x86_64' --device 'pixel_6'
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd --force --path "$ANDROID_AVD_HOME/pablovoice-ci.avd" -n pablovoice-ci --package 'system-images;android-35;default;x86_64' --device 'pixel_6'
           "$ANDROID_SDK_ROOT/platform-tools/adb" start-server
           test -x "$ANDROID_SDK_ROOT/emulator/emulator"
+          "$ANDROID_SDK_ROOT/emulator/emulator" -list-avds
           nohup "$ANDROID_SDK_ROOT/emulator/emulator" @pablovoice-ci -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics > /tmp/pablovoice-emulator.log 2>&1 &
           echo $! > /tmp/pablovoice-emulator.pid
 
