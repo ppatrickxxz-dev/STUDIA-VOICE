@@ -69,6 +69,7 @@ export async function executePabloAudioMessage(message, context, {
   audioToolRuntime,
   executeDeterministicEdit,
   persistAuthorialMemory,
+  generateMusicDraft,
 } = {}) {
   const music = await tryMusicIntelligence(message, context);
   if (music?.supported) {
@@ -78,6 +79,43 @@ export async function executePabloAudioMessage(message, context, {
       }
       const persistence = await persistAuthorialMemory(music.authorialMemory, music.feedback);
       return { ...music, persistence, execution: 'allowed', canApply: true };
+    }
+    if (music.kind === 'pmi_generation_request') {
+      if (music.blocked) {
+        return {
+          ...music,
+          kind: 'pmi_generation_blocked',
+          reply: music.reason === 'lyrics_required'
+            ? 'Esse pedido precisa de uma letra ou trecho no projeto primeiro. Não gerei nada por fora do seu contexto.'
+            : 'Esse pedido ainda não está pronto para geração.',
+          execution: 'none',
+          canApply: false,
+        };
+      }
+      if (typeof generateMusicDraft !== 'function') {
+        return {
+          ...music,
+          reply: 'O plano criativo está pronto, mas a geração online não está disponível nesta sessão. Não alterei sua letra.',
+          execution: 'preview_only',
+          canApply: false,
+        };
+      }
+      const generated = await generateMusicDraft(music.request);
+      return {
+        supported: true,
+        kind: 'pmi_generated_draft',
+        command: music.command,
+        targetSection: music.targetSection,
+        targetGenre: music.targetGenre,
+        session: music.session,
+        text: String(generated?.text || '').trim(),
+        reply: String(generated?.text || '').trim(),
+        provider: generated?.provider || null,
+        model: generated?.model || null,
+        execution: 'preview_only',
+        canApply: false,
+        reviewRequired: true,
+      };
     }
     return { ...music, execution: 'read_only', canApply: false };
   }
@@ -109,6 +147,8 @@ async function tryMusicIntelligence(message, context) {
   if (!intelligence) return null;
   const feedback = intelligence.respondToAuthorialFeedback(message, context);
   if (feedback?.supported) return feedback;
+  const generation = intelligence.planComposerGeneration(message, context);
+  if (generation?.supported) return generation;
   return intelligence.respondToMusicCreation(message, context);
 }
 
