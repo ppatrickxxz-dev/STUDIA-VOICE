@@ -1,0 +1,47 @@
+{
+  "domain": "PabloVoice Instrument System",
+  "updatedAt": "2026-08-27",
+  "disposition": "canonical-recovery-audited",
+  "principles": [
+    "reuse Audio Analysis Bus",
+    "mobile first",
+    "non destructive",
+    "preview before AI apply",
+    "project context aware",
+    "confidence and cultural regime aware",
+    "user language first, technical controls progressive"
+  ],
+  "capabilities": [
+    {"id":"audio_to_slices","name":"Audio → slices","status":"implemented-main-foundation","priority":"P0","evidence":"packages/audio/src/sampler/audio-to-instrument.mjs"},
+    {"id":"audio_to_piano_roll","name":"Audio note events → Piano Roll","status":"implemented-main-foundation","priority":"P0","evidence":"packages/audio/src/sampler/audio-to-instrument.mjs"},
+    {"id":"chromatic_sampler_descriptor","name":"Audio → chromatic playable descriptor","status":"implemented-main-foundation","priority":"P0","evidence":"packages/audio/src/sampler/audio-to-instrument.mjs"},
+    {"id":"touch_keyboard","name":"Touch keyboard performance","status":"implemented-historical-recovery","priority":"P0"},
+    {"id":"webaudio_synth","name":"Web Audio synth engine","status":"implemented-historical-recovery","priority":"P0"},
+    {"id":"performance_recording","name":"Record note/velocity/start/duration","status":"implemented-historical-recovery","priority":"P0"},
+    {"id":"midi_input","name":"Web MIDI note input","status":"implemented-historical-recovery-browser-dependent","priority":"P1"},
+    {"id":"offline_render","name":"Offline WAV instrument render","status":"implemented-historical-recovery","priority":"P0"},
+    {"id":"timeline_insert","name":"Render → project track/clip","status":"implemented-historical-recovery","priority":"P0"},
+    {"id":"instrument_history","name":"Instrument save + undo/redo","status":"implemented-historical-recovery","priority":"P0"},
+    {"id":"piano_roll_editor","name":"Editable Piano Roll","status":"specified-not-ported","priority":"P1","requirements":["notes","velocity","length","quantize","transpose","scale highlighting"]},
+    {"id":"instrument_rack","name":"Provider-neutral instrument rack","status":"specified","priority":"P1","providers":["Web Audio synth","SoundFont/SF2","SFZ","sample","future WASM synth"]},
+    {"id":"slice_sampler","name":"Playable slice sampler","status":"analysis-foundation-only","priority":"P1"},
+    {"id":"beat_lab","name":"Drum/step sequencer","status":"specified-from-creative-requirements","priority":"P1"},
+    {"id":"groove_intelligence","name":"Groove extraction/humanization","status":"planned","priority":"P2"},
+    {"id":"chord_voicing_assistant","name":"Chord/progression/voicing assistant","status":"knowledge-ready-implementation-pending","priority":"P2"},
+    {"id":"instrument_conversation_tools","name":"Pablo structured instrument creation commands","status":"specified","priority":"P1","examples":["Crie um baixo para esse refrão","Faça bateria funk aqui","Crie piano só no verso","Transforma esse som num instrumento"]},
+    {"id":"studio_life_instrument_deeplinks","name":"Studio Life instrument objects → real creation tools","status":"canonical-concept","priority":"P2"}
+  ],
+  "recommendedRecoveryOrder": [
+    "Instrument Core schema",
+    "port historical Web Audio/touch engine",
+    "render to current timeline/history",
+    "physical Android touch/audio validation",
+    "Piano Roll",
+    "slice sampler",
+    "instrument rack / SoundFont-SFZ evaluation",
+    "Beat Lab",
+    "Pablo structured instrument commands",
+    "groove/chord intelligence",
+    "Studio Life deep links"
+  ]
+}
