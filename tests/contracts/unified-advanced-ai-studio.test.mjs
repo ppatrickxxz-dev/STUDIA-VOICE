@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const advanced = await readFile(new URL('../../packages/app/advanced-ai-studio.mjs', import.meta.url), 'utf8');
 const pablo = await readFile(new URL('../../packages/app/pablo-conversation-ui.mjs', import.meta.url), 'utf8');
+const status = await readFile(new URL('../../packages/app/runtime-capability-status.mjs', import.meta.url), 'utf8');
 const preboot = await readFile(new URL('../../packages/app/preboot.mjs', import.meta.url), 'utf8');
 
 test('advanced AI layer uses only canonical authenticated endpoints', () => {
@@ -40,7 +41,16 @@ test('Pablo remains local-first and remote reasoning is advice-only fallback', (
   assert.match(pablo, /tools: \[\]/);
 });
 
-test('advanced AI layer boots with the canonical app', () => {
+test('runtime capability labels keep evidence gates explicit', () => {
+  assert.match(status, /buildDoesNotEqualFunctionalProof: true/);
+  assert.match(status, /stemsRequiresLiveRouteCanaryForPromotion: true/);
+  assert.match(status, /voiceConversionRequiresVerifiedGuideAndVoiceModel: true/);
+  assert.match(status, /CANDIDATE/);
+  assert.match(status, /GATED/);
+});
+
+test('advanced AI layers boot with the canonical app', () => {
   assert.match(preboot, /installPabloConversationUI/);
   assert.match(preboot, /installAdvancedAIStudio/);
+  assert.match(preboot, /installRuntimeCapabilityStatus/);
 });
