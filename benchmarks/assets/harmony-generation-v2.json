@@ -1,0 +1,30 @@
+{
+  "benchmark": "PabloVoice Benchmark v2",
+  "purpose": "B07 high-low harmony acoustic evidence plan",
+  "frozen": true,
+  "layers": [
+    { "voice": "high", "mode": "adaptive_partial" },
+    { "voice": "low", "mode": "adaptive_partial" }
+  ],
+  "requirements": {
+    "both_layers_required": true,
+    "timing_alignment_required": true,
+    "formant_preservation_required": true,
+    "lead_must_remain_unmodified": true,
+    "discreet_blend_required": true,
+    "each_layer_requires_acoustic_evidence": true,
+    "missing_layer_is_non_promotable": true
+  },
+  "route_contract": {
+    "endpoint": "progress-kaggle-harmony-v73",
+    "engine": "Rubber Band + librosa",
+    "supports_high": true,
+    "supports_low": true,
+    "modes": ["texture", "adaptive", "adaptive_partial"]
+  },
+  "execution_evidence": {
+    "high": null,
+    "low": null
+  },
+  "readiness_rule": "Implementation readiness is not acoustic validation. B07 can pass only when both frozen layers have retained current-route outputs and each output passes the Voice Acoustic Evidence Gate."
+}
