@@ -19,6 +19,15 @@ test('stems canary fails closed instead of blindly using projects[0]',()=>{
   assert.match(source,/Não foi possível identificar com segurança/);
 });
 
+test('remembered project is accepted only when it matches visible Studio candidates',()=>{
+  const candidatesIndex=source.indexOf('const candidates=projects.filter');
+  const rememberedIndex=source.indexOf('const remembered=localStorage.getItem');
+  const validationIndex=source.indexOf('candidates.find((project)=>project.id===remembered)');
+  assert.ok(candidatesIndex>=0 && rememberedIndex>candidatesIndex && validationIndex>rememberedIndex);
+  assert.doesNotMatch(source,/getProject\(remembered\)/);
+  assert.match(source,/localStorage\.removeItem\(ACTIVE_PROJECT_KEY\)/);
+});
+
 test('opening a project captures the visible project identity before dispatch',()=>{
   assert.match(source,/data-action=\"open-project\"/);
   assert.match(source,/ACTIVE_PROJECT_KEY/);
