@@ -6,7 +6,7 @@ import { createAuthorialMemory } from './authorial-memory.mjs';
 const DEFAULT_STRUCTURE = Object.freeze(['verso_1', 'pre_refrão', 'refrão', 'verso_2', 'pre_refrão', 'refrão', 'ponte', 'refrão_final']);
 const CREATION_INTENT = /(quero|vamos|bora|me ajuda|ajuda).{0,24}(musica|música|compor|composicao|composição|letra|refr[aã]o)|(?:criar|fazer|compor).{0,18}(musica|música|letra|refr[aã]o)|tenho uma ideia/i;
 
-export function startCompositionSession({ brief, lyrics = '', preferences = {}, genre = '', mood = '', authorialMemory = null } = {}) {
+export function startCompositionSession({ brief, lyrics = '', notes = '', preferences = {}, genre = '', mood = '', authorialMemory = null } = {}) {
   const concept = buildConcept(brief, { genre: genre || preferences.genre, mood: mood || preferences.mood });
   const analysis = lyrics.trim() ? analyzeLyrics(lyrics) : null;
   const memory = createAuthorialMemory(authorialMemory || preferences.authorialMemory || {});
@@ -24,6 +24,7 @@ export function startCompositionSession({ brief, lyrics = '', preferences = {}, 
       bridgeGoal: 'introduzir mudança de perspectiva, consequência ou revelação',
     },
     lyricsOriginal: String(lyrics || ''),
+    projectNotes: String(notes || '').slice(0, 4000),
     lyricAnalysis: analysis,
     authorialMemory: memory,
     authorialGuard: {
@@ -67,6 +68,7 @@ export function respondToMusicCreation(message = '', context = {}) {
   const session = startCompositionSession({
     brief,
     lyrics: context.lyrics || '',
+    notes: context.notes || '',
     genre: context.genre || context.preset || '',
     mood: context.mood || '',
     authorialMemory: context.authorialMemory || {},
