@@ -2,10 +2,43 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 const SHA_RE = /^[0-9a-f]{64}$/i;
 
 export class KaggleStemsClient {
-  constructor({ supabaseUrl, publishableKey, fetchImpl = globalThis.fetch } = {}) {
+  constructor({ supabaseUrl, publishableKey, dispatcherSlug = 'compute-kaggle-v54', fetchImpl = globalThis.fetch } = {}) {
     this.supabaseUrl = String(supabaseUrl || '').replace(/\/$/, '');
     this.publishableKey = String(publishableKey || '');
+    this.dispatcherSlug = String(dispatcherSlug || 'compute-kaggle-v54');
     this.fetch = fetchImpl;
+  }
+
+  async dispatch({ accessToken, projectId, sourceAssetId = null } = {}) {
+    if (!this.supabaseUrl || !this.publishableKey) throw new Error('Supabase runtime configuration is required.');
+    if (!accessToken) throw new Error('Authenticated access token is required.');
+    if (!UUID_RE.test(String(projectId || ''))) throw new Error('Valid projectId is required.');
+    if (sourceAssetId && !UUID_RE.test(String(sourceAssetId))) throw new Error('Valid sourceAssetId is required.');
+
+    const response = await this.fetch(`${this.supabaseUrl}/functions/v1/${this.dispatcherSlug}`, {
+      method: 'POST',
+      headers: {
+        apikey: this.publishableKey,
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        project_id: projectId,
+        ...(sourceAssetId ? { source_asset_id: sourceAssetId } : {}),
+      }),
+    });
+
+    const payload = await parseJson(response);
+    if (!response.ok || payload?.ok !== true) throw new Error(payload?.error || `Kaggle stems dispatch failed (${response.status}).`);
+    if (!UUID_RE.test(String(payload.job_id || ''))) throw new Error('Dispatcher returned an invalid job id.');
+    return {
+      ok: true,
+      jobId: payload.job_id,
+      status: payload.status || null,
+      progress: Number.isFinite(Number(payload.progress)) ? Number(payload.progress) : null,
+      dispatcher: payload.dispatcher || this.dispatcherSlug,
+      worker: payload.worker || null,
+    };
   }
 
   async createTicket({ accessToken, projectId, sourceAssetId = null } = {}) {
