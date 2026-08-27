@@ -79,6 +79,7 @@ async function refresh(button = null) {
   try {
     snapshot = await client.list({ accessToken: await sessionToken() });
     renderSnapshot();
+    notifyIdentityChange('refreshed');
   } catch (error) {
     setStatus(error?.message || 'Não consegui carregar suas gravações de referência.');
   } finally {
@@ -105,6 +106,7 @@ async function setReference(button) {
     });
     snapshot = await client.list({ accessToken: await sessionToken() });
     renderSnapshot();
+    notifyIdentityChange('set');
     setStatus(`Referência definida: ${snapshot.reference?.label || candidate?.name || 'gravação original'}. Ela será a base para comprovar sua identidade vocal.`);
   } catch (error) {
     setStatus(error?.message || 'Não consegui salvar essa referência.');
@@ -123,6 +125,7 @@ async function clearReference(button) {
     await client.clear({ accessToken: await sessionToken(), voiceModelId: snapshot.voiceModel.id });
     snapshot = await client.list({ accessToken: await sessionToken() });
     renderSnapshot();
+    notifyIdentityChange('cleared');
     setStatus('Referência removida. O Pablo não vai declarar identidade validada até você escolher outra gravação original.');
   } catch (error) {
     setStatus(error?.message || 'Não consegui remover a referência.');
@@ -131,6 +134,12 @@ async function clearReference(button) {
     setBusy(button, false, 'Remover referência');
     syncButtons();
   }
+}
+
+function notifyIdentityChange(reason) {
+  document.dispatchEvent(new CustomEvent('pablovoice:identity-reference-changed', {
+    detail: { reason: String(reason || 'changed'), configured: Boolean(snapshot.reference?.id) },
+  }));
 }
 
 function renderSnapshot() {
