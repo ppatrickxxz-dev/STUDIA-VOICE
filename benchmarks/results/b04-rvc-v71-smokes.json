@@ -1,0 +1,64 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "test": "B04",
+  "kind": "engineering_smoke_not_score",
+  "benchmark_score_eligible": false,
+  "project_id": "d64e4de9-791e-41bc-9307-7957389b2499",
+  "frozen_source_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d",
+  "guide": {
+    "asset_id": "549ff71f-7cce-414d-a77d-7021a7fc208e",
+    "sha256": "ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816",
+    "derived_from_frozen_source": true
+  },
+  "voice_model": {
+    "id": "5c0976b2-bd2c-44d7-8720-a2dc013fd4b5",
+    "pth_sha256": "58f0354124a4a18a0a5bd1f8c74bd95b6147713dcb23b98d9060a5bc63bda56a",
+    "index_sha256": "814feab12db225c2e1e0a43a661238dc587a7d1554343ca7223103be16fd930f"
+  },
+  "worker_version": "7.1",
+  "applio_commit": "085197e738ce9dd4c0bae1e0a74df5de25b89444",
+  "runs": [
+    {
+      "profile": "natural",
+      "job_id": "6751fc73-1100-4e2b-b803-fdc34aa10628",
+      "output_asset_id": "45f2cf70-a2ff-40c6-b544-9e3fc6ad4bae",
+      "output_sha256": "78b4c5e5728a8beb3b0e288699eb6aa5882e9ed580823a168c833bf9455701ac",
+      "guide_pcm_sha256": "228e382fe521b318fcbb0ffe0b0ae64ec2f3c02c036899e610c458b0a03f70e5",
+      "output_pcm_sha256": "47c90afe3c593b7d2be1f97470854fccdb7b9b1e31eba94fad8f66e0e2b89d09",
+      "duration_seconds": 180.999975,
+      "sample_rate_hz": 40000,
+      "channels": 1,
+      "recipe": {"pitch":0,"index_rate":0.62,"protect":0.45,"f0_method":"rmvpe","f0_autotune":false,"clean_audio":false,"formant_shifting":false,"embedder_model":"contentvec"}
+    },
+    {
+      "profile": "identity",
+      "job_id": "4443d6bb-7a87-4421-9754-b951ec67073d",
+      "output_asset_id": "bad6d443-9ec0-44a6-991a-8044830bae84",
+      "output_sha256": "502380aae1fad6a5aea96e90162b37ddea198d6da8b2f70c91d169e6a2d1f24d",
+      "guide_pcm_sha256": "228e382fe521b318fcbb0ffe0b0ae64ec2f3c02c036899e610c458b0a03f70e5",
+      "output_pcm_sha256": "ca0b3840162566cddfc990908faa06caefa3f43c967e69af957c07c2d8248ce0",
+      "duration_seconds": 180.999975,
+      "sample_rate_hz": 40000,
+      "channels": 1,
+      "recipe": {"pitch":0,"index_rate":0.70,"protect":0.50,"f0_method":"rmvpe","f0_autotune":false,"clean_audio":false,"formant_shifting":false,"embedder_model":"contentvec"}
+    },
+    {
+      "profile": "smooth",
+      "job_id": "d1b45068-a35c-421b-990a-a2d5a4888cae",
+      "output_asset_id": "dd9a5bca-37ff-4fe4-ad78-df25b3eea8a9",
+      "output_sha256": "527cf9f0b9263b31bd2c7036404d44b718851b9fe04c7878420a049c7408e358",
+      "guide_pcm_sha256": "228e382fe521b318fcbb0ffe0b0ae64ec2f3c02c036899e610c458b0a03f70e5",
+      "output_pcm_sha256": "36e76c149a35642db763d5074d728f306ded4b2622fc0c32f4f6578286d430a9",
+      "duration_seconds": 180.999975,
+      "sample_rate_hz": 40000,
+      "channels": 1,
+      "recipe": {"pitch":0,"index_rate":0.55,"protect":0.42,"f0_method":"rmvpe","f0_autotune":false,"clean_audio":false,"formant_shifting":false,"embedder_model":"contentvec"}
+    }
+  ],
+  "non_scoring_reasons": [
+    "Runs converted the full guide vocal instead of the frozen 64-72 second selection.",
+    "Runs predate the explicit voice_identity_references lock and therefore do not prove the frozen provider-input identity reference was active.",
+    "No blind B04 timbre/formant/performance/speaker review was recorded against the frozen localized output."
+  ],
+  "promotion_forbidden": true
+}
