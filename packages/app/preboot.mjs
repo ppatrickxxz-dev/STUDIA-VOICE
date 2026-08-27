@@ -47,6 +47,7 @@ try {
   const { installPianoRoll } = await import('./piano-roll-ui.mjs');
   const { installAudioToPianoRoll } = await import('./audio-to-piano-roll-ui.mjs');
   const { installSampler } = await import('./sampler-ui.mjs');
+  const { installBeatLab } = await import('./beat-lab-ui.mjs');
   installPabloConversationUI();
   installBreathReviewUI();
   installAdvancedAIStudio();
@@ -58,6 +59,7 @@ try {
   installPianoRoll();
   installAudioToPianoRoll();
   installSampler();
+  installBeatLab();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
