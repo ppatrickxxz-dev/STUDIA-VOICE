@@ -25,6 +25,7 @@ function fallbackShell() {
 
 try {
   await import('./app.js');
+  import('./pablo-remote.mjs').catch((error) => console.warn('PABLOVOICE_REMOTE_OPTIONAL_FAILED', error));
   fallbackShell();
 } catch (error) {
   console.error('PABLOVOICE_BOOT_IMPORT_FAILED', error);
