@@ -37,6 +37,23 @@
     "authenticated_dispatch_required": true,
     "callback_uses_expiring_hashed_token": true
   },
-  "observed_execution": null,
+  "observed_execution": {
+    "kind": "engineering_smoke_not_score",
+    "benchmark_score_eligible": false,
+    "job_id": "81c74a6f-012f-47b8-a013-67f018445a0c",
+    "source_asset_id": "45f2cf70-a2ff-40c6-b544-9e3fc6ad4bae",
+    "source_sha256": "78b4c5e5728a8beb3b0e288699eb6aa5882e9ed580823a168c833bf9455701ac",
+    "source_is_frozen_benchmark_vocal": false,
+    "output_asset_id": "1963a8de-3f1d-46cd-af31-57ec82a3e095",
+    "output_sha256": "87177efef84078709bd46bed625e991168338ddc969da05d8727b23fed4b85b1",
+    "detected_note_events": 647,
+    "corrected_segments": 4,
+    "corrected_coverage": 0.0056,
+    "median_abs_cents_before": 17.50000000000025,
+    "median_abs_cents_after": 12.5,
+    "median_vibrato_ratio": 0.9979186111208519,
+    "evidence_file": "benchmarks/results/b06-smoke-81c74a6f.json",
+    "does_not_satisfy_b06_score_requirement": true
+  },
   "readiness_rule": "B06 implementation can be ready before execution, but it cannot be scored or passed until the frozen benchmark input produces retained corrected audio with verified hashes and acoustic metrics."
 }
