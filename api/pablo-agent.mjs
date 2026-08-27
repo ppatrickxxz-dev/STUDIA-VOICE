@@ -1,3 +1,5 @@
+import { getVercelOidcToken } from '@vercel/oidc';
+
 const SUPABASE_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
 const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/responses';
@@ -14,6 +16,17 @@ function send(res, status, body) {
 function bearer(req) {
   const value = String(req.headers?.authorization || '');
   return value.startsWith('Bearer ') ? value.slice(7).trim() : '';
+}
+
+async function resolveGatewayToken() {
+  const explicit = String(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '').trim();
+  if (explicit) return explicit;
+  try {
+    return String(await getVercelOidcToken({ expirationBufferMs: 30_000 }) || '').trim();
+  } catch (error) {
+    console.error('PabloVoice Vercel OIDC token unavailable', String(error?.message || error).slice(0, 240));
+    return '';
+  }
 }
 
 async function authenticatedUser(jwt) {
@@ -65,10 +78,11 @@ function outputText(data) {
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    const gatewayToken = await resolveGatewayToken();
     return send(res, 200, {
       ok: true,
       service: 'pablovoice-vercel-oidc-agent',
-      configured: Boolean(process.env.VERCEL_OIDC_TOKEN || process.env.AI_GATEWAY_API_KEY),
+      configured: Boolean(gatewayToken),
       model: MODEL,
       credential_exposed: false,
       auth_for_turns: 'required',
@@ -90,7 +104,7 @@ export default async function handler(req, res) {
   const project = await ownedProject(jwt, String(body.project_id || '')).catch(() => null);
   if (!project) return send(res, 404, { ok: false, error: 'project_not_found' });
 
-  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '';
+  const gatewayToken = await resolveGatewayToken();
   if (!gatewayToken) return send(res, 503, { ok: false, error: 'gateway_unavailable', fallback_allowed: true });
 
   const instructions = [
