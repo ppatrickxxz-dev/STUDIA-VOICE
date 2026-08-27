@@ -7,6 +7,7 @@ const remoteState = {
   messages: [],
   busy: false,
   initialized: false,
+  activeLocalProjectId: '',
 };
 
 function esc(value = '') {
@@ -16,6 +17,10 @@ function esc(value = '') {
 async function currentLocalProject() {
   const projects = await listProjects();
   if (!projects.length) return null;
+  if (remoteState.activeLocalProjectId) {
+    const active = projects.find((project) => project.id === remoteState.activeLocalProjectId);
+    if (active) return active;
+  }
   return [...projects].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null;
 }
 
@@ -96,6 +101,11 @@ async function send(message) {
   if (!result?.ok || !result.reply) return { ok: false, error: 'Pablo remoto está indisponível agora; as sugestões locais continuam ativas.' };
   return { ok: true, reply: String(result.reply) };
 }
+
+document.addEventListener('click', (event) => {
+  const opener = event.target.closest('[data-action="open-project"][data-id]');
+  if (opener?.dataset.id) remoteState.activeLocalProjectId = opener.dataset.id;
+}, true);
 
 document.addEventListener('submit', async (event) => {
   if (!event.target.matches('[data-pablo-remote-form]')) return;
