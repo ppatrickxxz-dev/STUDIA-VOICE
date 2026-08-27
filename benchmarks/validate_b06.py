@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from validate_b04 import main as validate_b04_main
 
 ROOT = Path(__file__).parent
 PLAN = ROOT / "assets" / "pitch-note-correction.json"
@@ -81,4 +82,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    validate_b04_main()
     main()
