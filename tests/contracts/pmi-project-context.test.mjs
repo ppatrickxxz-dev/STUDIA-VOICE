@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { executePabloAudioMessage } from '../../packages/app/pablo-conversation-audio.mjs';
 
-test('PMI creation receives current lyrics, preset and authorial memory from conversation context', async () => {
+test('PMI creation receives current lyrics, notes, preset and authorial memory from conversation context', async () => {
   const result = await executePabloAudioMessage('Quero criar uma música sobre uma viagem que não chegou ao destino', {
     projectId: 'p1',
     preset: 'music',
@@ -21,6 +21,7 @@ test('PMI creation receives current lyrics, preset and authorial memory from con
   assert.equal(result.supported, true);
   assert.equal(result.kind, 'pmi_music_session');
   assert.equal(result.session.lyricsOriginal, '[Verso]\nEu fui até onde deu');
+  assert.equal(result.session.projectNotes, 'R&B íntimo');
   assert.equal(result.session.authorialMemory.evidenceCount, 2);
   assert.ok(result.session.lyricAnalysis);
 });
