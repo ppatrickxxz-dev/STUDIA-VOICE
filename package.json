@@ -10,5 +10,8 @@
     "lint": "node scripts/lint.mjs",
     "test": "node --test tests/unit/*.test.mjs tests/contracts/*.test.mjs",
     "test:all": "node scripts/lint.mjs && node --test tests/unit/*.test.mjs tests/contracts/*.test.mjs && bash scripts/security-gate.sh && node scripts/build-web.mjs && node scripts/verify-web-build.mjs && node scripts/performance-gate.mjs"
+  },
+  "dependencies": {
+    "@vercel/oidc": "^3.0.5"
   }
 }
