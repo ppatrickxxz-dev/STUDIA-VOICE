@@ -58,12 +58,14 @@ jobs:
           echo "::add-mask::$KEY_ALIAS"
           echo "::add-mask::$KEY_PASSWORD"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/pablovoice-release.jks"
-          chmod 600 "$RUNNER_TEMP/pablovoice-release.jks"
-          {
-            echo "PV_RELEASE_STORE_PASSWORD=$STORE_PASSWORD"
-            echo "PV_RELEASE_KEY_ALIAS=$KEY_ALIAS"
-            echo "PV_RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/pablovoice-store.pass"
+          printf '%s' "$KEY_ALIAS" > "$RUNNER_TEMP/pablovoice-key.alias"
+          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/pablovoice-key.pass"
+          chmod 600 "$RUNNER_TEMP/pablovoice-release.jks" "$RUNNER_TEMP/pablovoice-store.pass" "$RUNNER_TEMP/pablovoice-key.alias" "$RUNNER_TEMP/pablovoice-key.pass"
+          keytool -list \
+            -keystore "$RUNNER_TEMP/pablovoice-release.jks" \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null
           unset OIDC_TOKEN OIDC_JSON RESPONSE KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD
       - name: Re-run release gates
         run: |
@@ -75,9 +77,13 @@ jobs:
           node scripts/performance-gate.mjs
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Build signed APK and AAB
-        env:
-          PV_RELEASE_STORE_FILE: ${{ runner.temp }}/pablovoice-release.jks
-        run: gradle -p apps/android --no-daemon verifyReleaseSigning lintRelease assembleRelease bundleRelease
+        run: |
+          set -euo pipefail
+          export PV_RELEASE_STORE_FILE="$RUNNER_TEMP/pablovoice-release.jks"
+          export PV_RELEASE_STORE_PASSWORD="$(cat "$RUNNER_TEMP/pablovoice-store.pass")"
+          export PV_RELEASE_KEY_ALIAS="$(cat "$RUNNER_TEMP/pablovoice-key.alias")"
+          export PV_RELEASE_KEY_PASSWORD="$(cat "$RUNNER_TEMP/pablovoice-key.pass")"
+          gradle -p apps/android --no-daemon verifyReleaseSigning lintRelease assembleRelease bundleRelease
       - name: Validate signed release APK
         run: |
           bash scripts/validate-apk.sh apps/android/app/build/outputs/apk/release/app-release.apk com.pablovoice.studio
