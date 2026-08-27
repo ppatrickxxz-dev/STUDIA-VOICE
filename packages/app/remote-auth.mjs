@@ -10,6 +10,14 @@ function safeJson(value, fallback = null) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function decodeJwtPayload(token = '') {
+  try {
+    const payload = String(token).split('.')[1] || '';
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    return JSON.parse(atob(normalized));
+  } catch { return {}; }
+}
+
 function authHeaders(accessToken = '') {
   const headers = {
     apikey: PUBLISHABLE_KEY,
@@ -126,6 +134,40 @@ export class RemoteAuthAdapter {
     const refreshed = await this.refreshSession();
     if (refreshed) return refreshed;
     return this.loginWithDevice();
+  }
+
+  async ensureRemoteProject(localProject = {}) {
+    const session = await this.ensureSession();
+    const accessToken = session?.accessToken || '';
+    const localId = String(localProject?.id || '').trim().slice(0, 160);
+    const title = String(localProject?.name || localProject?.title || 'Projeto PabloVoice').trim().slice(0, 160) || 'Projeto PabloVoice';
+    if (!accessToken) return { ok: false, error: 'auth_required', fallback_allowed: true };
+    if (!localId) return { ok: false, error: 'local_project_id_required', fallback_allowed: true };
+    const subject = String(decodeJwtPayload(accessToken)?.sub || '');
+    if (!subject) return { ok: false, error: 'invalid_session', fallback_allowed: true };
+    const filter = encodeURIComponent(JSON.stringify({ local_project_id: localId }));
+    try {
+      const lookup = await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at&metadata=cs.${filter}&limit=1`, {
+        headers: authHeaders(accessToken),
+      });
+      const matches = await lookup.json().catch(() => []);
+      if (!lookup.ok) throw new Error(`project_lookup_${lookup.status}`);
+      if (Array.isArray(matches) && matches[0]?.id) return { ok: true, created: false, project: matches[0] };
+      const response = await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at`, {
+        method: 'POST',
+        headers: { ...authHeaders(accessToken), prefer: 'return=representation' },
+        body: JSON.stringify({
+          user_id: subject,
+          title,
+          metadata: { local_project_id: localId, source: 'pablovoice-local-first', linked_at: new Date().toISOString() },
+        }),
+      });
+      const created = await response.json().catch(() => []);
+      if (!response.ok || !Array.isArray(created) || !created[0]?.id) throw new Error(`project_create_${response.status}`);
+      return { ok: true, created: true, project: created[0] };
+    } catch {
+      return { ok: false, error: 'project_link_failed', fallback_allowed: true };
+    }
   }
 
   async agentHealth() {
