@@ -18,11 +18,13 @@ test('migration clamps unsafe legacy mixer values', () => {
   const migrated = migrateProject({
     id: 'legacy', name: 'Legacy', tracks: [{ id: 'track', assetId: 'audio', duration: 4, trimStart: -2, trimEnd: 99, gain: 8, pan: -4 }],
   });
-  assert.equal(migrated.schemaVersion, 5);
+  assert.equal(migrated.schemaVersion, 6);
   assert.equal(migrated.tracks[0].trimStart, 0);
   assert.equal(migrated.tracks[0].trimEnd, 4);
   assert.equal(migrated.tracks[0].gain, 2);
   assert.equal(migrated.tracks[0].pan, -1);
+  assert.equal(migrated.arrangementMap?.schema, 'pablovoice_arrangement_map_v1');
+  assert.deepEqual(migrated.arrangementMap?.sections, []);
 });
 
 test('region automation is normalized, persisted and snapshotted independently from effects', () => {

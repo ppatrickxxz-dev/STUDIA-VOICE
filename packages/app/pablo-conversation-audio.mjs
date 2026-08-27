@@ -10,6 +10,7 @@ export const CONVERSATIONAL_AUDIO_INTENTS = Object.freeze({
   audio_to_instrument: 'audio_to_instrument',
   inspect_audio: 'inspect_audio',
   inspect_mix: 'inspect_mix',
+  section_mark: 'mark_section',
   beat_organize: 'beat_organize',
   beat_humanize: 'beat_humanize',
   beat_reference_groove: 'beat_reference_groove',
@@ -23,6 +24,8 @@ export function interpretPabloAudioMessage(message, context = {}) {
   const trackId = context.trackId || null;
   const assetId = context.assetId || null;
   const projectId = context.projectId || null;
+  const sectionMarker = parseSectionMarker(text);
+  if (sectionMarker) return beatOperation('mark_section', sectionMarker, 'preview_then_apply');
 
   if (matches(text, ['virada antes do refrao', 'faz uma virada antes do refrao', 'cria uma virada antes do refrao'])) {
     return beatOperation('fill_before_section', { section: 'chorus', position: 'before', intensity: 0.65 }, 'preview_only');
@@ -341,6 +344,36 @@ function beatOperation(action, args, previewPolicy) {
   return { supported: true, kind: 'beat_operation', action, args, previewPolicy };
 }
 
+function parseSectionMarker(text) {
+  const section = '(pre[- ]?refrao|refrao|verso|ponte|intro|rap|outro)';
+  const time = '(\\d{1,4}(?::\\d{1,2})?(?:[.,]\\d+)?)';
+  const range = text.match(new RegExp(`\\b(?:marca|marque|marcar)\\s+(?:o\\s+)?${section}\\s+(?:de|entre)\\s+${time}\\s+(?:a|ate)\\s+${time}\\s*(?:s|seg|segundo|segundos)?\\b`));
+  if (range) {
+    const startSeconds = parseTimeToken(range[2]);
+    const endSeconds = parseTimeToken(range[3]);
+    if (startSeconds != null && endSeconds != null && endSeconds > startSeconds) return { section: range[1], startSeconds, endSeconds };
+    return null;
+  }
+  const marker = text.match(new RegExp(`\\b(?:marca|marque|marcar)\\s+(?:o\\s+)?${section}\\s+(?:em|aos?)\\s+${time}\\s*(?:s|seg|segundo|segundos)?\\b`))
+    || text.match(new RegExp(`\\b(?:o\\s+)?${section}\\s+(?:comeca|entra|inicia)\\s+(?:em|aos?)?\\s*${time}\\s*(?:s|seg|segundo|segundos)?\\b`));
+  if (!marker) return null;
+  const startSeconds = parseTimeToken(marker[2]);
+  return startSeconds == null ? null : { section: marker[1], startSeconds, endSeconds: null };
+}
+
+function parseTimeToken(value = '') {
+  const text = String(value || '').replace(',', '.');
+  const clock = text.match(/^(\d{1,3}):(\d{1,2})(?:\.(\d+))?$/);
+  if (clock) {
+    const minutes = Number(clock[1]);
+    const seconds = Number(clock[2]);
+    if (seconds >= 60) return null;
+    return Math.round((minutes * 60 + seconds + Number(`0.${clock[3] || 0}`)) * 1000) / 1000;
+  }
+  const numeric = Number(text);
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.round(numeric * 1000) / 1000 : null;
+}
+
 function humanizeAmount(text) {
   if (/\b(muito|bem mais|bastante)\b/.test(text)) return 0.65;
   if (/\b(pouco|sutil|leve)\b/.test(text)) return 0.22;
@@ -380,7 +413,7 @@ function normalize(value = '') {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9# +.-]/g, ' ')
+    .replace(/[^a-z0-9# +.\-:,]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
