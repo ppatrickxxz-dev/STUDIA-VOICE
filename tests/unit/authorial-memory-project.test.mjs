@@ -16,6 +16,11 @@ test('explicit PT-BR authorial feedback is parsed without editing lyrics', () =>
   assert.equal(accepted.category, 'structure');
 });
 
+test('audio and mix preferences do not leak into authorial memory', () => {
+  assert.equal(parseAuthorialFeedback('Prefiro menos graves').supported, false);
+  assert.equal(parseAuthorialFeedback('Não use reverb').supported, false);
+});
+
 test('authorial feedback extends existing project memory as evidence', () => {
   const result = respondToAuthorialFeedback('Evite a palavra futuro', {
     authorialMemory: {
