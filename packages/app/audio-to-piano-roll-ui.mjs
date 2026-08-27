@@ -1,7 +1,5 @@
-import { activeProjectSessionId, getAudioAsset, getProject, listProjects, saveProject } from './storage.mjs';
-import { analyzeWaveform } from './audio/src/analyzers/waveform-basic.mjs';
-import { detectOnsets } from './audio/src/analyzers/onset-basic.mjs';
-import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
+import { activeProjectSessionId, getProject, listProjects, saveProject } from './storage.mjs';
+import { analyzeAudioTrack } from './audio-analysis-runtime.mjs';
 import { buildAudioToInstrumentPlan } from './audio/src/sampler/audio-to-instrument.mjs';
 import { normalizeInstrumentState } from './instrument-engine.mjs';
 import { applyAudioPlanToInstrumentState, summarizeAudioPlan } from './audio-to-piano-roll-bridge.mjs';
@@ -40,7 +38,7 @@ async function onClick(event) {
     if (!project) throw new Error('Crie ou abra um projeto antes de transformar áudio em notas.');
     const track = project.tracks?.find((item) => item.id === project.activeTrackId) || project.tracks?.[0];
     if (!track?.assetId) throw new Error('Escolha uma faixa de áudio primeiro.');
-    const analysis = await analyzeTrack(track);
+    const analysis = await analyzeAudioTrack(track);
     const plan = buildAudioToInstrumentPlan(analysis, { preserveFormants: true });
     const summary = summarizeAudioPlan(plan);
     if (!summary.notes) {
@@ -70,34 +68,6 @@ async function currentProject() {
     if (project) return project;
   }
   return (await listProjects())[0] || null;
-}
-
-async function analyzeTrack(track) {
-  const asset = await getAudioAsset(track.assetId);
-  if (!asset?.blob) throw new Error('O arquivo dessa faixa não está disponível no aparelho.');
-  const AudioCtx = globalThis.AudioContext || globalThis.webkitAudioContext;
-  if (!AudioCtx) throw new Error('A análise musical não está disponível neste aparelho.');
-  const context = new AudioCtx();
-  try {
-    const bytes = await asset.blob.arrayBuffer();
-    const buffer = await context.decodeAudioData(bytes.slice(0));
-    const samples = buffer.getChannelData(0);
-    const waveform = analyzeWaveform(samples, { sampleRate: buffer.sampleRate });
-    const onsets = detectOnsets(samples, { sampleRate: buffer.sampleRate });
-    const musical = analyzeMusicalAudio({ samples, sampleRate: buffer.sampleRate, onsets, durationSeconds: buffer.duration });
-    return {
-      schemaVersion: 2,
-      assetId: track.assetId,
-      source: { sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels, durationSeconds: buffer.duration },
-      music: musical.music,
-      signal: { ...waveform.signal, onsets, transients: onsets },
-      voice: musical.voice,
-      confidence: musical.confidence,
-      validity: { complete: true, invalidatedRanges: [] },
-    };
-  } finally {
-    context.close?.().catch?.(() => {});
-  }
 }
 
 function toast(message, kind = '') {
