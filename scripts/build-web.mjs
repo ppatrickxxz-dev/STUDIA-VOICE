@@ -8,7 +8,7 @@ const packages = resolve(root, 'packages');
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
-for (const name of ['core', 'audio', 'songwriting']) {
+for (const name of ['core', 'audio', 'songwriting', 'music-intelligence']) {
   await cp(resolve(packages, name), resolve(out, name), { recursive: true });
 }
 await cp(resolve(packages, 'providers'), resolve(out, 'providers'), { recursive: true });
