@@ -11,6 +11,12 @@ function normalizeText(value = '') {
     .trim();
 }
 
+function hasPreserveClause(text, targetPattern) {
+  const preserve='(?:nao mexe(?:r)?|nao mudar|sem mexer|preserva(?:r)?|mantem|manter)';
+  const bridge='(?:\\s+(?:em|no|na|o|a|do|da|meu|minha|esse|essa|este|esta))*\\s+';
+  return new RegExp(`\\b${preserve}${bridge}(?:${targetPattern})\\b`).test(text);
+}
+
 export function interpretNaturalLanguageEdit(command) {
   const text = normalizeText(command);
   if (!text) throw new Error('Comando vazio.');
@@ -36,14 +42,13 @@ export function interpretNaturalLanguageEdit(command) {
   if (/\bfade\b/.test(text) && /\b(comeco|inicio|entrada)\b/.test(text) && /\b(curto|rapidinho|bem curto)\b/.test(text)) {
     operations.push({ type: 'set_effect', key: 'fadeIn', value: SHORT_FADE_SECONDS, evidence: 'short_fade_in' });
   }
-  if (/\bnao mexe|nao mudar|sem mexer|preserva|mantem\b/.test(text)) {
-    if (/\b(fim|final|saida)\b/.test(text)) {
-      preserved.add('trimEnd');
-      preserved.add('fadeOut');
-    }
-    if (/\b(comeco|inicio|entrada)\b/.test(text)) {
-      preserved.add('trimStart');
-    }
+
+  if (hasPreserveClause(text, 'fim|final|saida')) {
+    preserved.add('trimEnd');
+    preserved.add('fadeOut');
+  }
+  if (hasPreserveClause(text, 'comeco|inicio|entrada')) {
+    preserved.add('trimStart');
   }
 
   if (!operations.length) {
