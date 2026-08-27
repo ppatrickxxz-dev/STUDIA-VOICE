@@ -8,9 +8,13 @@ import {
   clearBeatPattern,
   createBeatLabState,
   duplicateBeatPattern,
+  generateBeatFill,
   normalizeBeatLabState,
+  refreshBeatLanesFromSampler,
   sequenceBeatEvents,
   setBeatBpm,
+  setBeatGrooveAmount,
+  setBeatHumanize,
   setBeatStepCount,
   setBeatStepVelocity,
   setBeatSwing,
@@ -71,6 +75,25 @@ async function onClick(event) {
   }
   if (button.dataset.beatPlay) { await previewBeat(); return; }
   if (button.dataset.beatStop) { stopPreview(); return; }
+  if (button.dataset.beatOrganize) {
+    stopPreview();
+    beatState = refreshBeatLanesFromSampler(beatState, samplerState);
+    selectedCell = null;
+    await persistBeatState();
+    renderBeatLab();
+    toast('Lanes reorganizadas pelas funções acústicas prováveis, preservando passos dos mesmos pads.', 'ok');
+    return;
+  }
+  if (button.dataset.beatFill) {
+    const before = activeBeatStepCount(beatState);
+    beatState = generateBeatFill(beatState, { intensity: 0.65 });
+    await persistBeatState();
+    renderBeatLab();
+    const after = activeBeatStepCount(beatState);
+    if (beatState.lastOperation?.ok && after >= before) toast('Virada criada no fim do padrão.', 'ok');
+    else toast('Ainda não há uma lane percussiva confiável para criar a virada automaticamente.', 'error');
+    return;
+  }
   if (button.dataset.beatClear) {
     stopPreview();
     beatState = clearBeatPattern(beatState);
@@ -98,6 +121,8 @@ async function onChange(event) {
   const target = event.target;
   if (target.matches('[data-beat-bpm]')) beatState = setBeatBpm(beatState, target.value);
   else if (target.matches('[data-beat-swing]')) beatState = setBeatSwing(beatState, Number(target.value) / 100);
+  else if (target.matches('[data-beat-groove]')) beatState = setBeatGrooveAmount(beatState, Number(target.value) / 100);
+  else if (target.matches('[data-beat-humanize]')) beatState = setBeatHumanize(beatState, Number(target.value) / 100);
   else if (target.matches('[data-beat-length]')) beatState = setBeatStepCount(beatState, target.value);
   else if (target.matches('[data-beat-velocity]') && selectedCell) beatState = setBeatStepVelocity(beatState, selectedCell.laneId, selectedCell.stepIndex, target.value);
   else return;
@@ -111,9 +136,10 @@ async function showBeatLab() {
     if (!activeProject) throw new Error('Crie ou abra um projeto antes de usar o Beat Lab.');
     samplerState = normalizeSamplerState(activeProject.sampler || {});
     if (!samplerState.pads.length) throw new Error('Crie pads no Sampler primeiro. O Beat Lab usa os samples do seu projeto.');
+    const preferredBpm = activeProject.instrumentLab?.bpm || samplerState.grooveTemplate?.bpm || 120;
     beatState = activeProject.beatLab
       ? normalizeBeatLabState(activeProject.beatLab, samplerState)
-      : createBeatLabState(samplerState, { bpm: activeProject.instrumentLab?.bpm || 120 });
+      : createBeatLabState(samplerState, { bpm: preferredBpm });
     activeProject.beatLab = beatState;
     await saveProject(activeProject);
     selectedCell = null;
@@ -136,17 +162,21 @@ function renderBeatLab() {
   const state = normalizeBeatLabState(beatState, samplerState);
   beatState = state;
   const activeSteps = activeBeatStepCount(state);
+  const grooveReady = Boolean(state.grooveTemplate?.ready);
+  const grooveConfidence = Math.round(Number(state.grooveTemplate?.confidence || 0) * 100);
   const overlay = document.createElement('div');
   overlay.className = 'pv-beat-overlay';
   overlay.dataset.beatLabModal = 'true';
   overlay.innerHTML = `<section class="pv-beat-modal" role="dialog" aria-modal="true" aria-label="Beat Lab">
     <header class="pv-beat-head">
-      <div><small>BEAT LAB · SAMPLES DO PROJETO</small><h2>Monte a batida em passos</h2><p>Cada linha toca um pad real do Sampler. O resultado pode virar faixa no Studio.</p></div>
+      <div><small>BEAT LAB · SAMPLES DO PROJETO</small><h2>Monte a batida em passos</h2><p>As lanes usam os pads reais do Sampler. Funções acústicas e groove são sugestões reversíveis.</p></div>
       <button class="pv-btn" type="button" data-beat-lab-close>Fechar</button>
     </header>
     <div class="pv-beat-controls">
       <label>BPM <input type="number" min="40" max="240" value="${state.bpm}" data-beat-bpm></label>
       <label>Swing <input type="range" min="0" max="100" step="1" value="${Math.round(state.swing * 100)}" data-beat-swing><b>${Math.round(state.swing * 100)}%</b></label>
+      <label>Groove do áudio <input type="range" min="0" max="100" step="1" value="${Math.round(state.grooveAmount * 100)}" data-beat-groove ${grooveReady ? '' : 'disabled'}><b>${grooveReady ? `${Math.round(state.grooveAmount * 100)}% · conf. ${grooveConfidence}%` : 'sem evidência suficiente'}</b></label>
+      <label>Humanizar <input type="range" min="0" max="100" step="1" value="${Math.round(state.humanize * 100)}" data-beat-humanize><b>${Math.round(state.humanize * 100)}%</b></label>
       <label>Tamanho <select data-beat-length>${[8,16,32].map((count) => `<option value="${count}" ${count === state.stepCount ? 'selected' : ''}>${count} passos</option>`).join('')}</select></label>
       <span class="pv-beat-status">${activeSteps} passo(s) ativo(s) · ${beatPatternDurationSeconds(state).toFixed(2)}s</span>
     </div>
@@ -155,17 +185,18 @@ function renderBeatLab() {
     <div class="pv-beat-actions">
       <button class="pv-btn" type="button" data-beat-play ${activeSteps ? '' : 'disabled'}>▶ Ouvir</button>
       <button class="pv-btn" type="button" data-beat-stop>■ Parar</button>
+      <button class="pv-btn" type="button" data-beat-organize>Organizar sons</button>
+      <button class="pv-btn" type="button" data-beat-fill>＋ Virada</button>
       <button class="pv-btn" type="button" data-beat-duplicate ${state.stepCount >= 32 ? 'disabled' : ''}>⧉ Duplicar padrão</button>
       <button class="pv-btn" type="button" data-beat-clear ${activeSteps ? '' : 'disabled'}>Limpar</button>
     </div>
     <footer class="pv-beat-footer">
-      <span class="pv-beat-status">Pads: ${state.lanes.length} · velocity por passo · swing não destrutivo</span>
+      <span class="pv-beat-status">Pads: ${state.lanes.length} · velocity · swing · groove/humanização não destrutivos</span>
       <div><button class="pv-btn" type="button" data-beat-save>Salvar padrão</button> <button class="pv-btn primary" type="button" data-beat-render ${activeSteps ? '' : 'disabled'}>Criar faixa no Studio</button></div>
     </footer>
   </section>`;
   document.body.appendChild(overlay);
 }
-
 function renderRows(state) {
   return state.lanes.map((lane) => {
     const steps = lane.steps.map((step, index) => {
@@ -175,7 +206,8 @@ function renderRows(state) {
       if (selectedCell?.laneId === lane.id && selectedCell?.stepIndex === index) classes.push('selected');
       return `<button type="button" class="${classes.join(' ')}" data-beat-lane="${escapeHtml(lane.id)}" data-beat-step="${index}" aria-pressed="${step.active ? 'true' : 'false'}" aria-label="${escapeHtml(lane.label)} passo ${index + 1}">${index + 1}</button>`;
     }).join('');
-    return `<div class="pv-beat-row steps-${state.stepCount}"><b class="pv-beat-lane" title="${escapeHtml(lane.label)}">${escapeHtml(lane.label)}</b>${steps}</div>`;
+    const confidence = lane.category === 'unknown' ? '' : ` · ${Math.round(lane.categoryConfidence * 100)}%`;
+    return `<div class="pv-beat-row steps-${state.stepCount}"><b class="pv-beat-lane" title="${escapeHtml(lane.label)}${confidence}">${escapeHtml(lane.label)}${confidence}</b>${steps}</div>`;
   }).join('');
 }
 

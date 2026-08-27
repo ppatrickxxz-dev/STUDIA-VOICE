@@ -3,6 +3,33 @@ import { analyzeWaveform } from './audio/src/analyzers/waveform-basic.mjs';
 import { detectOnsets } from './audio/src/analyzers/onset-basic.mjs';
 import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
 
+export function analyzeDecodedAudio(buffer, { assetId = null } = {}) {
+  if (!buffer?.getChannelData || !Number.isFinite(Number(buffer.sampleRate))) throw new TypeError('AudioBuffer válido é necessário para análise.');
+  const samples = buffer.getChannelData(0);
+  const waveform = analyzeWaveform(samples, { sampleRate: buffer.sampleRate });
+  const onsets = detectOnsets(samples, { sampleRate: buffer.sampleRate });
+  const musical = analyzeMusicalAudio({
+    samples,
+    sampleRate: buffer.sampleRate,
+    onsets,
+    durationSeconds: buffer.duration,
+  });
+  return {
+    schemaVersion: 2,
+    assetId,
+    source: {
+      sampleRate: buffer.sampleRate,
+      channels: buffer.numberOfChannels,
+      durationSeconds: buffer.duration,
+    },
+    music: musical.music,
+    signal: { ...waveform.signal, onsets, transients: onsets },
+    voice: musical.voice,
+    confidence: musical.confidence,
+    validity: { complete: true, invalidatedRanges: [] },
+  };
+}
+
 export async function analyzeAudioTrack(track) {
   if (!track?.assetId) throw new Error('Escolha uma faixa de áudio primeiro.');
   const asset = await getAudioAsset(track.assetId);
@@ -13,29 +40,7 @@ export async function analyzeAudioTrack(track) {
   try {
     const bytes = await asset.blob.arrayBuffer();
     const buffer = await context.decodeAudioData(bytes.slice(0));
-    const samples = buffer.getChannelData(0);
-    const waveform = analyzeWaveform(samples, { sampleRate: buffer.sampleRate });
-    const onsets = detectOnsets(samples, { sampleRate: buffer.sampleRate });
-    const musical = analyzeMusicalAudio({
-      samples,
-      sampleRate: buffer.sampleRate,
-      onsets,
-      durationSeconds: buffer.duration,
-    });
-    return {
-      schemaVersion: 2,
-      assetId: track.assetId,
-      source: {
-        sampleRate: buffer.sampleRate,
-        channels: buffer.numberOfChannels,
-        durationSeconds: buffer.duration,
-      },
-      music: musical.music,
-      signal: { ...waveform.signal, onsets, transients: onsets },
-      voice: musical.voice,
-      confidence: musical.confidence,
-      validity: { complete: true, invalidatedRanges: [] },
-    };
+    return analyzeDecodedAudio(buffer, { assetId: track.assetId });
   } finally {
     context.close?.().catch?.(() => {});
   }

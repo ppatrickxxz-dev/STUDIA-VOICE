@@ -44,7 +44,23 @@ test('Beat Lab styling respects canonical CSP and supports variable grid lengths
   assert.match(css, /\.pv-beat-row\.steps-32/);
 });
 
-test('Beat Lab exposes velocity, swing and 8/16/32 step patterns', async () => {
+test('Beat Lab exposes semantic lanes, reference groove, humanize and fill without duplicating analysis', async () => {
+  const [ui, engine] = await Promise.all([
+    read('packages/app/beat-lab-ui.mjs'),
+    read('packages/app/beat-lab-engine.mjs'),
+  ]);
+  assert.match(ui, /data-beat-organize/);
+  assert.match(ui, /data-beat-groove/);
+  assert.match(ui, /data-beat-humanize/);
+  assert.match(ui, /data-beat-fill/);
+  assert.match(engine, /selectSemanticPads/);
+  assert.match(engine, /refreshBeatLanesFromSampler/);
+  assert.match(engine, /generateBeatFill/);
+  assert.match(engine, /deterministicCentered/);
+  assert.doesNotMatch(engine, /Math\.random/);
+});
+
+test('Beat Lab still exposes velocity, swing and 8/16/32 step patterns', async () => {
   const [ui, engine] = await Promise.all([
     read('packages/app/beat-lab-ui.mjs'),
     read('packages/app/beat-lab-engine.mjs'),

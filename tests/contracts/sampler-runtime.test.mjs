@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-test('sampler boots in the canonical shell and reuses the shared audio analyzer', async () => {
+test('sampler boots in the canonical shell and reuses the shared decoded audio analyzer', async () => {
   const [preboot, sampler, pianoBridge, sharedAnalyzer] = await Promise.all([
     read('packages/app/preboot.mjs'),
     read('packages/app/sampler-ui.mjs'),
@@ -15,11 +15,12 @@ test('sampler boots in the canonical shell and reuses the shared audio analyzer'
 
   assert.match(preboot, /installSampler/);
   assert.match(preboot, /sampler-ui\.mjs/);
-  assert.match(sampler, /analyzeAudioTrack/);
+  assert.match(sampler, /analyzeDecodedAudio/);
   assert.doesNotMatch(sampler, /detectOnsets/);
   assert.match(pianoBridge, /analyzeAudioTrack/);
   assert.doesNotMatch(pianoBridge, /detectOnsets/);
   assert.match(sharedAnalyzer, /detectOnsets/);
+  assert.match(sharedAnalyzer, /analyzeDecodedAudio/);
 });
 
 test('slice pads reference the original project asset and persist edits instead of copying blobs', async () => {
@@ -36,6 +37,21 @@ test('slice pads reference the original project asset and persist edits instead 
   assert.match(engine, /fadeIn/);
   assert.match(engine, /fadeOut/);
   assert.match(engine, /gain/);
+  assert.match(engine, /grooveTemplate/);
+  assert.match(engine, /categoryConfidence/);
+});
+
+test('sampler uses local acoustic evidence without adding a second onset detector', async () => {
+  const [sampler, acoustics, slicer] = await Promise.all([
+    read('packages/app/sampler-ui.mjs'),
+    read('packages/app/pad-acoustics.mjs'),
+    read('packages/audio/src/sampler/audio-to-instrument.mjs'),
+  ]);
+  assert.match(sampler, /classifySamplerPads/);
+  assert.match(acoustics, /local_acoustic_heuristic_v1/);
+  assert.doesNotMatch(acoustics, /detectOnsets/);
+  assert.match(slicer, /normalizeOnsetEvents/);
+  assert.match(slicer, /extractGrooveTemplate/);
 });
 
 test('sampler audition uses source offsets for real slice playback', async () => {
