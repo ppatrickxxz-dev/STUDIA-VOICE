@@ -23,10 +23,14 @@ test('section UI edits the canonical arrangement map and snapshots every mutatio
   assert.match(ui, /confidence: 1/);
 });
 
-test('section UI can use the real Studio cursor and remains CSP-safe', async () => {
+test('section UI can use the real or last-heard Studio cursor and remains CSP-safe', async () => {
   const ui = await read('packages/app/section-map-ui.mjs');
   assert.match(ui, /document\.querySelector\('#current-time'\)/);
   assert.match(ui, /parseClockSeconds/);
+  assert.match(ui, /lastCursorSeconds/);
+  assert.match(ui, /lastCursorProjectId/);
+  assert.match(ui, /if \(projectId !== lastCursorProjectId\)/);
+  assert.match(ui, /live != null && live > 0 \? live : lastCursorSeconds/);
   assert.match(ui, /link\.href = '\.\/section-map\.css'/);
   assert.doesNotMatch(ui, /createElement\('style'\)/);
   assert.doesNotMatch(ui, /\.style\./);
@@ -38,4 +42,5 @@ test('section UI language explains that Pablo uses the confirmed Studio times', 
   assert.match(ui, /O Pablo usa exatamente estes tempos/);
   assert.match(ui, /timing confirmado/);
   assert.match(ui, /Usar cursor/);
+  assert.match(ui, /último ponto ouvido antes de parar/);
 });
