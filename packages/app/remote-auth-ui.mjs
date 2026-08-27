@@ -20,20 +20,24 @@ export function installRemoteAuthUI() {
 }
 
 async function injectPairing() {
-  if (document.querySelector('#pv-remote-pairing')) return;
+  const existing = document.querySelector('#pv-remote-pairing');
   const session = await auth.ensureSession().catch(() => null);
-  if (session?.accessToken) return;
+  if (session?.accessToken) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
   const host = findHost();
   if (!host) return;
   const card = document.createElement('article');
   card.id = 'pv-remote-pairing';
   card.className = 'pv-card chrome';
-  card.innerHTML = `<div class="pv-card-head"><div><h3>Conectar IA</h3><p>Pareie este aparelho uma vez para usar Composer, stems, Voice Lab e harmonias online.</p></div><span class="pv-tag">SEGURO</span></div>
+  card.innerHTML = `<div class="pv-card-head"><div><h3>Ativar recursos online</h3><p>Ative uma vez para usar criação com Pablo, separação de voz e instrumental, Voice Lab e harmonias.</p></div><span class="pv-tag">1 VEZ</span></div>
     <form class="pv-compose-row" data-remote-pair-form>
-      <input class="pv-field" name="code" inputmode="text" autocomplete="one-time-code" maxlength="64" placeholder="Código de conexão" aria-label="Código de conexão do PabloVoice">
-      <button class="pv-btn primary" type="submit">Conectar</button>
+      <input class="pv-field" name="code" inputmode="text" autocomplete="one-time-code" maxlength="64" placeholder="Código de ativação" aria-label="Código de ativação do PabloVoice">
+      <button class="pv-btn primary" type="submit">Ativar</button>
     </form>
-    <div class="pv-note" data-remote-pair-status>O código é de uso único. Depois, o aparelho usa um token rotativo e você não precisa repetir o pareamento.</div>`;
+    <div class="pv-note" data-remote-pair-status>Depois de ativar, este aparelho fica reconhecido automaticamente.</div>`;
   host.insertAdjacentElement('beforebegin', card);
 }
 
@@ -53,32 +57,35 @@ async function handleSubmit(event) {
   event.preventDefault();
   if (busy) return;
   const code = String(form.elements.code?.value || '').trim();
-  const status = form.parentElement?.querySelector('[data-remote-pair-status]');
+  const card = form.closest('#pv-remote-pairing');
+  const status = card?.querySelector('[data-remote-pair-status]');
   const button = form.querySelector('button[type="submit"]');
   if (!code) {
-    setText(status, 'Digite o código de conexão.');
+    setText(status, 'Cole o código de ativação.');
     return;
   }
   busy = true;
-  if (button) { button.disabled = true; button.textContent = 'Conectando…'; }
-  setText(status, 'Pareando este aparelho com sua conta…');
+  if (button) { button.disabled = true; button.textContent = 'Ativando…'; }
+  setText(status, 'Ativando os recursos online deste aparelho…');
   try {
     await auth.loginWithBootstrapCode(code);
-    setText(status, 'IA conectada neste aparelho. Composer, stems e Voice Lab já podem usar sua sessão.');
+    setText(status, 'Pronto. Recursos online ativados neste aparelho.');
     form.remove();
     document.dispatchEvent(new CustomEvent('pablovoice:remote-authenticated'));
+    setTimeout(() => card?.remove(), 900);
   } catch (error) {
     setText(status, humanError(error));
   } finally {
     busy = false;
-    if (button?.isConnected) { button.disabled = false; button.textContent = 'Conectar'; }
+    if (button?.isConnected) { button.disabled = false; button.textContent = 'Ativar'; }
   }
 }
 
 function humanError(error) {
-  const text = String(error?.message || error || 'Falha ao conectar.');
-  if (text.includes('bootstrap_invalid')) return 'Código inválido, expirado ou já usado.';
-  if (text.includes('bootstrap_used')) return 'Esse código já foi usado. Gere um novo código.';
+  const text = String(error?.message || error || 'Não consegui ativar agora.');
+  if (text.includes('bootstrap_invalid')) return 'Esse código venceu ou não é mais válido. Peça um novo código.';
+  if (text.includes('bootstrap_used')) return 'Esse código já foi usado. Peça um novo código.';
+  if (text.includes('fetch')) return 'Não consegui falar com o serviço online. Tente novamente em instantes.';
   return text;
 }
 

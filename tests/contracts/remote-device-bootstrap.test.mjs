@@ -15,11 +15,12 @@ test('remote auth exposes one-time bootstrap pairing without client secrets', ()
   assert.doesNotMatch(authSource, /OPENAI_API_KEY|GROQ_API_KEY|AI_GATEWAY_API_KEY/);
 });
 
-test('pairing UI is installed by preboot and describes one-time device pairing', () => {
+test('activation UI is installed by preboot and remains one-time and secret-free', () => {
   assert.match(prebootSource, /installRemoteAuthUI/);
-  assert.match(uiSource, /Conectar IA/);
+  assert.match(uiSource, /Ativar recursos online/);
   assert.match(uiSource, /one-time-code/);
-  assert.match(uiSource, /rotativo/i);
+  assert.match(uiSource, /automaticamente/i);
+  assert.match(uiSource, /rotatingDeviceToken:\s*true/);
   assert.match(uiSource, /noProviderSecretInClient:\s*true/);
 });
 
