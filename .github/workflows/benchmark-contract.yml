@@ -24,3 +24,4 @@ jobs:
         run: |
           python benchmarks/validate_benchmark.py
           python benchmarks/validate_b06.py
+          python benchmarks/validate_b08.py
