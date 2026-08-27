@@ -1,4 +1,3 @@
-import { normalizeGrooveTemplate } from './audio/src/sampler/groove-template.mjs';
 import { normalizeSamplerState } from './sampler-engine.mjs';
 
 export const BEAT_LAB_SCHEMA = 'pablovoice_beat_lab_v2';
@@ -363,6 +362,28 @@ function normalizeLastOperation(value) {
     category: value.category ? normalizeCategory(value.category) : null,
     intensity: value.intensity == null ? null : normalizeAmount(value.intensity),
     at: finite(value.at, Date.now()),
+  };
+}
+
+function normalizeGrooveTemplate(input = {}) {
+  const steps = clamp(Math.round(finite(input?.stepsPerBar, 16)), 4, 32);
+  const offsets = Array.isArray(input?.offsetsBeats) ? input.offsetsBeats : [];
+  const accents = Array.isArray(input?.accents) ? input.accents : [];
+  return {
+    schema: 'pablovoice_groove_template_v1',
+    ready: Boolean(input?.ready),
+    reason: input?.reason ? String(input.reason).slice(0, 64) : null,
+    source: String(input?.source || 'onset_grid_v1'),
+    bpm: finite(input?.bpm, 0),
+    tempoConfidence: clamp(finite(input?.tempoConfidence, 0), 0, 1),
+    stepsPerBar: steps,
+    stepBeats: clamp(finite(input?.stepBeats, 0.25), 0.0625, 1),
+    offsetsBeats: Array.from({ length: steps }, (_, index) => clamp(finite(offsets[index], 0), -0.125, 0.125)),
+    accents: Array.from({ length: steps }, (_, index) => clamp(finite(accents[index], 0), 0, 1)),
+    matchedOnsets: Math.max(0, Math.floor(finite(input?.matchedOnsets, 0))),
+    totalOnsets: Math.max(0, Math.floor(finite(input?.totalOnsets, 0))),
+    coverage: clamp(finite(input?.coverage, 0), 0, 1),
+    confidence: clamp(finite(input?.confidence, 0), 0, 1),
   };
 }
 
