@@ -1,8 +1,10 @@
 import { listProjects, getAudioAsset, saveProject as persistProject } from './storage.mjs';
+import { snapshotProject } from './core/src/project.mjs';
 import { executeNaturalLanguageEdit } from './core/src/natural-language-edit.mjs';
 import { analyzeWaveform } from './audio/src/analyzers/waveform-basic.mjs';
 import { detectOnsets } from './audio/src/analyzers/onset-basic.mjs';
 import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
+import { replaceBreathAutomation } from './audio/src/voice/breath-intelligence.mjs';
 import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
 import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
 import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
@@ -94,6 +96,19 @@ async function executeDeterministicEdit(message, trackId) {
   return result;
 }
 
+async function applyBreathAutomation(result, trackId) {
+  const project = await activeProject();
+  if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+  const target = project.tracks?.find((track) => track.id === trackId) || project.tracks?.[0];
+  if (!target) throw new Error('Nenhuma faixa disponível para aplicar respirações.');
+  const plan = Array.isArray(result?.result?.data?.events) ? result.result.data.events : [];
+  target.regionAutomation = replaceBreathAutomation(target.regionAutomation, plan);
+  const automatic = target.regionAutomation.filter((event) => event.source === 'pablo-breath-intelligence-v1').length;
+  const saved = snapshotProject(project, 'Respirações ajustadas pelo Pablo');
+  await persistProject(saved);
+  return automatic;
+}
+
 async function contextForMessage() {
   const project = await activeProject();
   const active = project?.tracks?.find((track) => track.id === project.activeTrackId) || project?.tracks?.[0] || null;
@@ -120,6 +135,10 @@ async function submitMessage(form) {
     appendMessage(formatResult(result), 'assistant', result);
     if (result.kind === 'deterministic_edit' && result.canApply) {
       appendMessage('A edição determinística foi aplicada e salva. Reabra o Studio para ouvir a prévia atualizada.', 'assistant');
+    }
+    if (result.tool === 'soften_breaths' && result.canApply) {
+      const applied = await applyBreathAutomation(result, context.trackId);
+      appendMessage(`${applied} respiração(ões) de alta confiança receberam automação reversível. Reabra o Studio e use A/B: A mantém o original; B reproduz a versão suavizada.`, 'assistant');
     }
   } catch (error) {
     appendMessage(error?.message || 'Não consegui executar esse pedido com segurança.', 'assistant', { error: true });
@@ -179,7 +198,7 @@ function formatResult(result) {
   }
   if (result.tool === 'inspect_mix') return `Analisei ${data.tracks?.length || 0} faixa(s) e ${data.relations?.length || 0} relação(ões) no mix.`;
   if (result.tool === 'bring_voice_forward' || result.tool === 'make_vocal_space') return data.execution === 'allowed' ? 'Montei um plano seguro para abrir espaço e trazer a voz para frente. Ele está pronto para prévia.' : 'Montei uma sugestão de mix, mas a confiança ainda pede revisão antes de aplicar.';
-  if (result.tool === 'soften_breaths') return `Encontrei ${data.total ?? data.length ?? 0} evento(s) de respiração no plano. Nada de baixa confiança será removido sozinho.`;
+  if (result.tool === 'soften_breaths') return `Encontrei ${data.total ?? data.events?.length ?? data.length ?? 0} evento(s) de respiração no plano. Nada de baixa confiança será removido sozinho.`;
   if (result.tool === 'align_vocals') return Number.isFinite(data.offsetMs) ? `O vocal secundário está deslocado em cerca de ${Math.round(data.offsetMs)} ms. ${data.execution === 'allowed' ? 'A correção está elegível para prévia.' : 'Vou manter como sugestão.'}` : 'Não encontrei evidência suficiente para alinhar automaticamente.';
   if (result.tool === 'audio_to_instrument') return data.chromatic?.ready ? `O áudio pode virar instrumento cromático a partir da nota MIDI ${data.chromatic.rootMidi}.` : 'Ainda não há pitch confiável o suficiente para transformar este áudio em instrumento automaticamente.';
   return 'Análise concluída. Mantive o resultado como preview seguro.';
