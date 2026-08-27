@@ -21,19 +21,30 @@ async function requestAgentHealth() {
   patchCapabilityUi();
 }
 
+function setText(node, value) {
+  if (!node) return;
+  const next = String(value || '');
+  if (node.textContent !== next) node.textContent = next;
+}
+
+function setClass(node, value) {
+  if (!node) return;
+  if (node.className !== value) node.className = value;
+}
+
 function patchCapabilityUi() {
   for (const chip of document.querySelectorAll('.pv-chip')) {
     const text = chip.textContent || '';
     if (text.includes('IA generativa')) {
       chip.classList.remove('off');
       chip.classList.toggle('on', Boolean(agentHealth?.available));
-      chip.textContent = agentHealth?.available ? '✓ IA generativa · provider online' : '◐ IA generativa · provider gated';
+      setText(chip, agentHealth?.available ? '✓ IA generativa · provider online' : '◐ IA generativa · provider gated');
     } else if (text.includes('Separação de stems')) {
       chip.classList.remove('off');
-      chip.textContent = '◐ Separação de stems · Demucs candidate';
+      setText(chip, '◐ Separação de stems · Demucs candidate');
     } else if (text.includes('Conversão vocal')) {
       chip.classList.remove('off');
-      chip.textContent = '◐ Conversão vocal · RVC/Applio gated';
+      setText(chip, '◐ Conversão vocal · RVC/Applio gated');
     }
   }
 
@@ -43,17 +54,17 @@ function patchCapabilityUi() {
     const status = row.querySelector('em');
     if (!engine || !status) continue;
     if (name === 'IA generativa') {
-      engine.textContent = agentHealth?.available ? `${agentHealth.provider || 'provider'} · ${agentHealth.model || 'modelo remoto'}` : 'Generator Adapter remoto';
-      status.textContent = agentHealth?.available ? 'ONLINE' : 'GATED';
-      status.className = agentHealth?.available ? 'ok' : 'off';
+      setText(engine, agentHealth?.available ? `${agentHealth.provider || 'provider'} · ${agentHealth.model || 'modelo remoto'}` : 'Generator Adapter remoto');
+      setText(status, agentHealth?.available ? 'ONLINE' : 'GATED');
+      setClass(status, agentHealth?.available ? 'ok' : 'off');
     } else if (name === 'Separação de stems') {
-      engine.textContent = 'Demucs htdemucs · rota standalone';
-      status.textContent = 'CANDIDATE';
-      status.className = 'off';
+      setText(engine, 'Demucs htdemucs · rota standalone');
+      setText(status, 'CANDIDATE');
+      setClass(status, 'off');
     } else if (name === 'Conversão vocal') {
-      engine.textContent = 'RVC/Applio · Natural / Identity / Smooth';
-      status.textContent = 'GATED';
-      status.className = 'off';
+      setText(engine, 'RVC/Applio · Natural / Identity / Smooth');
+      setText(status, 'GATED');
+      setClass(status, 'off');
     }
   }
 }
@@ -63,4 +74,5 @@ export const CAPABILITY_STATUS_POLICY = Object.freeze({
   remoteGenerationRequiresHealthyProvider: true,
   stemsRequiresLiveRouteCanaryForPromotion: true,
   voiceConversionRequiresVerifiedGuideAndVoiceModel: true,
+  domUpdatesAreIdempotent: true,
 });
