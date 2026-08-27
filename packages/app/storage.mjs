@@ -1,4 +1,4 @@
-import { migrateProject } from './core/src/project.mjs';
+import { migrateProject } from '../core/src/project.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
 const DB_VERSION = 3;
