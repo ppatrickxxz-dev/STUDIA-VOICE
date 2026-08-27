@@ -9,18 +9,24 @@ export {
   learnAuthorialDecision,
 } from './authorial-memory.mjs';
 export {
+  parseAuthorialFeedback,
+  applyAuthorialFeedback,
+  respondToAuthorialFeedback,
+} from './authorial-feedback.mjs';
+export {
   startCompositionSession,
   critiqueDraft,
   isMusicCreationRequest,
   respondToMusicCreation,
 } from './session-engine.mjs';
 
-export const PMI_MUSIC_VERSION = '1.0.0';
+export const PMI_MUSIC_VERSION = '1.0.1';
 export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'concept_engine',
   'composition_session',
   'rhyme_intelligence',
   'draft_critic',
   'authorial_memory',
+  'authorial_feedback',
   'conversational_entrypoint',
 ]);
