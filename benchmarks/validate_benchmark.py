@@ -6,6 +6,7 @@ MANIFEST = ROOT / "pablovoice-benchmark-v1.json"
 GENERATION_BRIEF = ROOT / "assets" / "frozen-brief.json"
 REFERENCE_ANALYSIS = ROOT / "assets" / "reference-analysis.json"
 NATURAL_LANGUAGE_EDITS = ROOT / "assets" / "natural-language-edits.json"
+SEQUENTIAL_EDITS = ROOT / "assets" / "sequential-edits.json"
 
 REQUIRED_TEST_IDS = {f"B{i:02d}" for i in range(1, 13)}
 REQUIRED_HARD_GATES = {"section_replacement","vocal_identity","pt_br_prosody","continuity","artifact_rate"}
@@ -18,6 +19,28 @@ B10_EXPECTED_OPERATIONS = [
     {"type": "set_track", "key": "pan", "value": 0},
     {"type": "set_effect", "key": "fadeIn", "value": 0.25},
 ]
+B11_FROZEN_COMMANDS = [
+    "Deixa minha voz mais limpa, sem mexer no fim.",
+    "Deixa ela mais presente e centraliza.",
+    "Coloca um fade bem curto no começo, sem mexer no fim.",
+]
+B11_EXPECTED_STEP_OPERATIONS = [
+    [{"type": "set_effect", "key": "clean", "value": True}],
+    [
+        {"type": "set_effect", "key": "presence", "value": True},
+        {"type": "set_track", "key": "pan", "value": 0},
+    ],
+    [{"type": "set_effect", "key": "fadeIn", "value": 0.25}],
+]
+B11_REQUIRED_PRESERVATIONS = {
+    "project identity",
+    "lyrics",
+    "track order",
+    "non-selected tracks",
+    "selected source asset identity",
+    "selected duration/sample-rate/channel layout",
+    "selected offset/trim/gain/mute/solo",
+}
 
 
 def fail(message: str) -> None:
@@ -33,6 +56,7 @@ def main() -> None:
     brief = load(GENERATION_BRIEF)
     reference = load(REFERENCE_ANALYSIS)
     conversational = load(NATURAL_LANGUAGE_EDITS)
+    sequential = load(SEQUENTIAL_EDITS)
 
     if data.get("benchmark") != "PabloVoice Benchmark v1": fail("unexpected benchmark name")
     tests = data.get("tests", [])
@@ -104,8 +128,17 @@ def main() -> None:
     if case.get("must_not_require_daw_terms") is not True: fail("B10 must remain conversational/non-DAW")
     if case.get("unsupported_extra_actions_are_failure") is not True: fail("B10 fail-closed rule changed")
 
+    if sequential.get("purpose") != "B11 continuity under repeated edits": fail("B11 purpose changed")
+    if sequential.get("frozen_before_first_provider_output") is not True: fail("B11 sequence must remain frozen pre-output")
+    if sequential.get("target") != "active_vocal_track": fail("B11 target changed")
+    if sequential.get("commands") != B11_FROZEN_COMMANDS: fail("B11 frozen command sequence changed")
+    if sequential.get("expected_step_operations") != B11_EXPECTED_STEP_OPERATIONS: fail("B11 expected operations changed")
+    if set(sequential.get("must_preserve_across_all_steps", [])) != B11_REQUIRED_PRESERVATIONS: fail("B11 preservation contract changed")
+    if sequential.get("score_requires_acoustic_evidence") is not True: fail("B11 must require acoustic evidence before scoring")
+    if sequential.get("implementation_readiness_is_not_pass") is not True: fail("B11 readiness must not become a pass")
+
     print("BENCHMARK CONTRACT PASSED")
-    print("12 tests locked; hard gates locked; generation/edit input domains coherent; B10 conversational case frozen; anti-goalpost rules active.")
+    print("12 tests locked; hard gates locked; generation/edit input domains coherent; B10 and B11 conversational cases frozen; anti-goalpost rules active.")
 
 
 if __name__ == "__main__":
