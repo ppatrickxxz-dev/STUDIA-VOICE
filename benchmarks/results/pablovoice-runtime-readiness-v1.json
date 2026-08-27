@@ -9,13 +9,15 @@
     "audio_engine_sha_before_b12_upgrade": "0bc21da5db14a0158a6c9975098ce7539f055fb7",
     "b12_upgrade_branch": "feat/benchmark-runtime-execution-v1",
     "b10_natural_language_engine_sha": "36ced78983c707f1e3d9de6d5e59a07136c23bc0",
-    "b10_frozen_case_sha": "84c3c8d3f828cc60d96bc7af4919a8dd7579b003"
+    "b10_frozen_case_sha": "84c3c8d3f828cc60d96bc7af4919a8dd7579b003",
+    "b11_sequential_engine_sha": "a9f272227ba8c0e966f850dff8c3b8ebaa291cc6",
+    "b11_frozen_sequence_sha": "9c1649119de950c24eb0ac53399ff7968cab8cbc"
   },
   "summary": {
     "scored_tests": [],
-    "implementation_ready_unexecuted": ["B10", "B12"],
+    "implementation_ready_unexecuted": ["B10", "B11", "B12"],
     "partial_tests": ["B06", "B07"],
-    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B08", "B09", "B11"],
+    "blocked_tests": ["B01", "B02", "B03", "B04", "B05", "B08", "B09"],
     "score_awarded": false
   },
   "tests": {
@@ -28,9 +30,9 @@
     "B07": {"status":"partial_non_promotable","reason":"A 22 ms / +11 cent double layer exists, but there is no musically generated high/low harmony engine."},
     "B08": {"status":"blocked","reason":"Mixer and effects can change presentation, but no arrangement-generation operation preserves melody/lyrics/identity under benchmark constraints."},
     "B09": {"status":"blocked","reason":"Runtime explicitly marks stem separation unavailable. Per-track export is not counted as source-separation."},
-    "B10": {"status":"implementation_ready_unexecuted","reason":"A deterministic PT-BR conversational edit engine now maps the frozen non-DAW command to the exact supported local operations, scopes preservation to the explicit conversational clause, preserves trimEnd/fadeOut, and fails closed on unsupported requests. It still requires retained execution evidence before scoring."},
-    "B11": {"status":"blocked","reason":"Non-destructive revisions exist, but sequential generative local edits with continuity preservation do not."},
-    "B12": {"status":"implementation_ready_unexecuted","reason":"Master WAV render exists; aligned stereo per-track rendering now preserves project duration, avoids per-stem normalization, rejects >0 dBFS stems instead of silently clipping, and fixes master channel selection. Benchmark output still must be executed and retained before scoring."}
+    "B10": {"status":"implementation_ready_unexecuted","reason":"A deterministic PT-BR conversational edit engine maps the frozen non-DAW command to exact supported local operations, scopes preservation to the explicit clause, and fails closed on unsupported requests. Retained execution evidence is still required before scoring."},
+    "B11": {"status":"implementation_ready_unexecuted","reason":"A guarded three-step conversational edit sequence now preserves project identity, lyrics, track order, all non-selected tracks, selected source identity, duration/sample layout, offset/trim/gain/mute/solo while allowing only requested supported effect/pan changes. Acoustic continuity evidence is still required before scoring the hard gate."},
+    "B12": {"status":"implementation_ready_unexecuted","reason":"Master WAV render exists; aligned stereo per-track rendering preserves project duration, avoids per-stem normalization, rejects >0 dBFS stems instead of silently clipping, and fixes master channel selection. Benchmark output still must be executed and retained before scoring."}
   },
   "promotion_rule": "Implementation readiness is not a benchmark pass. A test becomes scorable only after its full required operation produces retained output evidence against the frozen inputs."
 }
