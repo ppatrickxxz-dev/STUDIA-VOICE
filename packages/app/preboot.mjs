@@ -50,6 +50,7 @@ try {
   const { installPabloSectionVocalRestorationRecommendationAdapter } = await import('./pablo-section-vocal-restoration-recommendation-adapter.mjs');
   const { installPabloSectionVocalRestorationSelectiveAdapter } = await import('./pablo-section-vocal-restoration-selective-adapter.mjs');
   const { installPabloFullVocalScanAdapter } = await import('./pablo-full-vocal-scan-adapter.mjs');
+  const { installPabloFullVocalTreatmentAdapter } = await import('./pablo-full-vocal-treatment-adapter.mjs');
   const { installPabloSectionVocalScanAdapter } = await import('./pablo-section-vocal-scan-adapter.mjs');
   const { installPabloSectionVocalCleanupAdapter } = await import('./pablo-section-vocal-cleanup-adapter.mjs');
   const { installPabloSectionVocalSoftnessAdapter } = await import('./pablo-section-vocal-softness-adapter.mjs');
@@ -82,6 +83,7 @@ try {
   installPabloSectionVocalRestorationRecommendationAdapter();
   installPabloSectionVocalRestorationSelectiveAdapter();
   installPabloFullVocalScanAdapter();
+  installPabloFullVocalTreatmentAdapter();
   installPabloSectionVocalScanAdapter();
   installPabloSectionVocalCleanupAdapter();
   installPabloSectionVocalSoftnessAdapter();
