@@ -23,6 +23,17 @@ test('section UI edits the canonical arrangement map and snapshots every mutatio
   assert.match(ui, /confidence: 1/);
 });
 
+test('section save has an explicit click path and submit fallback that share one verified mutation function', async () => {
+  const ui = await read('packages/app/section-map-ui.mjs');
+  assert.match(ui, /data-section-save/);
+  assert.match(ui, /button\.dataset\.sectionSave/);
+  assert.match(ui, /event\.preventDefault\(\)/);
+  assert.match(ui, /await saveSectionForm\(form\)/);
+  assert.match(ui, /async function saveSectionForm\(form\)/);
+  assert.ok(ui.indexOf('button.dataset.sectionSave') < ui.indexOf('button.dataset.sectionUseCursor'));
+  assert.match(ui, /async function onSubmit\(event\)[\s\S]*await saveSectionForm\(form\)/);
+});
+
 test('section form uses named controls and confirms persistence by re-reading IndexedDB before success', async () => {
   const ui = await read('packages/app/section-map-ui.mjs');
   assert.match(ui, /form\.elements\.namedItem\('kind'\)/);
