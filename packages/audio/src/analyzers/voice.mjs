@@ -40,10 +40,20 @@ function normalizeEvents(events) {
       intensity: finiteOrNull(event.intensity),
       confidence: finiteOrNull(event.confidence)
     };
-    for (const field of ['frequencyHz', 'spectralPeakHz', 'spectralSpreadHz', 'spectralConfidence', 'peak', 'rms', 'transientRise']) {
-      const value = finiteOrNull(event[field]);
-      if (value !== null) normalized[field] = value;
-    }
+    const frequencyHz = finiteOrNull(event.frequencyHz);
+    const spectralPeakHz = finiteOrNull(event.spectralPeakHz);
+    const spectralSpreadHz = finiteOrNull(event.spectralSpreadHz);
+    const spectralConfidence = finiteOrNull(event.spectralConfidence);
+    const peak = finiteOrNull(event.peak);
+    const rms = finiteOrNull(event.rms);
+    const transientRise = finiteOrNull(event.transientRise);
+    if (frequencyHz !== null) normalized.frequencyHz = frequencyHz;
+    if (spectralPeakHz !== null) normalized.spectralPeakHz = spectralPeakHz;
+    if (spectralSpreadHz !== null) normalized.spectralSpreadHz = spectralSpreadHz;
+    if (spectralConfidence !== null) normalized.spectralConfidence = spectralConfidence;
+    if (peak !== null) normalized.peak = peak;
+    if (rms !== null) normalized.rms = rms;
+    if (transientRise !== null) normalized.transientRise = transientRise;
     if (event.spectralSource) normalized.spectralSource = String(event.spectralSource);
     if (event.source) normalized.source = String(event.source);
     return normalized;
