@@ -91,9 +91,15 @@ async function playVariant(projectId, sectionId, variant, mode, panel) {
   const status = await auditionSectionMixAB(project, section, variant, mode);
   const line = panel.querySelector('small');
   if (line) {
-    line.textContent = variant === 'A'
-      ? `Tocando A · ${status.removedEvents} evento(s) de ${comparisonFocus(status.mode)} removido(s) só para esta audição.`
-      : `Tocando B · ${status.comparedEvents} evento(s) de ${comparisonFocus(status.mode)} ativo(s) no projeto atual.`;
+    if (status.mode === SECTION_MIX_AB_MODES.ALL) {
+      line.textContent = variant === 'A'
+        ? `Tocando A · ${status.removedEvents} ajuste(s) do Pablo removido(s) só para esta audição.`
+        : `Tocando B · ${status.comparedEvents} ajuste(s) do Pablo ativos no projeto atual.`;
+    } else {
+      line.textContent = variant === 'A'
+        ? `Tocando A · ${status.removedEvents} evento(s) de ${comparisonFocus(status.mode)} removido(s) só para esta audição.`
+        : `Tocando B · ${status.comparedEvents} evento(s) de ${comparisonFocus(status.mode)} ativo(s) no projeto atual.`;
+    }
   }
 }
 
