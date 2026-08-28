@@ -55,3 +55,27 @@ Consequence: no streak punishment, forced decay, grinding or infantilized pet me
 Decision: approved visual identity, character canon and product language are preserved unless an explicit later decision replaces them.
 
 Consequence: recovered prototypes or parallel chats cannot silently redefine visual baseline or character identity.
+
+## 2026-08-28 — Future editing architecture is project-state + reversible actions
+
+Decision: future PabloVoice evolution will use the existing canonical core as the base for a project-state editing architecture built around Audio Analysis Bus v2, Section Take Graph, Pablo Action Contract, Action Ledger/provenance and Mix Intelligence Graph.
+
+Consequence: Pablo AI should resolve typed, targeted, non-destructive actions over real project objects rather than grow through unrelated phrase-specific features. Existing validated section/vocal adapters are migrated behind the action contract instead of being rewritten in parallel.
+
+## 2026-08-28 — Sections gain takes instead of provider-owned mutations
+
+Decision: `arrangementMap` remains the canonical section map, while future updates may attach multiple non-destructive takes/variants to a section with one active take.
+
+Consequence: recordings, generated alternatives, tuning, conversion, harmony and future provider outputs become candidate takes/assets. External providers must not directly overwrite canonical project state; adoption occurs through preview/review/commit.
+
+## 2026-08-28 — Analysis v2 must be proven end-to-end before consumers claim evidence
+
+Decision: declaring a feature in the analysis schema is insufficient if runtime, adapters or persistence drop it before a consumer receives it.
+
+Consequence: the first closure target is spectral-envelope delivery into Mix Intelligence, followed by other v2 fields. Higher-level masking/stereo/depth claims require real propagated evidence and fail closed when it is absent.
+
+## 2026-08-28 — Pablo edits converge on preview, commit and selective undo
+
+Decision: AI-driven edits should converge on the lifecycle `interpret -> validate -> plan -> preview -> A/B -> commit -> selective undo`, with safe reversible exceptions explicitly registered.
+
+Consequence: action ownership, preservation constraints, processing recipes, provider/model versions, confidence and provenance are recorded in an Action Ledger so project history is finer-grained than global snapshots alone.
