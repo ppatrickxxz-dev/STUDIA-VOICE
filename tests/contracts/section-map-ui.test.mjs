@@ -23,14 +23,15 @@ test('section UI edits the canonical arrangement map and snapshots every mutatio
   assert.match(ui, /confidence: 1/);
 });
 
-test('section save has an explicit click path and submit fallback that share one verified mutation function', async () => {
+test('section controls use attribute presence and save click plus submit fallback share one verified mutation function', async () => {
   const ui = await read('packages/app/section-map-ui.mjs');
-  assert.match(ui, /data-section-save/);
-  assert.match(ui, /button\.dataset\.sectionSave/);
+  for (const action of ['data-section-map-open', 'data-section-map-close', 'data-section-save', 'data-section-use-cursor', 'data-section-cancel-edit']) {
+    assert.match(ui, new RegExp(`hasAttribute\\('${action}'\\)`));
+  }
   assert.match(ui, /event\.preventDefault\(\)/);
   assert.match(ui, /await saveSectionForm\(form\)/);
   assert.match(ui, /async function saveSectionForm\(form\)/);
-  assert.ok(ui.indexOf('button.dataset.sectionSave') < ui.indexOf('button.dataset.sectionUseCursor'));
+  assert.ok(ui.indexOf("hasAttribute('data-section-save')") < ui.indexOf("hasAttribute('data-section-use-cursor')"));
   assert.match(ui, /async function onSubmit\(event\)[\s\S]*await saveSectionForm\(form\)/);
 });
 
