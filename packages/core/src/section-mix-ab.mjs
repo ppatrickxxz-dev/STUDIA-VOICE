@@ -11,7 +11,13 @@ import { PABLO_SECTION_VOCAL_DYNAMICS_SOURCE } from './section-vocal-dynamics.mj
 import { PABLO_SECTION_VOCAL_DEESSER_SOURCE } from './section-vocal-deesser.mjs';
 import { PABLO_SECTION_VOCAL_PLOSIVE_SOURCE } from './section-vocal-plosive.mjs';
 import { PABLO_SECTION_VOCAL_CLICK_SOURCE } from './section-vocal-click.mjs';
-import { PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST } from './section-vocal-cleanup.mjs';
+import { PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST, PABLO_SECTION_VOCAL_CLEANUP_SOURCES } from './section-vocal-cleanup.mjs';
+
+export const SECTION_MIX_AB_MODES = Object.freeze({
+  ALL: 'all',
+  DENOISE: 'denoise',
+  DEREVERB: 'dereverb',
+});
 
 export const PABLO_SECTION_MIX_SOURCES = Object.freeze([
   PABLO_SECTION_VOCAL_GAIN_SOURCE,
@@ -35,7 +41,12 @@ export function parseSectionMixABCommand(message = '') {
   const sectionMatch = text.match(/\b(pre[- ]?refrao|refrao|verso|ponte|intro|rap|outro)\b/);
   const section = normalizeSectionKind(sectionMatch?.[1] || '');
   if (!section) return null;
-  return { section, label: sectionLabel(section), occurrence: parseOccurrence(text) };
+  const hasDenoise = /\b(denoise|ruido de fundo|reducao de ruido)\b/.test(text);
+  const hasDereverb = /\b(de reverb|dereverb|reverberacao|reverb|reflexos? do ambiente)\b/.test(text);
+  const mode = hasDenoise !== hasDereverb
+    ? (hasDenoise ? SECTION_MIX_AB_MODES.DENOISE : SECTION_MIX_AB_MODES.DEREVERB)
+    : SECTION_MIX_AB_MODES.ALL;
+  return { section, label: sectionLabel(section), occurrence: parseOccurrence(text), mode };
 }
 
 export function planSectionMixAB(project, command) {
@@ -43,39 +54,54 @@ export function planSectionMixAB(project, command) {
   const clean = migrateProject(project);
   const sectionResult = resolveConfirmedSectionAudition(clean.arrangementMap, command.section, { occurrence: command.occurrence });
   if (!sectionResult.ok) return { ok: false, reason: sectionResult.reason, sectionResult };
-  const matches = findPabloSectionMixEvents(clean, sectionResult.section.id);
-  if (!matches.length) return { ok: false, reason: 'nothing_to_compare', project: clean, section: sectionResult.section };
-  return { ok: true, project: clean, section: sectionResult.section, occurrence: command.occurrence || null, matches };
+  const mode = normalizeABMode(command.mode);
+  const sources = sourcesForABMode(mode);
+  const matches = findPabloSectionMixEvents(clean, sectionResult.section.id, mode);
+  if (!matches.length) return { ok: false, reason: 'nothing_to_compare', project: clean, section: sectionResult.section, mode, sources };
+  return { ok: true, project: clean, section: sectionResult.section, occurrence: command.occurrence || null, mode, sources, matches };
 }
 
-export function buildSectionMixABVariant(project, sectionId, variant = 'B') {
+export function buildSectionMixABVariant(project, sectionId, variant = 'B', mode = SECTION_MIX_AB_MODES.ALL) {
   const clean = migrateProject(project);
   const normalizedVariant = String(variant || 'B').toUpperCase();
   if (!['A', 'B'].includes(normalizedVariant)) throw new TypeError('Variante A/B inválida.');
-  if (normalizedVariant === 'B') return { project: clean, variant: 'B', removed: [] };
+  const normalizedMode = normalizeABMode(mode);
+  if (normalizedVariant === 'B') return { project: clean, variant: 'B', mode: normalizedMode, removed: [] };
   const removed = [];
   for (const track of clean.tracks || []) {
     const before = Array.isArray(track.regionAutomation) ? track.regionAutomation : [];
     const keep = [];
     for (const event of before) {
-      if (isPabloSectionMixEvent(event, sectionId)) removed.push({ trackId: track.id, eventId: event.id, source: event.source });
+      if (isPabloSectionMixEvent(event, sectionId, normalizedMode)) removed.push({ trackId: track.id, eventId: event.id, source: event.source });
       else keep.push(event);
     }
     track.regionAutomation = keep;
   }
-  return { project: clean, variant: 'A', removed };
+  return { project: clean, variant: 'A', mode: normalizedMode, removed };
 }
 
-export function findPabloSectionMixEvents(project, sectionId) {
+export function findPabloSectionMixEvents(project, sectionId, mode = SECTION_MIX_AB_MODES.ALL) {
   const matches = [];
-  for (const track of project?.tracks || []) for (const event of track?.regionAutomation || []) if (isPabloSectionMixEvent(event, sectionId)) matches.push({ trackId: track.id, eventId: event.id, source: event.source });
+  for (const track of project?.tracks || []) for (const event of track?.regionAutomation || []) if (isPabloSectionMixEvent(event, sectionId, mode)) matches.push({ trackId: track.id, eventId: event.id, source: event.source });
   return matches;
 }
 
-export function isPabloSectionMixEvent(event, sectionId) {
+export function isPabloSectionMixEvent(event, sectionId, mode = SECTION_MIX_AB_MODES.ALL) {
   const source = String(event?.source || '');
   const id = String(event?.id || '');
-  return Boolean(sectionId) && PABLO_SECTION_MIX_SOURCES.includes(source) && id.endsWith(`:${sectionId}`);
+  return Boolean(sectionId) && sourcesForABMode(mode).includes(source) && id.endsWith(`:${sectionId}`);
+}
+
+export function sourcesForABMode(mode = SECTION_MIX_AB_MODES.ALL) {
+  const normalizedMode = normalizeABMode(mode);
+  if (normalizedMode === SECTION_MIX_AB_MODES.DENOISE) return [PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DENOISE];
+  if (normalizedMode === SECTION_MIX_AB_MODES.DEREVERB) return [PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DEREVERB];
+  return [...PABLO_SECTION_MIX_SOURCES];
+}
+
+function normalizeABMode(mode) {
+  const value = String(mode || SECTION_MIX_AB_MODES.ALL).toLowerCase();
+  return Object.values(SECTION_MIX_AB_MODES).includes(value) ? value : SECTION_MIX_AB_MODES.ALL;
 }
 
 function parseOccurrence(text) {
