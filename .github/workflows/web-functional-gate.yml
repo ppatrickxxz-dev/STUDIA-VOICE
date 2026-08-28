@@ -62,7 +62,7 @@ jobs:
       - name: Run browser functional gate
         env:
           CI: 'true'
-        run: npx playwright test tests/e2e/web-functional-gate.spec.mjs tests/e2e/pablo-section-here-gate.spec.mjs --reporter=line --workers=1
+        run: npx playwright test tests/e2e/web-functional-gate.spec.mjs tests/e2e/pablo-section-here-gate.spec.mjs tests/e2e/pablo-section-audition-gate.spec.mjs --reporter=line --workers=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
