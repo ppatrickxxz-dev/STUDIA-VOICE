@@ -133,13 +133,15 @@ function finalizeGroup(group) {
   const stationarity = clamp01(1 - Math.sqrt(variance) / 6);
   const meanFrameConfidence = group.frames.reduce((sum, frame) => sum + frame.confidence, 0) / group.frames.length;
   const humConfidence = group.frames.reduce((sum, frame) => sum + frame.humConfidence, 0) / group.frames.length;
+  const strongHumFrames = group.frames.filter((frame) => frame.humConfidence >= 0.72);
+  const humCoverage = strongHumFrames.length / group.frames.length;
   const frequencyVotes = new Map();
-  for (const frame of group.frames) {
+  for (const frame of strongHumFrames.length ? strongHumFrames : group.frames) {
     const weight = Math.max(0.01, frame.humConfidence);
     frequencyVotes.set(frame.humFrequencyHz, (frequencyVotes.get(frame.humFrequencyHz) || 0) + weight);
   }
   const humFrequencyHz = [...frequencyVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-  const noiseKind = humConfidence >= 0.58 ? 'hum' : 'broadband';
+  const noiseKind = humConfidence >= 0.58 || humCoverage >= 0.4 ? 'hum' : 'broadband';
   const levelIntensity = clamp01((medianDb + 68) / 36);
   return {
     start: roundMillis(group.start),
@@ -150,6 +152,7 @@ function finalizeGroup(group) {
     rmsDb: roundTenth(medianDb),
     stationarity: roundHundredth(stationarity),
     humConfidence: roundHundredth(humConfidence),
+    humCoverage: roundHundredth(humCoverage),
     ...(noiseKind === 'hum' && humFrequencyHz ? { frequencyHz: humFrequencyHz } : {}),
   };
 }
