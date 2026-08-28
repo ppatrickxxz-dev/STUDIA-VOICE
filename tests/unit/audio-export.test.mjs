@@ -36,3 +36,21 @@ test('export fails closed for invalid project, track asset, and missing decoded 
   assert.throws(() => prepareAudioExport(invalidTrack, { hasBuffer: () => true }), /Track sem ID ou arquivo/);
   assert.throws(() => prepareAudioExport(projectWithTrack(), { hasBuffer: () => false }), /não está disponível/);
 });
+
+test('single-track export validates only its requested asset and remains available when the track is muted', () => {
+  const project = projectWithTrack();
+  const target = project.tracks[0];
+  target.muted = true;
+  const other = createTrack({ name: 'Base ausente', assetId: 'asset_missing', duration: 4 });
+  project.tracks.push(other);
+  const exported = prepareAudioExport(project, {
+    trackId: target.id,
+    hasBuffer: (trackId) => trackId === target.id,
+  });
+  assert.equal(exported.tracks.find((track) => track.id === target.id).muted, true);
+  assert.equal(exported.tracks.length, 2);
+  assert.throws(() => prepareAudioExport(project, {
+    trackId: other.id,
+    hasBuffer: (trackId) => trackId === target.id,
+  }), /Base ausente/);
+});
