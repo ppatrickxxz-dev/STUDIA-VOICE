@@ -1,18 +1,20 @@
-import { planSectionMixAB, buildSectionMixABVariant } from './core/src/section-mix-ab.mjs';
+import { planSectionMixAB, buildSectionMixABVariant, SECTION_MIX_AB_MODES } from './core/src/section-mix-ab.mjs';
 import { auditionConfirmedSection, getSectionAuditionStatus, stopSectionAudition } from './section-audition-runtime.mjs';
 
 let status = Object.freeze({
   variant: null,
+  mode: SECTION_MIX_AB_MODES.ALL,
   projectId: null,
   sectionId: null,
   comparedEvents: 0,
   removedEvents: 0,
 });
 
-export async function auditionSectionMixAB(project, section, variant = 'B') {
+export async function auditionSectionMixAB(project, section, variant = 'B', mode = SECTION_MIX_AB_MODES.ALL) {
   const command = {
     section: section?.kind,
     occurrence: occurrenceForSection(project?.arrangementMap, section?.id, section?.kind),
+    mode,
   };
   const plan = planSectionMixAB(project, command);
   if (!plan.ok) {
@@ -22,10 +24,11 @@ export async function auditionSectionMixAB(project, section, variant = 'B') {
   }
   if (plan.section.id !== section?.id) throw new Error('A seção mudou desde que o A/B foi aberto. Abra a comparação novamente.');
 
-  const prepared = buildSectionMixABVariant(plan.project, plan.section.id, variant);
+  const prepared = buildSectionMixABVariant(plan.project, plan.section.id, variant, plan.mode);
   await auditionConfirmedSection(prepared.project, plan.section, { mode: 'processed' });
   status = freezeStatus({
     variant: prepared.variant,
+    mode: plan.mode,
     projectId: prepared.project.id,
     sectionId: plan.section.id,
     comparedEvents: plan.matches.length,
@@ -69,6 +72,7 @@ function abRuntimeError(plan) {
 function freezeStatus(value) {
   return Object.freeze({
     variant: value.variant || null,
+    mode: value.mode || SECTION_MIX_AB_MODES.ALL,
     projectId: value.projectId || null,
     sectionId: value.sectionId || null,
     comparedEvents: Number(value.comparedEvents || 0),
