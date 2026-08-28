@@ -8,6 +8,7 @@ import {
   buildSectionMixABVariant,
   parseSectionMixABCommand,
   planSectionMixAB,
+  SECTION_MIX_AB_MODES,
 } from '../../packages/core/src/section-mix-ab.mjs';
 
 function mixedProject() {
@@ -31,13 +32,13 @@ function mixedProject() {
 
 test('parses A/B requests without hijacking ordinary section audition', () => {
   assert.deepEqual(parseSectionMixABCommand('compara o refrão'), {
-    section: 'chorus', label: 'Refrão', occurrence: null,
+    section: 'chorus', label: 'Refrão', occurrence: null, mode: SECTION_MIX_AB_MODES.ALL,
   });
   assert.deepEqual(parseSectionMixABCommand('faz A/B do segundo refrão'), {
-    section: 'chorus', label: 'Refrão', occurrence: 2,
+    section: 'chorus', label: 'Refrão', occurrence: 2, mode: SECTION_MIX_AB_MODES.ALL,
   });
   assert.deepEqual(parseSectionMixABCommand('ouve antes e depois da ponte'), {
-    section: 'bridge', label: 'Ponte', occurrence: null,
+    section: 'bridge', label: 'Ponte', occurrence: null, mode: SECTION_MIX_AB_MODES.ALL,
   });
   assert.equal(parseSectionMixABCommand('toca o refrão'), null);
   assert.equal(parseSectionMixABCommand('compara essa parte'), null);
