@@ -90,7 +90,10 @@ function sourcesForMode(mode) {
   return [];
 }
 
-function belongsToSection(event, sectionId) { return Boolean(sectionId) && String(event?.id || '').endsWith(`:${sectionId}`); }
+function belongsToSection(event, sectionId) {
+  const id = String(event?.id || '');
+  return Boolean(sectionId) && id.endsWith(`:${sectionId}`);
+}
 function parseOccurrence(text) {
   if (/\b(primeir[oa]|1[oa]?)\b/.test(text)) return 1;
   if (/\b(segund[oa]|2[oa]?)\b/.test(text)) return 2;
