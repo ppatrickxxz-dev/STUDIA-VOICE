@@ -19,12 +19,46 @@ Both assets declare `engine=Demucs`, `model=htdemucs`, and point to the same sou
 - lossless stem asset creation: **validated**
 - repeated execution evidence: **validated** (5 completed full-pipeline jobs observed)
 
+## Standalone candidate readiness
+
+The original candidate from PR #29 passed the four canonical repository gates on its final head:
+
+- `web-and-contracts`: **success**
+- `browser-gate`: **success**
+- `android-build`: **success**
+- `android-emulator`: **success**
+
+PR #29 itself was not merged because review found route-safety defects. Its corrected current-main successor, PR #37, was merged as commit `2d5585ccbb2fba364f362659e68f0b36ed7053c9`.
+
+A fresh live Supabase inspection on 2026-08-28 verified the deployed standalone path up to the live-canary boundary:
+
+- project `yokmhqoncdwvxmzzybqa`: `ACTIVE_HEALTHY`
+- `compute-kaggle-v54` version 3: `ACTIVE`, JWT required, dispatches `job_type='stems'` and records `compute-kaggle-v54:standalone-stems-v1`
+- dispatcher resolves worker `kaggle-worker-source-v56`
+- `kaggle-worker-source-v56` version 3: `ACTIVE`, installs Demucs `4.0.1`, runs `htdemucs --two-stems=vocals`, verifies source SHA-256 and rejects identical/tiny outputs
+- `complete-kaggle-stems-job` version 1: `ACTIVE`, requires three distinct SHA-256 proofs, verifies both uploaded objects exist, persists independent `guide_vocal` and `instrumental` assets, and only then completes the job
+
+Canonical machine-readable evidence: `docs/B09_STANDALONE_READINESS_EVIDENCE_2026-08-28.json`.
+
 ## What is still pending
 
-The newly canonical standalone route:
+The canonical standalone route:
 
-`create-kaggle-ticket(job_type=stems) -> worker -> complete-kaggle-stems-job`
+`recording-ticket-v63 source_import -> recording-finalize-v63 -> create-kaggle-ticket(job_type=stems) -> compute-kaggle-v54 -> kaggle-worker-source-v56 -> complete-kaggle-stems-job`
 
-has not yet produced a completed standalone `render_jobs.job_type='stems'` row. Therefore the engine is evidence-backed, but the new standalone transport remains hidden from product promotion until its own canary completes.
+still has no completed standalone `render_jobs.job_type='stems'` row in the live database.
 
-This distinction is intentional: engine validation is not the same as route validation.
+The next terminal evidence for B09 is therefore exactly one live completed standalone stems job with:
+
+1. `job_type='stems'`;
+2. `proof.verified=true`;
+3. two independent persisted output assets (`guide_vocal` and `instrumental`);
+4. distinct source/vocal/instrumental SHA-256 values;
+5. non-trivial output sizes;
+6. the job's two `output_asset_ids` resolving to those persisted assets.
+
+Until that row exists, `routeValidated` remains false and B09 remains **not passed**.
+
+No physical Android approval is implied by CI or emulator evidence.
+
+This distinction is intentional: engine validation and route readiness are not the same as standalone route validation.
