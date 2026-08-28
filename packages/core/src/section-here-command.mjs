@@ -1,6 +1,6 @@
 import { normalizeSectionKind, sectionLabel } from './section-map.mjs';
 
-const SECTION_HERE_PATTERN = /\b(?:marca|marque|marcar|comeca|começa|inicia|iniciar)\s+(?:o|a)?\s*(pre[- ]?refrao|pre[- ]?refrão|refrao|refrão|verso|ponte|intro|rap|outro)\s+(?:comeca\s+|começa\s+)?aqui\b|\b(?:o|a)\s+(pre[- ]?refrao|pre[- ]?refrão|refrao|refrão|verso|ponte|intro|rap|outro)\s+(?:comeca|começa|inicia)\s+aqui\b/i;
+const SECTION_HERE_PATTERN = /\b(?:marca|marque|marcar|comeca|começa|inicia|iniciar)\s+(?:o|a)?\s*(pr[eé][- ]?refr[aã]o|refr[aã]o|verso|ponte|intro|rap|outro)\s+(?:comeca\s+|começa\s+)?aqui\b|\b(?:o|a)\s+(pr[eé][- ]?refr[aã]o|refr[aã]o|verso|ponte|intro|rap|outro)\s+(?:comeca|começa|inicia)\s+aqui\b/i;
 
 export function parseSectionHereCommand(message = '') {
   const text = String(message || '').trim();
