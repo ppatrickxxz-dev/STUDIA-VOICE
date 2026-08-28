@@ -67,6 +67,14 @@ async function restorationState(page) {
   });
 }
 
+async function waitForPabloIdle(page) {
+  await expect(page.locator('[data-pablo-form]')).toHaveAttribute('aria-busy', 'false', { timeout: 20_000 });
+}
+
+async function waitForRestorationCount(page, key, minimum) {
+  await expect.poll(async () => (await restorationState(page))[key].length, { timeout: 20_000 }).toBeGreaterThanOrEqual(minimum);
+}
+
 test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb apply, compare and undo independently without erasing each other', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -83,24 +91,24 @@ test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb apply, compare and u
   await page.locator('[data-route="pablo"]').first().click();
 
   await sendPablo(page, 'Pablo, aplica só o denoise no refrão');
+  await waitForRestorationCount(page, 'denoise', 1);
   await expect(page.getByText(/Apliquei só o denoise no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
   let state = await restorationState(page);
-  expect(state.denoise.length).toBeGreaterThanOrEqual(1);
   expect(state.dereverb).toHaveLength(0);
   expect(state.manual).toHaveLength(1);
   expect(state.denoise.every((event) => event.kind === 'vocal_denoise' && event.timbreProtected && event.reductionDb <= 5.5)).toBe(true);
 
   const firstDenoiseCount = state.denoise.length;
   await sendPablo(page, 'Pablo, aplica só o denoise no refrão');
-  await expect(page.getByText(/Apliquei só o denoise no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
+  await waitForPabloIdle(page);
   state = await restorationState(page);
   expect(state.denoise).toHaveLength(firstDenoiseCount);
 
   await sendPablo(page, 'Pablo, faz só o de-reverb no refrão');
+  await waitForRestorationCount(page, 'dereverb', 1);
   await expect(page.getByText(/Apliquei só o de-reverb no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
   state = await restorationState(page);
   expect(state.denoise).toHaveLength(firstDenoiseCount);
-  expect(state.dereverb.length).toBeGreaterThanOrEqual(1);
   expect(state.manual).toHaveLength(1);
   expect(state.dereverb.every((event) => event.kind === 'vocal_dereverb' && event.timbreProtected && event.amount <= 0.2)).toBe(true);
   const firstDereverbCount = state.dereverb.length;
@@ -124,32 +132,35 @@ test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb apply, compare and u
 
   await denoisePanel.getByRole('button', { name: 'Prefiro A · desfazer' }).click();
   await expect(page.getByText(/Desfiz só o denoise.*Refrão/i).last()).toBeVisible({ timeout: 10_000 });
+  await waitForPabloIdle(page);
   state = await restorationState(page);
   expect(state.denoise).toHaveLength(0);
   expect(state.dereverb).toHaveLength(firstDereverbCount);
   expect(state.manual).toHaveLength(1);
 
   await sendPablo(page, 'Pablo, aplica só o denoise no refrão');
-  await expect(page.getByText(/Apliquei só o denoise no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
+  await waitForRestorationCount(page, 'denoise', 1);
   state = await restorationState(page);
   expect(state.denoise.length).toBeGreaterThanOrEqual(1);
   expect(state.dereverb).toHaveLength(firstDereverbCount);
 
   await sendPablo(page, 'desfaz só o de-reverb no refrão');
   await expect(page.getByText(/Desfiz só o de-reverb.*Refrão/i).last()).toBeVisible({ timeout: 10_000 });
+  await waitForPabloIdle(page);
   state = await restorationState(page);
   expect(state.denoise.length).toBeGreaterThanOrEqual(1);
   expect(state.dereverb).toHaveLength(0);
   expect(state.manual).toHaveLength(1);
 
   await sendPablo(page, 'Pablo, faz só o de-reverb no refrão');
-  await expect(page.getByText(/Apliquei só o de-reverb no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
+  await waitForRestorationCount(page, 'dereverb', 1);
   state = await restorationState(page);
   expect(state.denoise.length).toBeGreaterThanOrEqual(1);
   expect(state.dereverb.length).toBeGreaterThanOrEqual(1);
 
   await sendPablo(page, 'desfaz a limpeza no refrão');
   await expect(page.getByText(/Desfiz a limpeza vocal.*Refrão/i).last()).toBeVisible({ timeout: 10_000 });
+  await waitForPabloIdle(page);
   state = await restorationState(page);
   expect(state.denoise).toHaveLength(0);
   expect(state.dereverb).toHaveLength(0);
