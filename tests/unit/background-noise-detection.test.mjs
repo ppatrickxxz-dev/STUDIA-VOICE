@@ -31,6 +31,27 @@ function voicedContour(seconds = 1.2, hopSeconds = 0.04) {
   return contour;
 }
 
+function humWindow44100() {
+  const sr = 44100;
+  const seconds = 1.1;
+  const out = new Float32Array(Math.floor(seconds * sr));
+  for (let index = 0; index < out.length; index += 1) {
+    const time = index / sr;
+    let value = Math.sin(2 * Math.PI * 220 * time) * 0.025;
+    if (time >= 0.34 && time <= 0.78) {
+      const fade = Math.min(1, (time - 0.34) / 0.04, (0.78 - time) / 0.04);
+      value = Math.sin(2 * Math.PI * 60 * time) * 0.014 * Math.max(0, fade);
+    }
+    out[index] = value;
+  }
+  const contour = [];
+  for (let time = 0; time < seconds; time += 0.045) {
+    const inHum = time >= 0.32 && time <= 0.8;
+    contour.push({ time, hz: inHum ? null : 220, voiced: !inHum, confidence: inHum ? 0 : 0.95 });
+  }
+  return { out, contour, sr };
+}
+
 test('stationary 60 Hz electrical hum becomes separate measured noise evidence', () => {
   const result = detectBackgroundNoise(tone(60, 0.014), {
     sampleRate,
@@ -47,6 +68,16 @@ test('stationary 60 Hz electrical hum becomes separate measured noise evidence',
   assert.ok(hum.rmsDb > -55 && hum.rmsDb < -30, `unexpected hum level ${hum.rmsDb}`);
 });
 
+test('44.1 kHz hum with fade edges remains hum when strong tonal frames cover the stationary event', () => {
+  const { out, contour, sr } = humWindow44100();
+  const result = detectBackgroundNoise(out, { sampleRate: sr, pitchContour: contour });
+  const hum = result.noiseEvents.find((event) => event.start < 0.8 && event.end > 0.34);
+  assert.ok(hum, 'expected the embedded hum window');
+  assert.equal(hum.noiseKind, 'hum');
+  assert.equal(hum.frequencyHz, 60);
+  assert.ok(hum.humCoverage >= 0.4 || hum.humConfidence >= 0.58);
+});
+
 test('stationary broadband noise is reported without inventing a hum frequency', () => {
   const result = detectBackgroundNoise(deterministicNoise(0.012), {
     sampleRate,
@@ -59,6 +90,7 @@ test('stationary broadband noise is reported without inventing a hum frequency',
   assert.ok(event, 'expected broadband classification');
   assert.equal('frequencyHz' in event, false);
   assert.ok(event.stationarity >= 0.55);
+  assert.ok(event.humCoverage < 0.4);
 });
 
 test('silence and voiced tone are not promoted to stationary background noise', () => {
