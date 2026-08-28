@@ -1,0 +1,122 @@
+import { test, expect } from '@playwright/test';
+
+function restorationWavFixture({ seconds = 3, sampleRate = 16000, reflectionDelayMs = 36, reflectionAmount = 0.18 } = {}) {
+  const samples = Math.floor(seconds * sampleRate);
+  const pcm = new Float32Array(samples);
+  const voiceRanges = [[0.18, 0.58], [0.82, 1.22], [1.48, 1.88], [2.12, 2.52]];
+  let random = 0x12345678;
+  for (let index = 0; index < samples; index += 1) {
+    const time = index / sampleRate;
+    random = (1664525 * random + 1013904223) >>> 0;
+    let value = (((random / 0xffffffff) * 2) - 1) * 0.008;
+    for (const [start, end] of voiceRanges) {
+      if (time < start || time >= end) continue;
+      const phase = (time - start) / (end - start);
+      const envelope = Math.min(1, phase / 0.035, (1 - phase) / 0.05);
+      value += envelope * (0.12 * Math.sin(2 * Math.PI * 220 * time) + 0.045 * Math.sin(2 * Math.PI * 660 * time));
+    }
+    pcm[index] = value;
+  }
+  const delay = Math.round(reflectionDelayMs * sampleRate / 1000);
+  for (let index = samples - 1; index >= delay; index -= 1) pcm[index] += reflectionAmount * pcm[index - delay];
+  const buffer = Buffer.alloc(44 + samples * 2);
+  buffer.write('RIFF', 0); buffer.writeUInt32LE(36 + samples * 2, 4); buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12); buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24); buffer.writeUInt32LE(sampleRate * 2, 28); buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36); buffer.writeUInt32LE(samples * 2, 40);
+  for (let index = 0; index < samples; index += 1) buffer.writeInt16LE(Math.round(Math.max(-1, Math.min(1, pcm[index])) * 32767), 44 + index * 2);
+  return buffer;
+}
+
+async function sendPablo(page, message) {
+  const form = page.locator('[data-pablo-form]');
+  await form.locator('input[name="message"]').fill(message);
+  await form.getByRole('button', { name: 'Enviar' }).click();
+}
+
+async function seedVocalProject(page) {
+  await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const sections = await import('./core/src/section-map.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    const vocal = project.tracks[0];
+    vocal.kind = 'recording';
+    vocal.name = 'Voz principal';
+    project.activeTrackId = vocal.id;
+    project.arrangementMap = sections.upsertConfirmedSection(project.arrangementMap, {
+      kind: 'chorus', startSeconds: 0.05, endSeconds: 2.9, source: 'user_manual', confidence: 1,
+    });
+    await storage.saveProject(project);
+  });
+}
+
+test('WEB RESTORATION RECOMMENDATION GATE: Pablo explains the same v9 gate without mutating before explicit cleanup', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Recomendação Restauração');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('#audio-picker').setInputFiles({ name: 'restoration-recommendation.wav', mimeType: 'audio/wav', buffer: restorationWavFixture() });
+  await expect(page.getByText('restoration-recommendation.wav').first()).toBeVisible();
+  await seedVocalProject(page);
+
+  const measured = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const runtime = await import('./audio-analysis-runtime.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    const vocal = project.tracks.find((track) => track.kind === 'recording');
+    const analysis = await runtime.analyzeAudioTrack(vocal);
+    return {
+      noise: analysis.voice.restoration.noiseWindowCount,
+      reverb: analysis.voice.restoration.reverbWindowCount,
+      guard: analysis.voice.restoration.timbreGuard,
+    };
+  });
+  expect(measured.noise).toBeGreaterThanOrEqual(1);
+  expect(measured.reverb).toBeGreaterThanOrEqual(1);
+  expect(measured.guard).toMatchObject({ pitchPreserving: true, formantPreserving: true });
+
+  await page.locator('[data-route="pablo"]').first().click();
+  const before = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    return JSON.stringify(await storage.getProject(storage.activeProjectSessionId()));
+  });
+
+  await sendPablo(page, 'Pablo, vale a pena restaurar a voz do refrão com ruído e reverb?');
+  const reply = page.getByText(/Avaliei Refrão sem alterar nada/i).last();
+  await expect(reply).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Denoise: recomendado pelo gate v9.*SNR.*margem da voz/i).last()).toBeVisible();
+  await expect(page.getByText(/De-reverb: recomendado pelo gate v9.*reflexo/i).last()).toBeVisible();
+  await expect(page.getByText(/proteção de timbre está válida.*pitch e formantes preservados/i).last()).toBeVisible();
+  await expect(page.getByText(/Studio · recomendação de restauração · somente leitura/i).last()).toBeVisible();
+
+  const afterRecommendation = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    return JSON.stringify(await storage.getProject(storage.activeProjectSessionId()));
+  });
+  expect(afterRecommendation).toBe(before);
+
+  await sendPablo(page, 'Pablo, limpa minha voz só no refrão');
+  await expect(page.getByText(/ruído de fundo reduzido/i).last()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/reflexo do ambiente reduzido/i).last()).toBeVisible();
+  const afterCleanup = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    const vocal = project.tracks.find((track) => track.kind === 'recording');
+    return {
+      denoise: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_denoise').length,
+      dereverb: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_dereverb').length,
+      revisions: project.revisions.length,
+    };
+  });
+  expect(afterCleanup.denoise).toBeGreaterThanOrEqual(1);
+  expect(afterCleanup.dereverb).toBeGreaterThanOrEqual(1);
+  expect(afterCleanup.revisions).toBeGreaterThanOrEqual(1);
+
+  const unexpected = errors.filter((message) => !/favicon/i.test(message) && !/Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element/i.test(message));
+  expect(unexpected).toEqual([]);
+});
