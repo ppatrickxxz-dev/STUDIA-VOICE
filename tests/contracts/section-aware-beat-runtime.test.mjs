@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('project schema owns the canonical arrangement map and snapshots it', async () => {
   const project = await read('packages/core/src/project.mjs');
-  assert.match(project, /PROJECT_SCHEMA_VERSION = 6/);
+  assert.match(project, /PROJECT_SCHEMA_VERSION = 7/);
   assert.match(project, /createArrangementMap/);
   assert.match(project, /normalizeArrangementMap/);
   assert.match(project, /arrangementMap: structuredClone\(clean\.arrangementMap\)/);
