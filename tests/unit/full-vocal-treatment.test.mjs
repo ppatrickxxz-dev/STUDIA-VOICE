@@ -23,6 +23,22 @@ function projectWithSections() {
   return { project, vocal };
 }
 
+function markSectionTreated(project, vocal, index = 0) {
+  const section = project.arrangementMap.sections[index];
+  vocal.regionAutomation.push({
+    id: `pablo_section_vocal_cleanup_plosive:${vocal.id}:1:${section.id}`,
+    kind: 'peaking_eq',
+    startSeconds: Number(section.startSeconds),
+    endSeconds: Number(section.endSeconds),
+    gainDb: -2,
+    frequencyHz: 120,
+    confidence: 0.9,
+    source: 'pablo_section_vocal_cleanup_plosive',
+    enabled: true,
+  });
+  return section;
+}
+
 function richAnalysis() {
   return {
     voice: {
@@ -56,6 +72,10 @@ test('parses whole-voice treatment intent without hijacking scan or section clea
   assert.equal(parsed.scope, 'priority_confirmed_sections');
   assert.equal(parsed.maxSections, 3);
   assert.equal(parsed.intensity, 'balanced');
+  const continued = parseFullVocalTreatmentCommand('Pablo, continua o tratamento vocal');
+  assert.equal(continued.scope, 'remaining_priority_confirmed_sections');
+  assert.equal(continued.mode, 'continue');
+  assert.equal(continued.skipPreviouslyTreated, true);
   assert.equal(parseFullVocalTreatmentCommand('Pablo, analisa minha voz inteira'), null);
   assert.equal(parseFullVocalTreatmentCommand('limpa minha voz no refrão'), null);
   assert.equal(parseFullVocalTreatmentCommand('desfaz a limpeza da voz inteira'), null);
@@ -78,6 +98,34 @@ test('plans a priority treatment chain from the full vocal scan ranking and stay
   assert.equal(result.plannedSections[0].modules.click.applied, true);
   assert.ok(result.plannedSections[0].eventCount >= 4);
   assert.equal(JSON.stringify(project), before);
+});
+
+test('continuing treatment skips already treated sections and plans only remaining candidates', () => {
+  const { project, vocal } = projectWithSections();
+  const first = markSectionTreated(project, vocal, 0);
+  const before = JSON.stringify(project);
+  const command = parseFullVocalTreatmentCommand('continua o tratamento vocal');
+  const result = planFullVocalTreatment(project, command, { analysis: richAnalysis() });
+  assert.equal(result.ok, true);
+  assert.equal(result.continueMode, true);
+  assert.equal(result.previouslyTreatedCount, 1);
+  assert.equal(result.previouslyTreatedSections[0].sectionId, first.id);
+  assert.equal(result.skippedSections.some((section) => section.reason === 'already_treated'), true);
+  assert.equal(result.plannedSections.some((section) => section.sectionId === first.id), false);
+  assert.equal(result.plannedSections[0].kind, 'chorus');
+  assert.equal(result.plannedSections[0].occurrence, 2);
+  assert.equal(JSON.stringify(project), before);
+});
+
+test('continuing treatment fails closed when every actionable section is already treated', () => {
+  const { project, vocal } = projectWithSections();
+  markSectionTreated(project, vocal, 0);
+  markSectionTreated(project, vocal, 2);
+  const command = parseFullVocalTreatmentCommand('prosseguir tratamento vocal');
+  const result = planFullVocalTreatment(project, command, { analysis: richAnalysis() });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'no_remaining_priority_cleanup_evidence');
+  assert.equal(result.previouslyTreatedCount, result.candidateCount);
 });
 
 test('applies only planned priority sections and preserves manual automation', () => {
