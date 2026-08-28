@@ -8,6 +8,7 @@ import { PABLO_SECTION_VOCAL_BODY_SOURCE } from './section-vocal-body.mjs';
 import { PABLO_SECTION_VOCAL_SOFTNESS_SOURCE } from './section-vocal-softness.mjs';
 import { PABLO_SECTION_VOCAL_PRESENCE_SOURCE } from './section-vocal-presence.mjs';
 import { PABLO_SECTION_VOCAL_DYNAMICS_SOURCE } from './section-vocal-dynamics.mjs';
+import { PABLO_SECTION_VOCAL_DEESSER_SOURCE } from './section-vocal-deesser.mjs';
 
 export const SECTION_MIX_UNDO_MODES = Object.freeze({
   ALL: 'all',
@@ -18,6 +19,7 @@ export const SECTION_MIX_UNDO_MODES = Object.freeze({
   VOCAL_SOFTNESS: 'vocal_softness',
   VOCAL_PRESENCE: 'vocal_presence',
   VOCAL_DYNAMICS: 'vocal_dynamics',
+  VOCAL_DEESSER: 'vocal_deesser',
 });
 
 export function parseSectionMixUndoCommand(message = '') {
@@ -27,7 +29,8 @@ export function parseSectionMixUndoCommand(message = '') {
   const section = normalizeSectionKind(sectionMatch?.[1] || '');
   if (!section) return null;
   let mode = null;
-  if (/\b(dinamica|compressao|compressor|picos?)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS;
+  if (/\b(de esser|deesser|sibilancia|sibilancias|sibilante|sibilantes|esses|chiado do s|chiado dos esses)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_DEESSER;
+  else if (/\b(dinamica|compressao|compressor|picos?)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS;
   else if (/\b(presenca|presente|na frente|definicao|clareza|articulacao)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE;
   else if (/\b(suavizacao|suavidade|estridencia|aspereza|menos brilho|escurecimento)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS;
   else if (/\b(corpo|calor|quente|encorpada|encorpado)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_BODY;
@@ -86,7 +89,8 @@ function sourcesForMode(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return [PABLO_SECTION_VOCAL_SOFTNESS_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return [PABLO_SECTION_VOCAL_PRESENCE_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return [PABLO_SECTION_VOCAL_DYNAMICS_SOURCE];
-  if (mode === SECTION_MIX_UNDO_MODES.ALL) return [PABLO_SECTION_VOCAL_GAIN_SOURCE, PABLO_SECTION_VOCAL_SPACE_SOURCE, PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE, PABLO_SECTION_VOCAL_BODY_SOURCE, PABLO_SECTION_VOCAL_SOFTNESS_SOURCE, PABLO_SECTION_VOCAL_PRESENCE_SOURCE, PABLO_SECTION_VOCAL_DYNAMICS_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return [PABLO_SECTION_VOCAL_DEESSER_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.ALL) return [PABLO_SECTION_VOCAL_GAIN_SOURCE, PABLO_SECTION_VOCAL_SPACE_SOURCE, PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE, PABLO_SECTION_VOCAL_BODY_SOURCE, PABLO_SECTION_VOCAL_SOFTNESS_SOURCE, PABLO_SECTION_VOCAL_PRESENCE_SOURCE, PABLO_SECTION_VOCAL_DYNAMICS_SOURCE, PABLO_SECTION_VOCAL_DEESSER_SOURCE];
   return [];
 }
 
@@ -100,4 +104,4 @@ function parseOccurrence(text) {
   if (/\b(terceir[oa]|3[oa]?)\b/.test(text)) return 3;
   return null;
 }
-function normalizeText(value = '') { return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function normalizeText(value = '') { return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[/_-]+/g, ' ').replace(/\s+/g, ' ').trim(); }
