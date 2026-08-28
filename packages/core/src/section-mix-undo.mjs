@@ -9,6 +9,7 @@ import { PABLO_SECTION_VOCAL_SOFTNESS_SOURCE } from './section-vocal-softness.mj
 import { PABLO_SECTION_VOCAL_PRESENCE_SOURCE } from './section-vocal-presence.mjs';
 import { PABLO_SECTION_VOCAL_DYNAMICS_SOURCE } from './section-vocal-dynamics.mjs';
 import { PABLO_SECTION_VOCAL_DEESSER_SOURCE } from './section-vocal-deesser.mjs';
+import { PABLO_SECTION_VOCAL_PLOSIVE_SOURCE } from './section-vocal-plosive.mjs';
 
 export const SECTION_MIX_UNDO_MODES = Object.freeze({
   ALL: 'all',
@@ -20,6 +21,7 @@ export const SECTION_MIX_UNDO_MODES = Object.freeze({
   VOCAL_PRESENCE: 'vocal_presence',
   VOCAL_DYNAMICS: 'vocal_dynamics',
   VOCAL_DEESSER: 'vocal_deesser',
+  VOCAL_PLOSIVE: 'vocal_plosive',
 });
 
 export function parseSectionMixUndoCommand(message = '') {
@@ -29,7 +31,8 @@ export function parseSectionMixUndoCommand(message = '') {
   const section = normalizeSectionKind(sectionMatch?.[1] || '');
   if (!section) return null;
   let mode = null;
-  if (/\b(de esser|deesser|sibilancia|sibilancias|sibilante|sibilantes|esses|chiado do s|chiado dos esses)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_DEESSER;
+  if (/\b(plosiva|plosivas|p e b|pes e bes|estouros? de p|estouros? de b|pop do microfone|pops do microfone|popping vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE;
+  else if (/\b(de esser|deesser|sibilancia|sibilancias|sibilante|sibilantes|esses|chiado do s|chiado dos esses)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_DEESSER;
   else if (/\b(dinamica|compressao|compressor|picos?)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS;
   else if (/\b(presenca|presente|na frente|definicao|clareza|articulacao)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE;
   else if (/\b(suavizacao|suavidade|estridencia|aspereza|menos brilho|escurecimento)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS;
@@ -90,7 +93,8 @@ function sourcesForMode(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return [PABLO_SECTION_VOCAL_PRESENCE_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return [PABLO_SECTION_VOCAL_DYNAMICS_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return [PABLO_SECTION_VOCAL_DEESSER_SOURCE];
-  if (mode === SECTION_MIX_UNDO_MODES.ALL) return [PABLO_SECTION_VOCAL_GAIN_SOURCE, PABLO_SECTION_VOCAL_SPACE_SOURCE, PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE, PABLO_SECTION_VOCAL_BODY_SOURCE, PABLO_SECTION_VOCAL_SOFTNESS_SOURCE, PABLO_SECTION_VOCAL_PRESENCE_SOURCE, PABLO_SECTION_VOCAL_DYNAMICS_SOURCE, PABLO_SECTION_VOCAL_DEESSER_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return [PABLO_SECTION_VOCAL_PLOSIVE_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.ALL) return [PABLO_SECTION_VOCAL_GAIN_SOURCE, PABLO_SECTION_VOCAL_SPACE_SOURCE, PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE, PABLO_SECTION_VOCAL_BODY_SOURCE, PABLO_SECTION_VOCAL_SOFTNESS_SOURCE, PABLO_SECTION_VOCAL_PRESENCE_SOURCE, PABLO_SECTION_VOCAL_DYNAMICS_SOURCE, PABLO_SECTION_VOCAL_DEESSER_SOURCE, PABLO_SECTION_VOCAL_PLOSIVE_SOURCE];
   return [];
 }
 

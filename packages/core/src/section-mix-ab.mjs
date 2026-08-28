@@ -9,6 +9,7 @@ import { PABLO_SECTION_VOCAL_SOFTNESS_SOURCE } from './section-vocal-softness.mj
 import { PABLO_SECTION_VOCAL_PRESENCE_SOURCE } from './section-vocal-presence.mjs';
 import { PABLO_SECTION_VOCAL_DYNAMICS_SOURCE } from './section-vocal-dynamics.mjs';
 import { PABLO_SECTION_VOCAL_DEESSER_SOURCE } from './section-vocal-deesser.mjs';
+import { PABLO_SECTION_VOCAL_PLOSIVE_SOURCE } from './section-vocal-plosive.mjs';
 
 export const PABLO_SECTION_MIX_SOURCES = Object.freeze([
   PABLO_SECTION_VOCAL_GAIN_SOURCE,
@@ -19,6 +20,7 @@ export const PABLO_SECTION_MIX_SOURCES = Object.freeze([
   PABLO_SECTION_VOCAL_PRESENCE_SOURCE,
   PABLO_SECTION_VOCAL_DYNAMICS_SOURCE,
   PABLO_SECTION_VOCAL_DEESSER_SOURCE,
+  PABLO_SECTION_VOCAL_PLOSIVE_SOURCE,
 ]);
 
 export function parseSectionMixABCommand(message = '') {

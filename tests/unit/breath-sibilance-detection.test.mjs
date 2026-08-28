@@ -60,11 +60,14 @@ test('shared pipeline auto-detects events but respects explicitly provided event
     sampleRate,
     breathEvents: [],
     sibilanceEvents: [],
+    plosiveEvents: [],
     pitchOptions: { frameSize: 512, hopSize: 512 },
   });
   assert.equal(provided.voice.eventDetection.source, 'provided');
   assert.equal(provided.voice.breathEvents.length, 0);
   assert.equal(provided.voice.sibilanceEvents.length, 0);
+  assert.equal(provided.voice.plosiveEvents.length, 0);
+  assert.equal(provided.voice.eventDetection.plosiveCount, 0);
 });
 
 test('breath plan preserves normalized start/end time coordinates', () => {

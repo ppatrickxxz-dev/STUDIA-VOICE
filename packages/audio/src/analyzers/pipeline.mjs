@@ -2,6 +2,7 @@ import { analyzePitch } from './pitch.mjs';
 import { analyzeTempo } from './tempo.mjs';
 import { analyzeVoice } from './voice.mjs';
 import { detectBreathAndSibilance } from './breath-sibilance.mjs';
+import { detectPlosives } from './plosive.mjs';
 
 const DEFAULT_INTERACTIVE_PITCH_OPTIONS = Object.freeze({ hopSize: 2048 });
 
@@ -11,10 +12,12 @@ export function analyzeMusicalAudio({
   onsets = [],
   breathEvents = null,
   sibilanceEvents = null,
+  plosiveEvents = null,
   formants = [],
   durationSeconds = null,
   pitchOptions = DEFAULT_INTERACTIVE_PITCH_OPTIONS,
   breathDetectionOptions = undefined,
+  plosiveDetectionOptions = undefined,
 } = {}) {
   const pitch = analyzePitch(samples, sampleRate, pitchOptions);
   const tempo = analyzeTempo(onsets, { durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : (samples?.length && sampleRate ? samples.length / sampleRate : null) });
@@ -22,9 +25,20 @@ export function analyzeMusicalAudio({
   const detected = needsBreathDetection
     ? detectBreathAndSibilance(samples, { sampleRate, ...(breathDetectionOptions || {}) })
     : { breathEvents: [], sibilanceEvents: [] };
+  const needsPlosiveDetection = !Array.isArray(plosiveEvents);
+  const detectedPlosives = needsPlosiveDetection
+    ? detectPlosives(samples, { sampleRate, ...(plosiveDetectionOptions || {}) })
+    : { plosiveEvents: [] };
   const resolvedBreaths = Array.isArray(breathEvents) ? breathEvents : detected.breathEvents;
   const resolvedSibilance = Array.isArray(sibilanceEvents) ? sibilanceEvents : detected.sibilanceEvents;
-  const voice = analyzeVoice({ pitchContour: pitch.pitchContour, breathEvents: resolvedBreaths, sibilanceEvents: resolvedSibilance, formants });
+  const resolvedPlosives = Array.isArray(plosiveEvents) ? plosiveEvents : detectedPlosives.plosiveEvents;
+  const voice = analyzeVoice({
+    pitchContour: pitch.pitchContour,
+    breathEvents: resolvedBreaths,
+    sibilanceEvents: resolvedSibilance,
+    plosiveEvents: resolvedPlosives,
+    formants,
+  });
   return {
     music: {
       bpm: tempo.bpm,
@@ -37,9 +51,10 @@ export function analyzeMusicalAudio({
       ...voice,
       pitchContour: pitch.pitchContour,
       eventDetection: {
-        source: needsBreathDetection ? 'local-heuristic-v1' : 'provided',
+        source: needsBreathDetection || needsPlosiveDetection ? 'local-heuristic-v1' : 'provided',
         breathCount: resolvedBreaths.length,
         sibilanceCount: resolvedSibilance.length,
+        plosiveCount: resolvedPlosives.length,
       }
     },
     confidence: {

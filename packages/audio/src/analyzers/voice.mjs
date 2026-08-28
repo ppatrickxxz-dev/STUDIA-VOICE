@@ -1,4 +1,4 @@
-export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
+export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
   const voiced = pitchContour.filter((point) => point?.voiced && Number.isFinite(point.hz));
   const hzValues = voiced.map((point) => point.hz).sort((a,b)=>a-b);
   const confidence = voiced.length ? voiced.reduce((sum, point) => sum + (Number(point.confidence) || 0), 0) / voiced.length : 0;
@@ -16,6 +16,7 @@ export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEv
     roomReverb: finiteOrNull(roomReverb),
     breathEvents: normalizeEvents(breathEvents),
     sibilanceEvents: normalizeEvents(sibilanceEvents),
+    plosiveEvents: normalizeEvents(plosiveEvents),
     formants: Array.isArray(formants) ? formants : [],
     confidence
   };

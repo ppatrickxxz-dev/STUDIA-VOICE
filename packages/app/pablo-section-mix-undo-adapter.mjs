@@ -57,6 +57,7 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return `Desfiz o tratamento de plosivas que eu tinha criado no ${where}. Removi ${count} microcorte(s) de P/B do Pablo e preservei corpo, grave contínuo, de-esser, dinâmica, respirações e ajustes manuais.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return `Desfiz o de-esser vocal que eu tinha criado no ${where}. Removi ${count} microcorte(s) de sibilância do Pablo e preservei brilho geral, presença, dinâmica, volume, outros EQs, respirações e ajustes manuais.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfiz a dinâmica vocal que eu tinha criado no ${where}. Removi ${count} compressor regional do Pablo e preservei de-esser, volume, EQ, respirações e ajustes manuais.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei de-esser, dinâmica, presença, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
@@ -68,6 +69,7 @@ function successReply(command, section, count) {
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
 function undoRevisionLabel(command, section) {
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return `Desfeito tratamento de plosivas no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return `Desfeito de-esser vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfeita dinâmica vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfeito ganho vocal no ${section.label}`;
@@ -79,6 +81,7 @@ function undoRevisionLabel(command, section) {
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
 function modeLabel(mode) {
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return 'tratamento de plosivas';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return 'de-esser vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return 'dinâmica vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return 'ganho vocal';
