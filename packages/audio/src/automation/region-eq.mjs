@@ -30,7 +30,7 @@ export function normalizePeakingEqEvent(event = {}) {
   const normalized = normalizeBaseEqEvent(event, REGIONAL_PEAKING_EQ_KIND);
   return {
     ...normalized,
-    frequencyHz: clamp(finite(event.frequencyHz, 220), 80, 6000),
+    frequencyHz: clamp(finite(event.frequencyHz, 220), 80, 12000),
     q: clamp(finite(event.q, 0.82), 0.35, 6),
   };
 }
