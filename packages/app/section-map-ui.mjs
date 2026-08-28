@@ -8,6 +8,7 @@ import {
   upsertConfirmedSection,
 } from './core/src/section-map.mjs';
 import { activeProjectSessionId, getProject, listProjects, saveProject } from './storage.mjs';
+import { readStudioPlayhead, recordStudioPlayhead } from './studio-playhead-context.mjs';
 
 const SECTION_OPTIONS = Object.freeze([
   ['intro', 'Intro'],
@@ -22,8 +23,6 @@ const SECTION_OPTIONS = Object.freeze([
 let mounted = false;
 let activeProject = null;
 let editingSectionId = null;
-let lastCursorSeconds = 0;
-let lastCursorProjectId = '';
 
 export function installSectionMapUI() {
   if (mounted) return;
@@ -269,18 +268,19 @@ async function persistVerifiedArrangementMap(nextMap, revisionLabel, {
 
 function captureCursorPosition() {
   const projectId = String(activeProjectSessionId() || '');
-  if (projectId !== lastCursorProjectId) {
-    lastCursorProjectId = projectId;
-    lastCursorSeconds = 0;
-  }
   const parsed = parseClockSeconds(document.querySelector('#current-time')?.textContent || '');
-  if (parsed != null && parsed > 0) lastCursorSeconds = parsed;
+  if (projectId && parsed != null && parsed > 0) recordStudioPlayhead(projectId, parsed);
 }
 
 function currentCursorSeconds() {
-  captureCursorPosition();
+  const projectId = String(activeProjectSessionId() || '');
   const live = parseClockSeconds(document.querySelector('#current-time')?.textContent || '');
-  return live != null && live > 0 ? live : lastCursorSeconds;
+  if (projectId && live != null && live > 0) {
+    recordStudioPlayhead(projectId, live);
+    return live;
+  }
+  const remembered = readStudioPlayhead(projectId);
+  return remembered.ok ? remembered.seconds : 0;
 }
 
 async function currentProject() {
