@@ -4,12 +4,14 @@ import { resolveConfirmedSectionAudition } from './section-audition.mjs';
 import { resolveVocalTrack, timelineRangeToSourceRegion } from './section-vocal-gain.mjs';
 import { planSectionVocalDeEsser } from './section-vocal-deesser.mjs';
 import { planSectionVocalPlosive } from './section-vocal-plosive.mjs';
+import { planSectionVocalClick } from './section-vocal-click.mjs';
 import { planSectionVocalDynamics } from './section-vocal-dynamics.mjs';
 
 export const PABLO_SECTION_VOCAL_CLEANUP_SOURCES = Object.freeze({
   BREATH: 'pablo_section_vocal_cleanup_breath',
   DEESSER: 'pablo_section_vocal_cleanup_deesser',
   PLOSIVE: 'pablo_section_vocal_cleanup_plosive',
+  CLICK: 'pablo_section_vocal_cleanup_click',
   DYNAMICS: 'pablo_section_vocal_cleanup_dynamics',
 });
 export const PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST = Object.freeze(Object.values(PABLO_SECTION_VOCAL_CLEANUP_SOURCES));
@@ -24,6 +26,7 @@ export const DEFAULT_CLEANUP = Object.freeze({
   dynamicsRatio: 2,
   deEsserMaxReductionDb: 3,
   plosiveMaxReductionDb: 3.5,
+  clickMaxReductionDb: 4.5,
 });
 
 export function parseSectionVocalCleanupCommand(message = '') {
@@ -60,7 +63,7 @@ export function planSectionVocalCleanup(project, command, { analysis = null } = 
   if (!target.ok) return target;
   if (!analysis?.voice) return { ...target, ok: false, reason: 'cleanup_analysis_required' };
   const sectionId = target.section.id;
-  const modules = { breath: null, deesser: null, plosive: null, dynamics: null };
+  const modules = { breath: null, deesser: null, plosive: null, click: null, dynamics: null };
   const events = [];
 
   const breathEvents = planBreathCleanup(analysis.voice.breathEvents, target.range, command.intensity, target.track.id, sectionId);
@@ -113,6 +116,27 @@ export function planSectionVocalCleanup(project, command, { analysis = null } = 
     modules.plosive = { applied: true, count: adapted.length };
     events.push(...adapted);
   } else modules.plosive = { applied: false, reason: plosive.reason, count: 0 };
+
+  const clickCommand = {
+    section: command.section,
+    label: command.label,
+    occurrence: command.occurrence,
+    maxReductionDb: command.intensity === 'light' ? 3 : DEFAULT_CLEANUP.clickMaxReductionDb,
+    blocked: false,
+  };
+  const click = planSectionVocalClick(target.project, clickCommand, {
+    clickEvents: analysis.voice.clickEvents,
+    analysisSource: analysis.voice.eventDetection?.source,
+  });
+  if (click.ok) {
+    const adapted = click.events.map((event, index) => ({
+      ...event,
+      id: `${PABLO_SECTION_VOCAL_CLEANUP_SOURCES.CLICK}:${target.track.id}:${index + 1}:${sectionId}`,
+      source: PABLO_SECTION_VOCAL_CLEANUP_SOURCES.CLICK,
+    }));
+    modules.click = { applied: true, count: adapted.length };
+    events.push(...adapted);
+  } else modules.click = { applied: false, reason: click.reason, count: 0 };
 
   const peakEvidence = qualifyingPeakEvents(analysis.voice.peakEvents, target.range);
   if (shouldApplyDynamics(peakEvidence)) {
@@ -243,6 +267,7 @@ function analysisSummary(analysis) {
     breaths: Array.isArray(voice.breathEvents) ? voice.breathEvents.length : 0,
     sibilance: Array.isArray(voice.sibilanceEvents) ? voice.sibilanceEvents.length : 0,
     plosives: Array.isArray(voice.plosiveEvents) ? voice.plosiveEvents.length : 0,
+    clicks: Array.isArray(voice.clickEvents) ? voice.clickEvents.length : 0,
     peaks: Array.isArray(voice.peakEvents) ? voice.peakEvents.length : 0,
     source: String(voice.eventDetection?.source || 'unknown'),
   };
