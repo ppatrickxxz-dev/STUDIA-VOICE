@@ -12,10 +12,10 @@ export function detectPlosives(samples, {
 } = {}) {
   if (!samples || typeof samples.length !== 'number' || samples.length < frameSize) return { plosiveEvents: [], frames: [] };
   const frames = [];
-  let previousRms = 1e-6;
+  let previousRms = null;
   for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
     const feature = analyzePlosiveFrame(samples, start, frameSize, sampleRate);
-    const rise = feature.rms / Math.max(previousRms, 1e-6);
+    const rise = previousRms == null ? 1 : feature.rms / Math.max(previousRms, 1e-6);
     const lowScore = smoothStep(0.48, 0.82, feature.lowFrequencyRatio);
     const riseScore = smoothStep(1.35, 3.2, rise);
     const crestScore = smoothStep(2.0, 5.5, feature.crestFactor);
@@ -37,7 +37,7 @@ export function detectPlosives(samples, {
       frequencyHz: feature.frequencyHz,
       spectralConfidence: feature.spectralConfidence,
     });
-    previousRms = Math.max(feature.rms, previousRms * 0.55);
+    previousRms = previousRms == null ? feature.rms : Math.max(feature.rms, previousRms * 0.55);
   }
   return { plosiveEvents: mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }), frames };
 }
