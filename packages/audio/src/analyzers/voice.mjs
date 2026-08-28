@@ -1,4 +1,4 @@
-export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], peakEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
+export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], peakEvents = [], clickEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
   const voiced = pitchContour.filter((point) => point?.voiced && Number.isFinite(point.hz));
   const hzValues = voiced.map((point) => point.hz).sort((a,b)=>a-b);
   const confidence = voiced.length ? voiced.reduce((sum, point) => sum + (Number(point.confidence) || 0), 0) / voiced.length : 0;
@@ -18,6 +18,7 @@ export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEv
     sibilanceEvents: normalizeEvents(sibilanceEvents),
     plosiveEvents: normalizeEvents(plosiveEvents),
     peakEvents: normalizeEvents(peakEvents),
+    clickEvents: normalizeEvents(clickEvents),
     formants: Array.isArray(formants) ? formants : [],
     confidence
   };
@@ -47,6 +48,8 @@ function normalizeEvents(events) {
     const peak = finiteOrNull(event.peak);
     const rms = finiteOrNull(event.rms);
     const transientRise = finiteOrNull(event.transientRise);
+    const differenceRatio = finiteOrNull(event.differenceRatio);
+    const lowFrequencyRatio = finiteOrNull(event.lowFrequencyRatio);
     if (frequencyHz !== null) normalized.frequencyHz = frequencyHz;
     if (spectralPeakHz !== null) normalized.spectralPeakHz = spectralPeakHz;
     if (spectralSpreadHz !== null) normalized.spectralSpreadHz = spectralSpreadHz;
@@ -54,6 +57,8 @@ function normalizeEvents(events) {
     if (peak !== null) normalized.peak = peak;
     if (rms !== null) normalized.rms = rms;
     if (transientRise !== null) normalized.transientRise = transientRise;
+    if (differenceRatio !== null) normalized.differenceRatio = differenceRatio;
+    if (lowFrequencyRatio !== null) normalized.lowFrequencyRatio = lowFrequencyRatio;
     if (event.spectralSource) normalized.spectralSource = String(event.spectralSource);
     if (event.source) normalized.source = String(event.source);
     return normalized;

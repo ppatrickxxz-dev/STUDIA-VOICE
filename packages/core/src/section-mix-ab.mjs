@@ -10,6 +10,7 @@ import { PABLO_SECTION_VOCAL_PRESENCE_SOURCE } from './section-vocal-presence.mj
 import { PABLO_SECTION_VOCAL_DYNAMICS_SOURCE } from './section-vocal-dynamics.mjs';
 import { PABLO_SECTION_VOCAL_DEESSER_SOURCE } from './section-vocal-deesser.mjs';
 import { PABLO_SECTION_VOCAL_PLOSIVE_SOURCE } from './section-vocal-plosive.mjs';
+import { PABLO_SECTION_VOCAL_CLICK_SOURCE } from './section-vocal-click.mjs';
 import { PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST } from './section-vocal-cleanup.mjs';
 
 export const PABLO_SECTION_MIX_SOURCES = Object.freeze([
@@ -22,6 +23,7 @@ export const PABLO_SECTION_MIX_SOURCES = Object.freeze([
   PABLO_SECTION_VOCAL_DYNAMICS_SOURCE,
   PABLO_SECTION_VOCAL_DEESSER_SOURCE,
   PABLO_SECTION_VOCAL_PLOSIVE_SOURCE,
+  PABLO_SECTION_VOCAL_CLICK_SOURCE,
   ...PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST,
 ]);
 
