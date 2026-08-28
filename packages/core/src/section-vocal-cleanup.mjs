@@ -29,7 +29,7 @@ export const DEFAULT_CLEANUP = Object.freeze({
 export function parseSectionVocalCleanupCommand(message = '') {
   const text = normalizeText(message);
   if (!text || /\b(desfaz|desfazer|volta|voltar|remove|remover)\b/.test(text)) return null;
-  const intent = /\b(limpa (?:a|minha) voz|limpar (?:a|minha) voz|limpeza vocal|faz uma limpeza (?:na|da) voz|fazer uma limpeza (?:na|da) voz|corrige os problemas (?:da|na) minha voz|corrigir os problemas (?:da|na) minha voz|trata (?:a|minha) voz|tratar (?:a|minha) voz)\b/.test(text);
+  const intent = /\b(limpa (?:a|minha) voz|limpar (?:a|minha) voz|limpeza vocal|faz uma limpeza(?: leve| levemente| sutil| sutilmente| um pouco| pouquinho)? (?:na|da) voz|fazer uma limpeza(?: leve| levemente| sutil| sutilmente| um pouco| pouquinho)? (?:na|da) voz|corrige os problemas (?:da|na) minha voz|corrigir os problemas (?:da|na) minha voz|trata (?:a|minha) voz|tratar (?:a|minha) voz)\b/.test(text);
   if (!intent) return null;
   const sectionMatch = text.match(/\b(pre[- ]?refrao|refrao|verso|ponte|intro|rap|outro)\b/);
   const section = normalizeSectionKind(sectionMatch?.[1] || '');
