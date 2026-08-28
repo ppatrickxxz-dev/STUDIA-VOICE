@@ -7,6 +7,7 @@ import {
 } from './section-vocal-cleanup.mjs';
 
 export const PABLO_SECTION_VOCAL_SCAN_SOURCE = 'pablo_section_vocal_scan';
+const NOISE_CLASSIFICATION_GATE = Object.freeze({ confidence: 0.68, stationarity: 0.55, minRmsDb: -68 });
 
 export function parseSectionVocalScanCommand(message = '') {
   const text = normalizeText(message);
@@ -64,6 +65,12 @@ export function planSectionVocalScan(project, command, { analysis = null } = {})
     }, target, { autoEdit: dynamicsAutoEdit }));
   }
 
+  const classifiedNoise = qualifyingNoiseClassification(analysis.voice.noiseEvents, target.range);
+  for (const event of classifiedNoise) {
+    const type = event.noiseKind === 'hum' ? 'hum' : 'broadband_noise';
+    findings.push(buildFinding(type, event, target, { autoEdit: false }));
+  }
+
   findings.sort((a, b) => a.timelineStartSeconds - b.timelineStartSeconds || a.type.localeCompare(b.type));
   const observed = observedCounts(analysis.voice, target.range);
   const actionableCount = findings.filter((finding) => finding.autoEdit).length;
@@ -81,6 +88,7 @@ export function planSectionVocalScan(project, command, { analysis = null } = {})
     reviewCount,
     clean: findings.length === 0,
     analysisSource: String(analysis.voice.eventDetection?.source || 'unknown'),
+    noiseAnalysisSource: String(analysis.voice.noiseDetection?.source || 'unknown'),
   };
 }
 
@@ -112,6 +120,10 @@ function buildFinding(type, event, target, { autoEdit = true } = {}) {
   if (Number.isFinite(Number(event?.reflectionDelayMs))) finding.reflectionDelayMs = roundTenth(Number(event.reflectionDelayMs));
   if (Number.isFinite(Number(event?.correlation))) finding.correlation = roundHundredth(Number(event.correlation));
   if (Number.isFinite(Number(event?.amount))) finding.dereverbAmount = roundHundredth(Number(event.amount));
+  if (Number.isFinite(Number(event?.rmsDb))) finding.rmsDb = roundTenth(Number(event.rmsDb));
+  if (Number.isFinite(Number(event?.stationarity))) finding.stationarity = roundHundredth(clamp01(event.stationarity));
+  if (Number.isFinite(Number(event?.humConfidence))) finding.humConfidence = roundHundredth(clamp01(event.humConfidence));
+  if (event?.noiseKind) finding.noiseKind = String(event.noiseKind);
   if (event?.timbreProtected === true) finding.timbreProtected = true;
   return finding;
 }
@@ -135,10 +147,13 @@ function findingLabel(type) {
   if (type === 'peak') return 'Pico de dinâmica';
   if (type === 'noise') return 'Ruído de fundo';
   if (type === 'reverb') return 'Reflexo do ambiente';
+  if (type === 'hum') return 'Hum de rede';
+  if (type === 'broadband_noise') return 'Ruído broadband';
   return 'Evidência vocal';
 }
 
 function observedCounts(voice, range) {
+  const classifiedNoise = (Array.isArray(voice?.noiseEvents) ? voice.noiseEvents : []).filter((event) => overlapsRange(event, range));
   return {
     breaths: countOverlap(voice?.breathEvents, range),
     sibilance: countOverlap(voice?.sibilanceEvents, range),
@@ -147,6 +162,8 @@ function observedCounts(voice, range) {
     peaks: countOverlap(voice?.peakEvents, range),
     noiseWindows: countRestorationWindows(voice?.restoration?.windows, range, 'noise'),
     reverbWindows: countRestorationWindows(voice?.restoration?.windows, range, 'reverb'),
+    classifiedNoise: classifiedNoise.length,
+    hum: classifiedNoise.filter((event) => event?.noiseKind === 'hum').length,
   };
 }
 
@@ -168,6 +185,20 @@ function qualifyingPeakEvents(events, range) {
     const intensity = clamp01(event?.intensity);
     return confidence >= DEFAULT_CLEANUP.peakConfidenceThreshold
       && intensity >= DEFAULT_CLEANUP.peakIntensityThreshold;
+  });
+}
+
+function qualifyingNoiseClassification(events, range) {
+  if (!Array.isArray(events)) return [];
+  return events.filter((event) => {
+    if (!overlapsRange(event, range)) return false;
+    const confidence = clamp01(event?.confidence);
+    const stationarity = clamp01(event?.stationarity);
+    const rmsDb = Number(event?.rmsDb);
+    return confidence >= NOISE_CLASSIFICATION_GATE.confidence
+      && stationarity >= NOISE_CLASSIFICATION_GATE.stationarity
+      && Number.isFinite(rmsDb)
+      && rmsDb >= NOISE_CLASSIFICATION_GATE.minRmsDb;
   });
 }
 

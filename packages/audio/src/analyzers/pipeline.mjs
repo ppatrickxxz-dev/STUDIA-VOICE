@@ -5,6 +5,7 @@ import { detectBreathAndSibilance } from './breath-sibilance.mjs';
 import { detectPlosives } from './plosive.mjs';
 import { detectVocalPeaks } from './vocal-peaks.mjs';
 import { detectVocalClicks } from './vocal-clicks.mjs';
+import { detectBackgroundNoise } from './background-noise.mjs';
 import { analyzeVocalRestoration } from './vocal-restoration.mjs';
 
 const DEFAULT_INTERACTIVE_PITCH_OPTIONS = Object.freeze({ hopSize: 2048 });
@@ -18,6 +19,7 @@ export function analyzeMusicalAudio({
   plosiveEvents = null,
   peakEvents = null,
   clickEvents = null,
+  noiseEvents = null,
   formants = [],
   durationSeconds = null,
   pitchOptions = DEFAULT_INTERACTIVE_PITCH_OPTIONS,
@@ -25,6 +27,7 @@ export function analyzeMusicalAudio({
   plosiveDetectionOptions = undefined,
   peakDetectionOptions = undefined,
   clickDetectionOptions = undefined,
+  noiseDetectionOptions = undefined,
   restorationOptions = undefined,
 } = {}) {
   const pitch = analyzePitch(samples, sampleRate, pitchOptions);
@@ -55,6 +58,22 @@ export function analyzeMusicalAudio({
       })
     : { clickEvents: [] };
   const resolvedClicks = Array.isArray(clickEvents) ? clickEvents : detectedClicks.clickEvents;
+  const needsNoiseDetection = !Array.isArray(noiseEvents);
+  const detectedNoise = needsNoiseDetection
+    ? detectBackgroundNoise(samples, {
+        sampleRate,
+        pitchContour: pitch.pitchContour,
+        excludedEvents: [
+          ...resolvedBreaths,
+          ...resolvedSibilance,
+          ...resolvedPlosives,
+          ...resolvedPeaks,
+          ...resolvedClicks,
+        ],
+        ...(noiseDetectionOptions || {}),
+      })
+    : { noiseEvents: [] };
+  const resolvedNoise = Array.isArray(noiseEvents) ? noiseEvents : detectedNoise.noiseEvents;
   const restoration = analyzeVocalRestoration(samples, {
     sampleRate,
     pitchContour: pitch.pitchContour,
@@ -67,6 +86,7 @@ export function analyzeMusicalAudio({
     plosiveEvents: resolvedPlosives,
     peakEvents: resolvedPeaks,
     clickEvents: resolvedClicks,
+    noiseEvents: resolvedNoise,
     formants,
     restoration,
     snrDb: restoration.summary?.snrDb,
@@ -92,7 +112,11 @@ export function analyzeMusicalAudio({
         clickCount: resolvedClicks.length,
         noiseWindowCount: restoration.noiseWindowCount,
         reverbWindowCount: restoration.reverbWindowCount,
-      }
+      },
+      noiseDetection: {
+        source: needsNoiseDetection ? 'local-stationary-noise-v1' : 'provided',
+        count: resolvedNoise.length,
+      },
     },
     confidence: {
       pitch: pitch.confidence,
