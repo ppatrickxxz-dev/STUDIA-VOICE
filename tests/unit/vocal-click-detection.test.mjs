@@ -46,24 +46,35 @@ test('click candidate overlapping measured plosive is rejected', () => {
     plosiveEvents: [{ start: 0.39, end: 0.47, confidence: 0.9, frequencyHz: 120 }],
   });
   assert.equal(result.clickEvents.length, 0);
+  assert.ok(result.rejectedByPlosiveOverlap >= 1);
 });
 
-test('click candidate overlapping a sustained large peak is rejected but short peak evidence is not a blanket veto', () => {
+test('sustained peak shape is rejected while short or high-crest framed peak evidence does not blanket-veto a click', () => {
   const samples = voiceWithClick();
   const rejected = detectVocalClicks(samples, {
     sampleRate,
     frameSize: 64,
     hopSize: 16,
-    peakEvents: [{ start: 0.39, end: 0.49, confidence: 0.9, intensity: 1 }],
+    peakEvents: [{ start: 0.39, end: 0.49, confidence: 0.9, intensity: 1, peak: 0.32, rms: 0.16 }],
   });
   assert.equal(rejected.clickEvents.length, 0);
-  const retained = detectVocalClicks(samples, {
+  assert.ok(rejected.rejectedBySustainedPeakOverlap >= 1);
+
+  const shortRetained = detectVocalClicks(samples, {
     sampleRate,
     frameSize: 64,
     hopSize: 16,
-    peakEvents: [{ start: 0.415, end: 0.43, confidence: 0.9, intensity: 1 }],
+    peakEvents: [{ start: 0.415, end: 0.43, confidence: 0.9, intensity: 1, peak: 0.56, rms: 0.06 }],
   });
-  assert.ok(retained.clickEvents.length >= 1);
+  assert.ok(shortRetained.clickEvents.length >= 1);
+
+  const framedImpulseRetained = detectVocalClicks(samples, {
+    sampleRate,
+    frameSize: 64,
+    hopSize: 16,
+    peakEvents: [{ start: 0.39, end: 0.49, confidence: 0.9, intensity: 1, peak: 0.56, rms: 0.05 }],
+  });
+  assert.ok(framedImpulseRetained.clickEvents.length >= 1);
 });
 
 test('canonical pipeline exposes clickEvents and explicit five-family evidence remains provided', () => {
