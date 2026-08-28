@@ -88,16 +88,22 @@ async function projectState(page) {
     const storage = await import('./storage.mjs');
     const project = await storage.getProject(storage.activeProjectSessionId());
     const vocal = project.tracks.find((track) => track.kind === 'recording');
+    const sectionIds = project.arrangementMap.sections.map((section) => section.id);
+    const automation = vocal.regionAutomation.map((event) => ({ id: event.id, kind: event.kind, source: event.source, enabled: event.enabled }));
     return {
       updatedAt: project.updatedAt,
       revisions: project.revisions.length,
-      sectionIds: project.arrangementMap.sections.map((section) => section.id),
-      automation: vocal.regionAutomation.map((event) => ({ id: event.id, kind: event.kind, source: event.source, enabled: event.enabled })),
+      sectionIds,
+      cleanupBySection: Object.fromEntries(sectionIds.map((sectionId) => [
+        sectionId,
+        automation.filter((event) => String(event.id).endsWith(`:${sectionId}`) && String(event.source).startsWith('pablo_section_vocal_cleanup_')).length,
+      ])),
+      automation,
     };
   });
 }
 
-test('WEB FULL VOCAL TREATMENT GATE: Pablo treats the highest-priority confirmed sections and persists only canonical cleanup automation', async ({ page }) => {
+test('WEB FULL VOCAL TREATMENT GATE: Pablo treats by priority, then continues without duplicating treated sections', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -131,26 +137,42 @@ test('WEB FULL VOCAL TREATMENT GATE: Pablo treats the highest-priority confirmed
 
   const before = await projectState(page);
   await page.locator('[data-route="pablo"]').first().click();
-  await sendPablo(page, 'Pablo, trata minha voz inteira por prioridade top 2');
+  await sendPablo(page, 'Pablo, trata minha voz inteira por prioridade top 1');
   await expect(page.getByText(/Tratei a voz por prioridade/i).last()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/Studio · tratamento vocal por prioridade salvo/i).last()).toBeVisible();
-  const reply = await page.locator('[data-pablo-log] .pv-msg.assistant').last().innerText();
-  expect(reply).toMatch(/trechos mais críticos/i);
-  expect(reply).toMatch(/1º refrão/i);
-  expect(reply).toMatch(/2º refrão/i);
-  expect(reply).toMatch(/Nada fora das seções escolhidas foi alterado/i);
+  const firstReply = await page.locator('[data-pablo-log] .pv-msg.assistant').last().innerText();
+  expect(firstReply).toMatch(/trechos mais críticos/i);
+  expect(firstReply).toMatch(/1º refrão/i);
+  expect(firstReply).toMatch(/Nada fora das seções escolhidas foi alterado/i);
 
-  const after = await projectState(page);
-  expect(after.updatedAt).not.toBe(before.updatedAt);
-  expect(after.revisions).toBeGreaterThan(before.revisions);
-  const sources = after.automation.map((event) => event.source);
+  const afterFirst = await projectState(page);
+  expect(afterFirst.updatedAt).not.toBe(before.updatedAt);
+  expect(afterFirst.revisions).toBeGreaterThan(before.revisions);
+  expect(afterFirst.cleanupBySection[afterFirst.sectionIds[0]]).toBeGreaterThan(0);
+  expect(afterFirst.cleanupBySection[afterFirst.sectionIds[1]]).toBe(0);
+
+  await sendPablo(page, 'Pablo, continua o tratamento vocal');
+  await expect(page.getByText(/Continuei o tratamento vocal por prioridade/i).last()).toBeVisible({ timeout: 20_000 });
+  const continuedReply = await page.locator('[data-pablo-log] .pv-msg.assistant').last().innerText();
+  expect(continuedReply).toMatch(/sem repetir as seções já tratadas/i);
+  expect(continuedReply).toMatch(/2º refrão/i);
+  expect(continuedReply).toMatch(/Pulei 1 seção\(ões\) que já tinham tratamento vocal salvo/i);
+  expect(continuedReply).toMatch(/Nada fora das novas seções escolhidas foi alterado/i);
+
+  const afterContinue = await projectState(page);
+  expect(afterContinue.updatedAt).not.toBe(afterFirst.updatedAt);
+  expect(afterContinue.revisions).toBeGreaterThan(afterFirst.revisions);
+  expect(afterContinue.cleanupBySection[afterContinue.sectionIds[0]]).toBe(afterFirst.cleanupBySection[afterFirst.sectionIds[0]]);
+  expect(afterContinue.cleanupBySection[afterContinue.sectionIds[1]]).toBeGreaterThan(0);
+
+  const sources = afterContinue.automation.map((event) => event.source);
   expect(sources.includes('user_manual')).toBe(true);
   expect(sources.some((source) => source === 'pablo_section_vocal_cleanup_deesser')).toBe(true);
   expect(sources.some((source) => source === 'pablo_section_vocal_cleanup_plosive')).toBe(true);
   expect(sources.some((source) => source === 'pablo_section_vocal_cleanup_click')).toBe(true);
   expect(sources.some((source) => source === 'pablo_section_vocal_cleanup_dynamics')).toBe(true);
-  for (const sectionId of after.sectionIds) {
-    expect(after.automation.some((event) => String(event.id).endsWith(`:${sectionId}`) && String(event.source).startsWith('pablo_section_vocal_cleanup_'))).toBe(true);
+  for (const sectionId of afterContinue.sectionIds) {
+    expect(afterContinue.automation.some((event) => String(event.id).endsWith(`:${sectionId}`) && String(event.source).startsWith('pablo_section_vocal_cleanup_'))).toBe(true);
   }
 
   const unexpected = errors.filter((message) => !/favicon/i.test(message) && !/Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element/i.test(message));

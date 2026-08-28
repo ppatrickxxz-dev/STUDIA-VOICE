@@ -1,5 +1,9 @@
 import { planFullVocalScan, resolveFullVocalScanTarget } from './full-vocal-scan.mjs';
-import { applySectionVocalCleanup, planSectionVocalCleanup } from './section-vocal-cleanup.mjs';
+import {
+  applySectionVocalCleanup,
+  isCleanupEventForSection,
+  planSectionVocalCleanup,
+} from './section-vocal-cleanup.mjs';
 
 export const PABLO_FULL_VOCAL_TREATMENT_SOURCE = 'pablo_full_vocal_priority_treatment';
 export const DEFAULT_FULL_VOCAL_TREATMENT = Object.freeze({ maxSections: 3 });
@@ -7,16 +11,20 @@ export const DEFAULT_FULL_VOCAL_TREATMENT = Object.freeze({ maxSections: 3 });
 export function parseFullVocalTreatmentCommand(message = '') {
   const text = normalizeText(message);
   if (!text || /\b(desfaz|desfazer|volta|voltar|compara|comparar|prefiro)\b/.test(text)) return null;
-  if (/\b(analisa|analisar|escaneia|escanear|diagnostico|varredura|varre|ouve)\b/.test(text) && !/\b(limpa|limpar|trata|tratar|corrige|corrigir|aplica|aplicar|executa|executar)\b/.test(text)) return null;
-  if (/\b(pre refrao|refrao|verso|ponte|intro|rap|outro)\b/.test(text) && !/\b(secao por secao|por secoes|todas as secoes|todos os trechos|voz inteira|faixa inteira|musica inteira|projeto inteiro)\b/.test(text)) return null;
+  if (/\b(analisa|analisar|escaneia|escanear|diagnostico|varredura|varre|ouve)\b/.test(text) && !/\b(limpa|limpar|trata|tratar|corrige|corrigir|aplica|aplicar|executa|executar|continua|continuar|prossegue|prosseguir)\b/.test(text)) return null;
+  if (/\b(pre refrao|refrao|verso|ponte|intro|rap|outro)\b/.test(text) && !/\b(secao por secao|por secoes|todas as secoes|todos os trechos|voz inteira|faixa inteira|musica inteira|projeto inteiro|proximas secoes|secoes restantes)\b/.test(text)) return null;
 
+  const continueIntent = /\b(continua|continuar|prossegue|prosseguir|segue|seguir|retoma|retomar)\b/.test(text)
+    && /\b(tratamento vocal|limpeza vocal|tratamento da voz|limpeza da voz|tratar minha voz|limpar minha voz|voz)\b/.test(text);
   const treatmentIntent = /\b(limpa (?:a|minha) voz|limpar (?:a|minha) voz|trata (?:a|minha) voz|tratar (?:a|minha) voz|corrige (?:os problemas )?(?:da|na) minha voz|corrigir (?:os problemas )?(?:da|na) minha voz|aplica (?:a )?limpeza vocal|aplicar (?:a )?limpeza vocal|executa (?:a )?limpeza vocal|fazer tratamento vocal|faz tratamento vocal)\b/.test(text);
-  const wholeIntent = /\b(inteira|inteiro|completa|completo|toda|todo|do inicio ao fim|secao por secao|por secoes|todas as secoes|todos os trechos|por prioridade|mais criticos|mais criticas|projeto inteiro|faixa inteira|musica inteira)\b/.test(text);
-  if (!treatmentIntent || !wholeIntent) return null;
+  const wholeIntent = /\b(inteira|inteiro|completa|completo|toda|todo|do inicio ao fim|secao por secao|por secoes|todas as secoes|todos os trechos|por prioridade|mais criticos|mais criticas|proximas secoes|secoes restantes|restante|restantes|projeto inteiro|faixa inteira|musica inteira)\b/.test(text);
+  if (!continueIntent && (!treatmentIntent || !wholeIntent)) return null;
 
   return {
-    scope: 'priority_confirmed_sections',
+    scope: continueIntent ? 'remaining_priority_confirmed_sections' : 'priority_confirmed_sections',
     source: PABLO_FULL_VOCAL_TREATMENT_SOURCE,
+    mode: continueIntent ? 'continue' : 'priority',
+    skipPreviouslyTreated: continueIntent,
     maxSections: parseMaxSections(text),
     intensity: /\b(leve|levemente|sutil|sutilmente|um pouco|pouquinho)\b/.test(text) ? 'light' : 'balanced',
     blocked: false,
@@ -37,10 +45,18 @@ export function planFullVocalTreatment(project, command = {}, { analysis = null 
 
   const maxSections = boundedLimit(command.maxSections, scan.rankedSections.length);
   const candidates = scan.rankedSections.filter((section) => Number(section.actionableCount) > 0);
+  const treatedSectionIds = command.skipPreviouslyTreated ? treatedCleanupSectionIds(target.track, candidates) : new Set();
   const plannedSections = [];
   const skippedSections = [];
+  const previouslyTreatedSections = [];
 
   for (const section of candidates) {
+    if (treatedSectionIds.has(section.sectionId)) {
+      const skipped = skipFor(section, 'already_treated');
+      skippedSections.push(skipped);
+      previouslyTreatedSections.push(skipped);
+      continue;
+    }
     const cleanupCommand = cleanupCommandForSection(section, command);
     if (plannedSections.length >= maxSections) {
       skippedSections.push(skipFor(section, 'outside_priority_limit'));
@@ -72,11 +88,17 @@ export function planFullVocalTreatment(project, command = {}, { analysis = null 
   if (!plannedSections.length) {
     return {
       ok: false,
-      reason: 'no_priority_cleanup_evidence',
+      reason: command.skipPreviouslyTreated && candidates.length && previouslyTreatedSections.length === candidates.length
+        ? 'no_remaining_priority_cleanup_evidence'
+        : 'no_priority_cleanup_evidence',
       source: PABLO_FULL_VOCAL_TREATMENT_SOURCE,
       scan,
       skippedSections,
+      previouslyTreatedSections,
+      previouslyTreatedCount: previouslyTreatedSections.length,
       candidateCount: candidates.length,
+      remainingCandidateCount: Math.max(0, candidates.length - previouslyTreatedSections.length),
+      continueMode: Boolean(command.skipPreviouslyTreated),
     };
   }
 
@@ -84,11 +106,15 @@ export function planFullVocalTreatment(project, command = {}, { analysis = null 
     ok: true,
     source: PABLO_FULL_VOCAL_TREATMENT_SOURCE,
     readOnly: true,
+    continueMode: Boolean(command.skipPreviouslyTreated),
     analysisPasses: scan.analysisPasses,
     trackId: scan.trackId,
     scannedSectionCount: scan.scannedSectionCount,
     rankedSectionCount: scan.rankedSections.length,
     candidateCount: candidates.length,
+    remainingCandidateCount: Math.max(0, candidates.length - previouslyTreatedSections.length),
+    previouslyTreatedCount: previouslyTreatedSections.length,
+    previouslyTreatedSections,
     plannedSectionCount: plannedSections.length,
     skippedSectionCount: skippedSections.length + scan.skippedSectionCount,
     totalScanFindings: scan.totalFindings,
@@ -162,6 +188,19 @@ function cleanupCommandForSection(section, command) {
     intensity: command.intensity || 'balanced',
     blocked: false,
   };
+}
+
+function treatedCleanupSectionIds(track, sections = []) {
+  const knownSectionIds = new Set(sections.map((section) => section.sectionId).filter(Boolean));
+  const treated = new Set();
+  const automation = Array.isArray(track?.regionAutomation) ? track.regionAutomation : [];
+  for (const event of automation) {
+    if (event?.enabled === false) continue;
+    for (const sectionId of knownSectionIds) {
+      if (isCleanupEventForSection(event, sectionId)) treated.add(sectionId);
+    }
+  }
+  return treated;
 }
 
 function skipFor(section, reason) {
