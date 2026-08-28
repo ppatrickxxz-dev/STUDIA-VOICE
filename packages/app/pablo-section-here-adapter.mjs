@@ -1,20 +1,9 @@
 import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
-import { normalizeSectionKind, sectionLabel } from './core/src/section-map.mjs';
+import { parseSectionHereCommand } from './core/src/section-here-command.mjs';
 import { activeProjectSessionId } from './storage.mjs';
 import { readStudioPlayhead } from './studio-playhead-context.mjs';
 
-const SECTION_HERE_PATTERN = /\b(?:marca|marque|marcar|comeca|começa|inicia|iniciar)\s+(?:o|a)?\s*(pre[- ]?refrao|pre[- ]?refrão|refrao|refrão|verso|ponte|intro|rap|outro)\s+(?:comeca\s+|começa\s+)?aqui\b|\b(?:o|a)\s+(pre[- ]?refrao|pre[- ]?refrão|refrao|refrão|verso|ponte|intro|rap|outro)\s+(?:comeca|começa|inicia)\s+aqui\b/i;
-
 let mounted = false;
-
-export function parseSectionHereCommand(message = '') {
-  const text = String(message || '').trim();
-  if (!text || /^\s*\[[^\]]+\]/.test(text)) return null;
-  const match = text.match(SECTION_HERE_PATTERN);
-  const rawSection = match?.[1] || match?.[2] || '';
-  const section = normalizeSectionKind(rawSection);
-  return section ? { section, label: sectionLabel(section) } : null;
-}
 
 export function installPabloSectionHereAdapter() {
   if (mounted) return;
