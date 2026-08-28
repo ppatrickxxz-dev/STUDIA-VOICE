@@ -194,7 +194,7 @@ function normalizeRegionAutomation(input, duration) {
       normalized.q = clamp(finite(event?.q, 1), 0.2, 4);
     }
     if (kind === 'peaking_eq') {
-      normalized.frequencyHz = clamp(finite(event?.frequencyHz, 220), 80, 6000);
+      normalized.frequencyHz = clamp(finite(event?.frequencyHz, 220), 80, 12000);
       normalized.q = clamp(finite(event?.q, 0.82), 0.35, 6);
     }
     if (kind === 'compressor') {
