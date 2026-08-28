@@ -23,6 +23,19 @@ test('section UI edits the canonical arrangement map and snapshots every mutatio
   assert.match(ui, /confidence: 1/);
 });
 
+test('section form uses named controls and confirms persistence by re-reading IndexedDB before success', async () => {
+  const ui = await read('packages/app/section-map-ui.mjs');
+  assert.match(ui, /form\.elements\.namedItem\('kind'\)/);
+  assert.match(ui, /form\.elements\.namedItem\('start'\)/);
+  assert.match(ui, /form\.elements\.namedItem\('end'\)/);
+  assert.match(ui, /persistVerifiedArrangementMap/);
+  assert.match(ui, /await getProject\(saved\.id\)/);
+  assert.match(ui, /mustContainId/);
+  assert.match(ui, /mustNotContainId/);
+  assert.match(ui, /Não marquei como salva/);
+  assert.match(ui, /Não marquei como concluída/);
+});
+
 test('section UI can use the real or last-heard Studio cursor and remains CSP-safe', async () => {
   const ui = await read('packages/app/section-map-ui.mjs');
   assert.match(ui, /document\.querySelector\('#current-time'\)/);
