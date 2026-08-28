@@ -51,7 +51,7 @@ async function onPabloSubmitCapture(event) {
       return;
     }
 
-    const snapshotted = snapshotProject(result.project, `Tratamento vocal por prioridade em ${result.appliedSectionCount} seção(ões)`);
+    const snapshotted = snapshotProject(result.project, `${result.continueMode ? 'Continuação do tratamento vocal' : 'Tratamento vocal por prioridade'} em ${result.appliedSectionCount} seção(ões)`);
     await saveProject(snapshotted);
     const persisted = await getProject(project.id);
     if (!isTreatmentPersisted(persisted, result)) {
@@ -88,12 +88,19 @@ function successReply(result) {
     const modules = appliedModules(section.modules).join(', ');
     return `${where} (${priorityLabel(section.priority)}): ${section.eventCount} ajuste(s)${modules ? ` · ${modules}` : ''}`;
   });
-  const limited = result.candidateCount > result.appliedSectionCount
-    ? ` Parei nas ${result.appliedSectionCount} seção(ões) mais críticas; ${result.candidateCount - result.appliedSectionCount} seção(ões) ainda podem ser tratadas depois.`
+  const remaining = Math.max(0, Number(result.remainingCandidateCount || result.candidateCount || 0) - Number(result.previouslyTreatedCount || 0) - Number(result.appliedSectionCount || 0));
+  const limited = remaining > 0
+    ? ` Parei nas ${result.appliedSectionCount} próxima(s) seção(ões) mais críticas; ${remaining} seção(ões) ainda podem ser tratadas depois.`
+    : '';
+  const already = result.previouslyTreatedCount
+    ? ` Pulei ${result.previouslyTreatedCount} seção(ões) que já tinham tratamento vocal salvo.`
     : '';
   const skipped = result.applicationSkipped?.length
     ? ` ${result.applicationSkipped.length} seção(ões) foram puladas porque o gate fechou durante a aplicação.`
     : '';
+  if (result.continueMode) {
+    return `Continuei o tratamento vocal por prioridade sem repetir as seções já tratadas. Apliquei os próximos trechos críticos: ${sections.join('; ')}.${already}${limited}${skipped} Nada fora das novas seções escolhidas foi alterado.`;
+  }
   return `Tratei a voz por prioridade, usando uma única análise vocal e só os módulos que os gates acústicos autorizaram. Comecei pelos trechos mais críticos: ${sections.join('; ')}.${limited}${skipped} Nada fora das seções escolhidas foi alterado.`;
 }
 
@@ -103,6 +110,7 @@ function blockedReply(result) {
   if (result.reason === 'vocal_track_ambiguous') return 'Há mais de uma faixa vocal possível. Selecione a voz principal no Studio e repita o tratamento.';
   if (result.reason === 'treatment_analysis_required' || result.reason === 'scan_analysis_required') return 'Preciso analisar a própria faixa vocal antes de tratar por prioridade. Não apliquei preset sem evidência acústica.';
   if (result.reason === 'no_scannable_confirmed_sections') return 'As seções confirmadas não estão cobertas com segurança pela faixa vocal atual. Não tratei outro áudio no lugar.';
+  if (result.reason === 'no_remaining_priority_cleanup_evidence') return 'As seções críticas já têm tratamento vocal salvo ou não há novo trecho seguro restante para continuar. Não dupliquei filtros nem alterei nada.';
   if (result.reason === 'no_priority_cleanup_evidence') return 'Varri as seções confirmadas, mas não encontrei trecho com evidência suficiente para aplicar limpeza automática com proteção de timbre. Não alterei nada por aproximação.';
   if (result.reason === 'priority_treatment_apply_failed') return 'O ranking encontrou candidatos, mas a aplicação não passou na verificação final. Não confirmei tratamento salvo.';
   return 'Não consegui resolver a faixa vocal e as seções com segurança. Não alterei o projeto.';
