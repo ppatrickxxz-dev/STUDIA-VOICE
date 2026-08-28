@@ -53,7 +53,21 @@ async function seedVocalProject(page) {
   });
 }
 
-test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb can be applied independently without duplicating or erasing each other', async ({ page }) => {
+async function restorationState(page) {
+  return page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    const vocal = project.tracks.find((track) => track.kind === 'recording');
+    return {
+      denoise: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_denoise'),
+      dereverb: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_dereverb'),
+      manual: vocal.regionAutomation.filter((event) => event.source === 'user_manual'),
+      revisions: project.revisions.length,
+    };
+  });
+}
+
+test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb apply, compare and undo independently without erasing each other', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -70,17 +84,7 @@ test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb can be applied indep
 
   await sendPablo(page, 'Pablo, aplica só o denoise no refrão');
   await expect(page.getByText(/Apliquei só o denoise no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
-  let state = await page.evaluate(async () => {
-    const storage = await import('./storage.mjs');
-    const project = await storage.getProject(storage.activeProjectSessionId());
-    const vocal = project.tracks.find((track) => track.kind === 'recording');
-    return {
-      denoise: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_denoise'),
-      dereverb: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_dereverb'),
-      manual: vocal.regionAutomation.filter((event) => event.source === 'user_manual'),
-      revisions: project.revisions.length,
-    };
-  });
+  let state = await restorationState(page);
   expect(state.denoise.length).toBeGreaterThanOrEqual(1);
   expect(state.dereverb).toHaveLength(0);
   expect(state.manual).toHaveLength(1);
@@ -89,42 +93,67 @@ test('WEB SELECTIVE RESTORATION GATE: denoise and de-reverb can be applied indep
   const firstDenoiseCount = state.denoise.length;
   await sendPablo(page, 'Pablo, aplica só o denoise no refrão');
   await expect(page.getByText(/Apliquei só o denoise no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
-  state = await page.evaluate(async () => {
-    const storage = await import('./storage.mjs');
-    const project = await storage.getProject(storage.activeProjectSessionId());
-    const vocal = project.tracks.find((track) => track.kind === 'recording');
-    return { denoise: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_denoise').length };
-  });
-  expect(state.denoise).toBe(firstDenoiseCount);
+  state = await restorationState(page);
+  expect(state.denoise).toHaveLength(firstDenoiseCount);
 
   await sendPablo(page, 'Pablo, faz só o de-reverb no refrão');
   await expect(page.getByText(/Apliquei só o de-reverb no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
-  state = await page.evaluate(async () => {
-    const storage = await import('./storage.mjs');
-    const project = await storage.getProject(storage.activeProjectSessionId());
-    const vocal = project.tracks.find((track) => track.kind === 'recording');
-    return {
-      denoise: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_denoise'),
-      dereverb: vocal.regionAutomation.filter((event) => event.source === 'pablo_section_vocal_cleanup_dereverb'),
-      manual: vocal.regionAutomation.filter((event) => event.source === 'user_manual'),
-    };
-  });
+  state = await restorationState(page);
   expect(state.denoise).toHaveLength(firstDenoiseCount);
   expect(state.dereverb.length).toBeGreaterThanOrEqual(1);
   expect(state.manual).toHaveLength(1);
   expect(state.dereverb.every((event) => event.kind === 'vocal_dereverb' && event.timbreProtected && event.amount <= 0.2)).toBe(true);
+  const firstDereverbCount = state.dereverb.length;
+
+  await sendPablo(page, 'compara só o denoise no refrão');
+  const denoisePanel = page.locator('[data-section-mix-ab][data-ab-mode="denoise"]').last();
+  await expect(denoisePanel).toBeVisible({ timeout: 10_000 });
+  await expect(denoisePanel).toContainText(/A\/B de denoise pronto/i);
+  await denoisePanel.getByRole('button', { name: 'Ouvir A' }).click();
+  await page.waitForTimeout(100);
+  const abStatus = await page.evaluate(async () => {
+    const runtime = await import('./section-mix-ab-runtime.mjs');
+    return runtime.getSectionMixABStatus();
+  });
+  expect(abStatus.mode).toBe('denoise');
+  expect(abStatus.removedEvents).toBe(firstDenoiseCount);
+  state = await restorationState(page);
+  expect(state.denoise).toHaveLength(firstDenoiseCount);
+  expect(state.dereverb).toHaveLength(firstDereverbCount);
+  expect(state.manual).toHaveLength(1);
+
+  await denoisePanel.getByRole('button', { name: 'Prefiro A · desfazer' }).click();
+  await expect(page.getByText(/Desfiz só o denoise.*Refrão/i).last()).toBeVisible({ timeout: 10_000 });
+  state = await restorationState(page);
+  expect(state.denoise).toHaveLength(0);
+  expect(state.dereverb).toHaveLength(firstDereverbCount);
+  expect(state.manual).toHaveLength(1);
+
+  await sendPablo(page, 'Pablo, aplica só o denoise no refrão');
+  await expect(page.getByText(/Apliquei só o denoise no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
+  state = await restorationState(page);
+  expect(state.denoise.length).toBeGreaterThanOrEqual(1);
+  expect(state.dereverb).toHaveLength(firstDereverbCount);
+
+  await sendPablo(page, 'desfaz só o de-reverb no refrão');
+  await expect(page.getByText(/Desfiz só o de-reverb.*Refrão/i).last()).toBeVisible({ timeout: 10_000 });
+  state = await restorationState(page);
+  expect(state.denoise.length).toBeGreaterThanOrEqual(1);
+  expect(state.dereverb).toHaveLength(0);
+  expect(state.manual).toHaveLength(1);
+
+  await sendPablo(page, 'Pablo, faz só o de-reverb no refrão');
+  await expect(page.getByText(/Apliquei só o de-reverb no Refrão/i).last()).toBeVisible({ timeout: 20_000 });
+  state = await restorationState(page);
+  expect(state.denoise.length).toBeGreaterThanOrEqual(1);
+  expect(state.dereverb.length).toBeGreaterThanOrEqual(1);
 
   await sendPablo(page, 'desfaz a limpeza no refrão');
   await expect(page.getByText(/Desfiz a limpeza vocal.*Refrão/i).last()).toBeVisible({ timeout: 10_000 });
-  const afterUndo = await page.evaluate(async () => {
-    const storage = await import('./storage.mjs');
-    const project = await storage.getProject(storage.activeProjectSessionId());
-    const vocal = project.tracks.find((track) => track.kind === 'recording');
-    return vocal.regionAutomation.map((event) => event.source);
-  });
-  expect(afterUndo.some((source) => source === 'pablo_section_vocal_cleanup_denoise')).toBe(false);
-  expect(afterUndo.some((source) => source === 'pablo_section_vocal_cleanup_dereverb')).toBe(false);
-  expect(afterUndo).toContain('user_manual');
+  state = await restorationState(page);
+  expect(state.denoise).toHaveLength(0);
+  expect(state.dereverb).toHaveLength(0);
+  expect(state.manual).toHaveLength(1);
 
   const unexpected = errors.filter((message) => !/favicon/i.test(message) && !/Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element/i.test(message));
   expect(unexpected).toEqual([]);
