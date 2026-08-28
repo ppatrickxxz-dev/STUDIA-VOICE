@@ -47,11 +47,14 @@ export function detectVocalClicks(samples, {
         : 0.82 * baselineRms + 0.18 * feature.rms;
   }
   const raw = mergeClickFrames(frames, { mergeGapSeconds, maxEventSeconds });
+  const plosiveRejected = raw.filter((event) => overlapsPlosive(event, plosiveEvents));
+  const peakRejected = raw.filter((event) => !overlapsPlosive(event, plosiveEvents) && overlapsLargePeak(event, peakEvents));
   const clicks = raw.filter((event) => !overlapsPlosive(event, plosiveEvents) && !overlapsLargePeak(event, peakEvents));
   return {
     clickEvents: clicks.map((event) => ({ ...event, source: 'vocal-click-impulse-v1' })),
     frames,
-    rejectedByPlosiveOverlap: raw.length - raw.filter((event) => overlapsPlosive(event, plosiveEvents)).length,
+    rejectedByPlosiveOverlap: plosiveRejected.length,
+    rejectedBySustainedPeakOverlap: peakRejected.length,
   };
 }
 
@@ -61,8 +64,10 @@ export function analyzeClickFrame(samples, start, frameSize, sampleRate = 48000)
   let peak = 0;
   let crossings = 0;
   let previous = Number(samples[start]) || 0;
+  const frame = new Float64Array(frameSize);
   for (let index = 0; index < frameSize; index += 1) {
     const value = Number(samples[start + index]) || 0;
+    frame[index] = value;
     sumSquares += value * value;
     peak = Math.max(peak, Math.abs(value));
     if (index > 0) {
@@ -77,12 +82,26 @@ export function analyzeClickFrame(samples, start, frameSize, sampleRate = 48000)
   const differenceRatio = differenceRms / Math.max(rms, 1e-9);
   const crestFactor = peak / Math.max(rms, 1e-9);
   const zcr = crossings / Math.max(1, frameSize - 1);
-  const lowGrid = [90, 140, 220, 320].filter((frequencyHz) => frequencyHz < sampleRate / 2);
-  const referenceGrid = [700, 1200, 2200, 3500, 5500].filter((frequencyHz) => frequencyHz < sampleRate / 2);
-  const lowPower = lowGrid.reduce((sum, frequencyHz) => sum + goertzelPower(samples, start, frameSize, sampleRate, frequencyHz), 0);
-  const referencePower = referenceGrid.reduce((sum, frequencyHz) => sum + goertzelPower(samples, start, frameSize, sampleRate, frequencyHz), 0);
-  const lowFrequencyRatio = lowPower / Math.max(1e-12, lowPower + referencePower);
+  const lowFrequencyRatio = movingAverageLowBandRatio(frame, sampleRate);
   return { rms, differenceRms, differenceRatio, peak, crestFactor, zcr, lowFrequencyRatio };
+}
+
+function movingAverageLowBandRatio(frame, sampleRate) {
+  if (!frame?.length) return 0;
+  const windowSize = Math.max(5, Math.min(65, frame.length, Math.round(Number(sampleRate) / 1000) || 5));
+  let running = 0;
+  let lowSquares = 0;
+  let totalSquares = 0;
+  for (let index = 0; index < frame.length; index += 1) {
+    const value = Number(frame[index]) || 0;
+    totalSquares += value * value;
+    running += value;
+    if (index >= windowSize) running -= Number(frame[index - windowSize]) || 0;
+    const count = Math.min(index + 1, windowSize);
+    const low = running / Math.max(1, count);
+    lowSquares += low * low;
+  }
+  return clamp01(lowSquares / Math.max(totalSquares, 1e-12));
 }
 
 function mergeClickFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
@@ -159,21 +178,6 @@ function overlaps(a, b, padding = 0) {
   const bEnd = Number(b?.end ?? b?.time);
   if (![aStart, aEnd, bStart, bEnd].every(Number.isFinite)) return false;
   return Math.min(aEnd + padding, bEnd + padding) > Math.max(aStart - padding, bStart - padding);
-}
-
-function goertzelPower(samples, start, frameSize, sampleRate, frequencyHz) {
-  if (!(sampleRate > 0) || !(frequencyHz > 0) || frequencyHz >= sampleRate / 2) return 0;
-  const omega = 2 * Math.PI * frequencyHz / sampleRate;
-  const coeff = 2 * Math.cos(omega);
-  let s0 = 0; let s1 = 0; let s2 = 0;
-  for (let index = 0; index < frameSize; index += 1) {
-    const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * index) / Math.max(1, frameSize - 1));
-    const value = (Number(samples[start + index]) || 0) * window;
-    s0 = value + coeff * s1 - s2;
-    s2 = s1;
-    s1 = s0;
-  }
-  return Math.max(0, s1 * s1 + s2 * s2 - coeff * s1 * s2);
 }
 
 function smoothStep(edge0, edge1, value) {
