@@ -96,7 +96,7 @@ test('WEB VOCAL DYNAMICS GATE: real compressor is regional, A/B isolated and sel
     await storage.saveProject(project);
     return { schemaVersion: project.schemaVersion, event, supportCount: support.regionAutomation.length };
   });
-  expect(saved.schemaVersion).toBe(8);
+  expect(saved.schemaVersion).toBe(9);
   expect(saved.event.kind).toBe('compressor');
   expect(saved.event.thresholdDb).toBe(-18); expect(saved.event.ratio).toBe(2.2);
   expect(saved.event.attackSeconds).toBe(0.006); expect(saved.event.releaseSeconds).toBe(0.12);

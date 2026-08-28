@@ -46,6 +46,17 @@ function richAnalysis() {
         { start: 12, end: 12.05, confidence: 0.9, intensity: 0.93, peak: 0.7, transientRise: 2.8, source: 'vocal-peak-transient-v1' },
         { start: 13.2, end: 13.25, confidence: 0.84, intensity: 0.82, peak: 0.62, transientRise: 2.3, source: 'vocal-peak-transient-v1' },
       ],
+      restoration: {
+        source: 'local-vocal-restoration-profile-v1',
+        noiseWindowCount: 1,
+        reverbWindowCount: 1,
+        timbreGuard: { pitchPreserving: true, formantPreserving: true, voicedMarginDb: 10, maxNoiseReductionDb: 5.5, maxDereverbAmount: 0.2, source: 'bounded-vocal-timbre-guard-v1' },
+        windows: [{
+          start: 8.2, end: 9.4,
+          noise: { actionable: true, confidence: 0.86, noiseFloorDb: -43, voicedLevelDb: -20, snrDb: 23, thresholdDb: -38, voicedMarginDb: 18, reductionDb: 3.2, source: 'vocal-noise-floor-v1' },
+          reverb: { actionable: true, delayConsistent: true, confidence: 0.84, reflectionDelayMs: 36, amount: 0.14, dampingHz: 5200, correlation: 0.49, prominence: 0.12, source: 'vocal-early-reflection-v1' },
+        }],
+      },
     },
   };
 }
@@ -59,7 +70,7 @@ test('parses explicit diagnostic language with a named section and does not hija
   assert.equal(parseSectionVocalScanCommand('trata minha voz no refrão'), null);
 });
 
-test('reports five evidence families from the same cleanup gates and keeps positions sorted', () => {
+test('reports seven evidence families from the same cleanup gates and keeps positions sorted', () => {
   const { project } = projectWithVocal();
   const command = parseSectionVocalScanCommand('analisa minha voz no refrão');
   const result = planSectionVocalScan(project, command, { analysis: richAnalysis() });
@@ -68,11 +79,13 @@ test('reports five evidence families from the same cleanup gates and keeps posit
   assert.equal(result.source, PABLO_SECTION_VOCAL_SCAN_SOURCE);
   assert.equal(result.clean, false);
   const types = new Set(result.findings.map((finding) => finding.type));
-  for (const type of ['breath', 'sibilance', 'plosive', 'click', 'peak']) assert.ok(types.has(type), `missing ${type}`);
+  for (const type of ['breath', 'sibilance', 'plosive', 'click', 'peak', 'noise', 'reverb']) assert.ok(types.has(type), `missing ${type}`);
   assert.ok(result.findings.every((finding) => finding.timelineStartSeconds >= 8 && finding.timelineEndSeconds <= 16));
   assert.deepEqual(result.findings.map((finding) => finding.timelineStartSeconds), [...result.findings.map((finding) => finding.timelineStartSeconds)].sort((a, b) => a - b));
   assert.ok(result.findings.some((finding) => finding.type === 'sibilance' && finding.frequencyHz === 9200));
   assert.ok(result.findings.some((finding) => finding.type === 'plosive' && finding.frequencyHz === 120));
+  assert.ok(result.findings.some((finding) => finding.type === 'noise' && finding.snrDb === 23 && finding.timbreProtected));
+  assert.ok(result.findings.some((finding) => finding.type === 'reverb' && finding.reflectionDelayMs === 36 && finding.timbreProtected));
   assert.equal(result.modules.dynamics.applied, true);
   assert.ok(result.findings.filter((finding) => finding.type === 'peak').every((finding) => finding.autoEdit));
 });
@@ -85,6 +98,7 @@ test('peak diagnosis exposes review-only evidence when one moderate peak is not 
   analysis.voice.plosiveEvents = [];
   analysis.voice.clickEvents = [];
   analysis.voice.peakEvents = [{ start: 12, end: 12.04, confidence: 0.74, intensity: 0.68, peak: 0.42, transientRise: 2.1 }];
+  analysis.voice.restoration = null;
   const result = planSectionVocalScan(project, parseSectionVocalScanCommand('faz um diagnóstico da minha voz no refrão'), { analysis });
   assert.equal(result.ok, true);
   assert.equal(result.modules.dynamics.applied, false);

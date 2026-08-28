@@ -30,7 +30,7 @@ test('applies one idempotent high shelf only to the safe vocal track', () => {
 test('regional high shelf survives project migration with frequency metadata', () => {
   const { project } = projectWithVocal(); const applied = applySectionVocalBrightness(project, parseSectionVocalBrightnessCommand('dá mais brilho à minha voz no refrão')); const migrated = migrateProject(applied.project);
   const event = migrated.tracks.find((track) => track.kind === 'recording').regionAutomation.find((item) => item.source === PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE);
-  assert.equal(migrated.schemaVersion, 8); assert.equal(event.kind, 'high_shelf'); assert.equal(event.frequencyHz, 6500); assert.equal(event.gainDb, 2.5);
+  assert.equal(migrated.schemaVersion, 9); assert.equal(event.kind, 'high_shelf'); assert.equal(event.frequencyHz, 6500); assert.equal(event.gainDb, 2.5);
 });
 
 test('brightness uses confirmed-section and vocal ambiguity gates already established by section editing', () => {

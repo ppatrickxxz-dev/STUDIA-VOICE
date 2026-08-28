@@ -32,7 +32,7 @@ test('applies one idempotent broad peaking EQ only to the safe vocal track', () 
 test('regional peaking EQ survives project migration with frequency and Q metadata', () => {
   const { project } = projectWithVocal(); const applied = applySectionVocalBody(project, parseSectionVocalBodyCommand('dá mais corpo à minha voz no refrão')); const migrated = migrateProject(applied.project);
   const event = migrated.tracks.find((track) => track.kind === 'recording').regionAutomation.find((item) => item.source === PABLO_SECTION_VOCAL_BODY_SOURCE);
-  assert.equal(migrated.schemaVersion, 8); assert.equal(event.kind, 'peaking_eq'); assert.equal(event.frequencyHz, 220); assert.equal(event.q, 0.82); assert.equal(event.gainDb, 1.5);
+  assert.equal(migrated.schemaVersion, 9); assert.equal(event.kind, 'peaking_eq'); assert.equal(event.frequencyHz, 220); assert.equal(event.q, 0.82); assert.equal(event.gainDb, 1.5);
 });
 
 test('body uses the same confirmed-section and vocal ambiguity gates as other regional edits', () => {

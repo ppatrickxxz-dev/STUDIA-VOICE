@@ -13,6 +13,8 @@ export const PABLO_SECTION_VOCAL_CLEANUP_SOURCES = Object.freeze({
   PLOSIVE: 'pablo_section_vocal_cleanup_plosive',
   CLICK: 'pablo_section_vocal_cleanup_click',
   DYNAMICS: 'pablo_section_vocal_cleanup_dynamics',
+  DENOISE: 'pablo_section_vocal_cleanup_denoise',
+  DEREVERB: 'pablo_section_vocal_cleanup_dereverb',
 });
 export const PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST = Object.freeze(Object.values(PABLO_SECTION_VOCAL_CLEANUP_SOURCES));
 
@@ -27,6 +29,11 @@ export const DEFAULT_CLEANUP = Object.freeze({
   deEsserMaxReductionDb: 3,
   plosiveMaxReductionDb: 3.5,
   clickMaxReductionDb: 4.5,
+  noiseConfidenceThreshold: 0.72,
+  reverbConfidenceThreshold: 0.72,
+  minVoicedMarginDb: 10,
+  maxNoiseReductionDb: 5.5,
+  maxDereverbAmount: 0.2,
 });
 
 export function parseSectionVocalCleanupCommand(message = '') {
@@ -63,7 +70,7 @@ export function planSectionVocalCleanup(project, command, { analysis = null } = 
   if (!target.ok) return target;
   if (!analysis?.voice) return { ...target, ok: false, reason: 'cleanup_analysis_required' };
   const sectionId = target.section.id;
-  const modules = { breath: null, deesser: null, plosive: null, click: null, dynamics: null };
+  const modules = { breath: null, deesser: null, plosive: null, click: null, dynamics: null, denoise: null, dereverb: null };
   const events = [];
 
   const breathEvents = planBreathCleanup(analysis.voice.breathEvents, target.range, command.intensity, target.track.id, sectionId);
@@ -163,6 +170,15 @@ export function planSectionVocalCleanup(project, command, { analysis = null } = 
       events.push(adapted);
     } else modules.dynamics = { applied: false, reason: dynamics.reason, count: 0, evidenceCount: peakEvidence.length };
   } else modules.dynamics = { applied: false, reason: 'no_peak_evidence', count: 0, evidenceCount: peakEvidence.length };
+
+  const restoration = planRestorationCleanup(analysis.voice.restoration, target.range, {
+    intensity: command.intensity,
+    trackId: target.track.id,
+    sectionId,
+  });
+  modules.denoise = restoration.modules.denoise;
+  modules.dereverb = restoration.modules.dereverb;
+  events.push(...restoration.events);
 
   if (!events.length) {
     return {
@@ -269,8 +285,153 @@ function analysisSummary(analysis) {
     plosives: Array.isArray(voice.plosiveEvents) ? voice.plosiveEvents.length : 0,
     clicks: Array.isArray(voice.clickEvents) ? voice.clickEvents.length : 0,
     peaks: Array.isArray(voice.peakEvents) ? voice.peakEvents.length : 0,
+    noiseWindows: Math.max(0, Number(voice.restoration?.noiseWindowCount) || 0),
+    reverbWindows: Math.max(0, Number(voice.restoration?.reverbWindowCount) || 0),
+    restorationSource: String(voice.restoration?.source || 'unavailable'),
     source: String(voice.eventDetection?.source || 'unknown'),
   };
+}
+
+function planRestorationCleanup(restoration, range, { intensity, trackId, sectionId }) {
+  const events = [];
+  const modules = {
+    denoise: { applied: false, reason: 'no_safe_noise_profile', count: 0, evidenceCount: 0 },
+    dereverb: { applied: false, reason: 'no_safe_reverb_profile', count: 0, evidenceCount: 0 },
+  };
+  const guard = restoration?.timbreGuard;
+  const guardReady = restoration?.source === 'local-vocal-restoration-profile-v1'
+    && guard?.source === 'bounded-vocal-timbre-guard-v1'
+    && guard?.pitchPreserving === true
+    && guard?.formantPreserving === true
+    && Number(guard?.voicedMarginDb) >= DEFAULT_CLEANUP.minVoicedMarginDb
+    && Number(guard?.maxNoiseReductionDb) > 0
+    && Number(guard?.maxNoiseReductionDb) <= DEFAULT_CLEANUP.maxNoiseReductionDb
+    && Number(guard?.maxDereverbAmount) > 0
+    && Number(guard?.maxDereverbAmount) <= DEFAULT_CLEANUP.maxDereverbAmount;
+  if (!guardReady || !Array.isArray(restoration?.windows)) return { events, modules };
+
+  const noiseWindows = restoration.windows.filter((window) => safeNoiseEvidence(window?.noise) && overlapsWindow(window, range));
+  const noiseRegions = mergeRestorationWindows(noiseWindows, range);
+  for (const [index, region] of noiseRegions.entries()) {
+    const evidence = region.windows.map((window) => window.noise);
+    const voicedLevelDb = Math.min(...evidence.map((item) => Number(item.voicedLevelDb)));
+    const thresholdDb = Math.min(...evidence.map((item) => Number(item.thresholdDb)), voicedLevelDb - DEFAULT_CLEANUP.minVoicedMarginDb);
+    const reductionScale = intensity === 'light' ? 0.72 : 1;
+    const reductionDb = Math.min(DEFAULT_CLEANUP.maxNoiseReductionDb, median(evidence.map((item) => Number(item.reductionDb))) * reductionScale);
+    const confidence = median(evidence.map((item) => Number(item.confidence)));
+    events.push({
+      id: `${PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DENOISE}:${trackId}:${index + 1}:${sectionId}`,
+      kind: 'vocal_denoise',
+      startSeconds: roundMillis(region.startSeconds),
+      endSeconds: roundMillis(region.endSeconds),
+      thresholdDb: roundTenth(thresholdDb),
+      reductionDb: roundTenth(reductionDb),
+      attackSeconds: 0.008,
+      releaseSeconds: intensity === 'light' ? 0.1 : 0.06,
+      noiseFloorDb: roundTenth(median(evidence.map((item) => Number(item.noiseFloorDb)))),
+      voicedLevelDb: roundTenth(voicedLevelDb),
+      snrDb: roundTenth(median(evidence.map((item) => Number(item.snrDb)))),
+      voicedMarginDb: roundTenth(voicedLevelDb - thresholdDb),
+      confidence: roundHundredth(confidence),
+      timbreProtected: true,
+      guardSource: String(guard.source || 'bounded-vocal-timbre-guard-v1'),
+      source: PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DENOISE,
+      enabled: true,
+    });
+  }
+  modules.denoise = noiseRegions.length
+    ? { applied: true, count: noiseRegions.length, evidenceCount: noiseWindows.length, timbreProtected: true }
+    : { applied: false, reason: 'no_safe_noise_profile', count: 0, evidenceCount: noiseWindows.length };
+
+  const reverbWindows = restoration.windows.filter((window) => safeReverbEvidence(window?.reverb) && overlapsWindow(window, range));
+  const reverbRegions = mergeRestorationWindows(reverbWindows, range);
+  for (const [index, region] of reverbRegions.entries()) {
+    const evidence = region.windows.map((window) => window.reverb);
+    const amountScale = intensity === 'light' ? 0.7 : 1;
+    const amount = Math.min(DEFAULT_CLEANUP.maxDereverbAmount, median(evidence.map((item) => Number(item.amount))) * amountScale);
+    events.push({
+      id: `${PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DEREVERB}:${trackId}:${index + 1}:${sectionId}`,
+      kind: 'vocal_dereverb',
+      startSeconds: roundMillis(region.startSeconds),
+      endSeconds: roundMillis(region.endSeconds),
+      reflectionDelayMs: roundTenth(median(evidence.map((item) => Number(item.reflectionDelayMs)))),
+      amount: roundHundredth(amount),
+      dampingHz: Math.round(median(evidence.map((item) => Number(item.dampingHz)))),
+      correlation: roundHundredth(median(evidence.map((item) => Number(item.correlation)))),
+      prominence: roundHundredth(median(evidence.map((item) => Number(item.prominence)))),
+      confidence: roundHundredth(median(evidence.map((item) => Number(item.confidence)))),
+      timbreProtected: true,
+      guardSource: String(guard.source || 'bounded-vocal-timbre-guard-v1'),
+      source: PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DEREVERB,
+      enabled: true,
+    });
+  }
+  modules.dereverb = reverbRegions.length
+    ? { applied: true, count: reverbRegions.length, evidenceCount: reverbWindows.length, timbreProtected: true }
+    : { applied: false, reason: 'no_safe_reverb_profile', count: 0, evidenceCount: reverbWindows.length };
+  return { events, modules };
+}
+
+function safeNoiseEvidence(evidence) {
+  const confidence = Number(evidence?.confidence);
+  const reductionDb = Number(evidence?.reductionDb);
+  const thresholdDb = Number(evidence?.thresholdDb);
+  const voicedLevelDb = Number(evidence?.voicedLevelDb);
+  const voicedMarginDb = voicedLevelDb - thresholdDb;
+  return evidence?.source === 'vocal-noise-floor-v1'
+    && evidence?.actionable === true
+    && confidence >= DEFAULT_CLEANUP.noiseConfidenceThreshold
+    && reductionDb > 0
+    && reductionDb <= DEFAULT_CLEANUP.maxNoiseReductionDb
+    && voicedMarginDb >= DEFAULT_CLEANUP.minVoicedMarginDb
+    && Number(evidence?.noiseFloorDb) >= -58
+    && Number(evidence?.noiseFloorDb) <= -18
+    && Number(evidence?.snrDb) >= 5.5
+    && Number(evidence?.snrDb) <= 29;
+}
+
+function safeReverbEvidence(evidence) {
+  return evidence?.source === 'vocal-early-reflection-v1'
+    && evidence?.actionable === true
+    && evidence?.delayConsistent === true
+    && Number(evidence?.confidence) >= DEFAULT_CLEANUP.reverbConfidenceThreshold
+    && Number(evidence?.reflectionDelayMs) >= 18
+    && Number(evidence?.reflectionDelayMs) <= 90
+    && Number(evidence?.amount) > 0
+    && Number(evidence?.amount) <= DEFAULT_CLEANUP.maxDereverbAmount
+    && Number(evidence?.correlation) >= 0.1
+    && Number(evidence?.prominence) >= 0.04;
+}
+
+function overlapsWindow(window, range) {
+  const start = Number(window?.start);
+  const end = Number(window?.end);
+  return Number.isFinite(start) && Number.isFinite(end) && end > start
+    && Math.min(end, range.endSeconds) > Math.max(start, range.startSeconds);
+}
+
+function mergeRestorationWindows(windows, range) {
+  const sorted = windows.map((window) => ({
+    startSeconds: Math.max(Number(window.start), range.startSeconds),
+    endSeconds: Math.min(Number(window.end), range.endSeconds),
+    window,
+  })).filter((item) => item.endSeconds - item.startSeconds >= 0.2)
+    .sort((a, b) => a.startSeconds - b.startSeconds);
+  const regions = [];
+  for (const item of sorted) {
+    const current = regions.at(-1);
+    if (current && item.startSeconds <= current.endSeconds + 0.04) {
+      current.endSeconds = Math.max(current.endSeconds, item.endSeconds);
+      current.windows.push(item.window);
+    } else regions.push({ startSeconds: item.startSeconds, endSeconds: item.endSeconds, windows: [item.window] });
+  }
+  return regions;
+}
+
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  return sorted[Math.floor((sorted.length - 1) / 2)];
 }
 
 function parseOccurrence(text) {
@@ -282,4 +443,5 @@ function parseOccurrence(text) {
 function normalizeText(value = '') { return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[/_-]+/g, ' ').replace(/\s+/g, ' ').trim(); }
 function roundMillis(value) { return Math.round(Number(value) * 1000) / 1000; }
 function roundHundredth(value) { return Math.round(Number(value) * 100) / 100; }
+function roundTenth(value) { return Math.round(Number(value) * 10) / 10; }
 function clamp(value, min, max) { return Math.min(max, Math.max(min, Number(value) || 0)); }

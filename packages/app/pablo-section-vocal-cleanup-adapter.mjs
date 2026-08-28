@@ -85,6 +85,18 @@ function sameCleanupEvent(saved, planned) {
       if (Math.abs(Number(saved?.[field]) - Number(planned?.[field])) > 0.001) return false;
     }
   }
+  if (planned.kind === 'vocal_denoise') {
+    for (const field of ['thresholdDb', 'reductionDb', 'attackSeconds', 'releaseSeconds', 'noiseFloorDb', 'voicedLevelDb', 'snrDb', 'voicedMarginDb']) {
+      if (Math.abs(Number(saved?.[field]) - Number(planned?.[field])) > 0.001) return false;
+    }
+    if (saved.timbreProtected !== true || saved.guardSource !== planned.guardSource) return false;
+  }
+  if (planned.kind === 'vocal_dereverb') {
+    for (const field of ['reflectionDelayMs', 'amount', 'dampingHz', 'correlation', 'prominence']) {
+      if (Math.abs(Number(saved?.[field]) - Number(planned?.[field])) > 0.001) return false;
+    }
+    if (saved.timbreProtected !== true || saved.guardSource !== planned.guardSource) return false;
+  }
   return true;
 }
 
@@ -95,13 +107,17 @@ function successReply(command, result) {
   if (result.modules.plosive?.applied) applied.push(`${result.modules.plosive.count} plosiva(s) tratada(s)`);
   if (result.modules.click?.applied) applied.push(`${result.modules.click.count} estalo(s) curto(s) atenuado(s)`);
   if (result.modules.dynamics?.applied) applied.push(`picos controlados (${result.modules.dynamics.evidenceCount} evidência(s))`);
+  if (result.modules.denoise?.applied) applied.push(`ruído de fundo reduzido em ${result.modules.denoise.count} trecho(s), só abaixo da margem segura da voz`);
+  if (result.modules.dereverb?.applied) applied.push(`reflexo do ambiente reduzido em ${result.modules.dereverb.count} trecho(s), sem mudar pitch ou formantes`);
   const skipped = [];
   if (!result.modules.breath?.applied) skipped.push('respirações');
   if (!result.modules.deesser?.applied) skipped.push('sibilância');
   if (!result.modules.plosive?.applied) skipped.push('plosivas');
   if (!result.modules.click?.applied) skipped.push('estalos');
   if (!result.modules.dynamics?.applied) skipped.push('compressão');
-  return `Limpei ${occurrenceLabel(command, result.section)} usando só o que encontrei na própria voz: ${applied.join('; ')}.${skipped.length ? ` Não apliquei ${skipped.join(', ')} porque não havia evidência suficiente.` : ''} Nada fora dessa seção foi alterado.`;
+  if (!result.modules.denoise?.applied) skipped.push('denoise');
+  if (!result.modules.dereverb?.applied) skipped.push('de-reverb');
+  return `Limpei ${occurrenceLabel(command, result.section)} usando só o que encontrei na própria voz: ${applied.join('; ')}.${skipped.length ? ` Não apliquei ${skipped.join(', ')} porque não havia evidência suficiente ou a proteção de timbre não abriu o gate.` : ''} Nada fora dessa seção foi alterado.`;
 }
 
 function blockedReply(command, result) {
@@ -113,7 +129,7 @@ function blockedReply(command, result) {
   if (result.reason === 'vocal_track_ambiguous') return 'Há mais de uma faixa vocal possível. Selecione a voz no Studio e repita o pedido.';
   if (result.reason === 'section_outside_vocal_track') return `A faixa vocal não cobre o trecho confirmado de ${command.label.toLowerCase()}. Não criei tratamento fora do áudio.`;
   if (result.reason === 'cleanup_analysis_required') return 'Preciso analisar a própria faixa vocal antes da limpeza. Não apliquei um preset sem ouvir o áudio.';
-  if (result.reason === 'no_cleanup_evidence') return `Analisei ${command.label.toLowerCase()} e não encontrei respirações fortes, sibilância, plosivas, estalos ou picos com confiança suficiente. Não alterei a voz por aproximação.`;
+  if (result.reason === 'no_cleanup_evidence') return `Analisei ${command.label.toLowerCase()} e não encontrei respirações fortes, sibilância, plosivas, estalos, picos, ruído ou reflexo de ambiente com confiança e margem de timbre suficientes. Não alterei a voz por aproximação.`;
   return 'Não consegui resolver essa limpeza regional com segurança. Não alterei o projeto.';
 }
 

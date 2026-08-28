@@ -52,12 +52,12 @@ test('applies one idempotent compressor only to the resolved vocal track', () =>
   assert.equal(second.replacedExisting, true);
 });
 
-test('schema v8 migration preserves regional compressor metadata', () => {
+test('schema v9 migration preserves regional compressor metadata', () => {
   const { project } = projectWithVocal();
   const applied = applySectionVocalDynamics(project, parseSectionVocalDynamicsCommand('segura os picos da minha voz no refrão'));
   const migrated = migrateProject(applied.project);
   const event = migrated.tracks.find((track) => track.kind === 'recording').regionAutomation.find((item) => item.source === PABLO_SECTION_VOCAL_DYNAMICS_SOURCE);
-  assert.equal(migrated.schemaVersion, 8);
+  assert.equal(migrated.schemaVersion, 9);
   assert.equal(event.kind, 'compressor');
   assert.equal(event.thresholdDb, -18);
   assert.equal(event.ratio, 2.2);

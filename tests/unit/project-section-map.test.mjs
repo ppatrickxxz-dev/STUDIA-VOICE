@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { createProject, migrateProject, snapshotProject } from '../../packages/core/src/project.mjs';
 import { upsertConfirmedSection } from '../../packages/core/src/section-map.mjs';
 
-test('new projects carry the canonical arrangement map in schema v8', () => {
+test('new projects carry the canonical arrangement map in schema v9', () => {
   const project = createProject('Mapa');
-  assert.equal(project.schemaVersion, 8);
+  assert.equal(project.schemaVersion, 9);
   assert.equal(project.arrangementMap?.schema, 'pablovoice_arrangement_map_v1');
   assert.deepEqual(project.arrangementMap?.sections, []);
 });
 
 test('legacy projects migrate without inventing section timings', () => {
   const migrated = migrateProject({ schemaVersion: 5, id: 'legacy-project', name: 'Legacy', tracks: [], lyrics: '[Refrão]\nEu volto aqui', revisions: [] });
-  assert.equal(migrated.schemaVersion, 8);
+  assert.equal(migrated.schemaVersion, 9);
   assert.deepEqual(migrated.arrangementMap.sections, []);
 });
 

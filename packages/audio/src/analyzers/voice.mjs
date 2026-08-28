@@ -1,4 +1,4 @@
-export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], peakEvents = [], clickEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
+export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], peakEvents = [], clickEvents = [], formants = [], snrDb = null, roomReverb = null, restoration = null } = {}) {
   const voiced = pitchContour.filter((point) => point?.voiced && Number.isFinite(point.hz));
   const hzValues = voiced.map((point) => point.hz).sort((a,b)=>a-b);
   const confidence = voiced.length ? voiced.reduce((sum, point) => sum + (Number(point.confidence) || 0), 0) / voiced.length : 0;
@@ -19,9 +19,63 @@ export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEv
     plosiveEvents: normalizeEvents(plosiveEvents),
     peakEvents: normalizeEvents(peakEvents),
     clickEvents: normalizeEvents(clickEvents),
+    restoration: normalizeRestoration(restoration),
     formants: Array.isArray(formants) ? formants : [],
     confidence
   };
+}
+
+function normalizeRestoration(input) {
+  if (!input || typeof input !== 'object') return {
+    source: 'unavailable', windows: [], noiseWindowCount: 0, reverbWindowCount: 0,
+    summary: { noiseFloorDb: null, snrDb: null, reflectionDelayMs: null, reflectionCorrelation: null },
+    timbreGuard: null,
+  };
+  return {
+    source: String(input.source || 'unknown'),
+    windows: (Array.isArray(input.windows) ? input.windows : []).map((window) => ({
+      id: String(window?.id || ''),
+      start: finiteOrNull(window?.start),
+      end: finiteOrNull(window?.end),
+      noise: normalizeRestorationEvidence(window?.noise, 'vocal-noise-floor-v1'),
+      reverb: normalizeRestorationEvidence(window?.reverb, 'vocal-early-reflection-v1'),
+    })).filter((window) => window.start !== null && window.end !== null && window.end > window.start),
+    noiseWindowCount: Math.max(0, Math.floor(Number(input.noiseWindowCount) || 0)),
+    reverbWindowCount: Math.max(0, Math.floor(Number(input.reverbWindowCount) || 0)),
+    summary: {
+      noiseFloorDb: finiteOrNull(input.summary?.noiseFloorDb),
+      snrDb: finiteOrNull(input.summary?.snrDb),
+      reflectionDelayMs: finiteOrNull(input.summary?.reflectionDelayMs),
+      reflectionCorrelation: finiteOrNull(input.summary?.reflectionCorrelation),
+    },
+    timbreGuard: input.timbreGuard && typeof input.timbreGuard === 'object' ? {
+      pitchPreserving: input.timbreGuard.pitchPreserving === true,
+      formantPreserving: input.timbreGuard.formantPreserving === true,
+      voicedMarginDb: finiteOrNull(input.timbreGuard.voicedMarginDb),
+      maxNoiseReductionDb: finiteOrNull(input.timbreGuard.maxNoiseReductionDb),
+      maxDereverbAmount: finiteOrNull(input.timbreGuard.maxDereverbAmount),
+      source: String(input.timbreGuard.source || 'unknown'),
+    } : null,
+  };
+}
+
+function normalizeRestorationEvidence(input, fallbackSource) {
+  const value = input && typeof input === 'object' ? input : {};
+  const normalized = {
+    actionable: value.actionable === true,
+    confidence: finiteOrNull(value.confidence) ?? 0,
+    source: String(value.source || fallbackSource),
+  };
+  if ('delayConsistent' in value) normalized.delayConsistent = value.delayConsistent === true;
+  for (const field of [
+    'noiseFloorDb', 'voicedLevelDb', 'snrDb', 'thresholdDb', 'voicedMarginDb', 'reductionDb',
+    'quietFrameCount', 'voicedFrameCount', 'reflectionDelayMs', 'correlation', 'prominence',
+    'amount', 'dampingHz',
+  ]) {
+    const number = finiteOrNull(value[field]);
+    if (number !== null) normalized[field] = number;
+  }
+  return normalized;
 }
 
 export function classifyBreathAction(event, { autoThreshold = 0.82, suggestThreshold = 0.55 } = {}) {
