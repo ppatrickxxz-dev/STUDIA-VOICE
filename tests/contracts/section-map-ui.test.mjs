@@ -48,6 +48,12 @@ test('section form uses named controls and confirms persistence by re-reading In
   assert.match(ui, /Não marquei como concluída/);
 });
 
+test('section clock zero-pads whole and fractional seconds', async () => {
+  const ui = await read('packages/app/section-map-ui.mjs');
+  assert.match(ui, /String\(Math\.round\(seconds\)\)\.padStart\(2, '0'\)/);
+  assert.match(ui, /seconds\.toFixed\(1\)\.padStart\(4, '0'\)/);
+});
+
 test('section UI can use the real or last-heard Studio cursor and remains CSP-safe', async () => {
   const ui = await read('packages/app/section-map-ui.mjs');
   assert.match(ui, /document\.querySelector\('#current-time'\)/);
