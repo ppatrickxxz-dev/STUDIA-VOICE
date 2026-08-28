@@ -73,20 +73,23 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei o espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei o ganho da voz, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei brilho, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei ganho, brilho da voz, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei ganho, espaço instrumental, respirações e ajustes manuais.`;
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
 
 function undoRevisionLabel(command, section) {
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfeito ganho vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfeito espaço vocal no ${section.label}`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfeito brilho vocal no ${section.label}`;
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
 
 function modeLabel(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return 'ganho vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return 'espaço vocal';
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return 'brilho vocal';
   return 'ajustes regionais de mix';
 }
 

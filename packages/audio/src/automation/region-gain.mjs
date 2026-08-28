@@ -1,7 +1,7 @@
 export function regionGainEnvelope(events = [], cursor = 0, duration = Infinity, ramp = 0.012) {
   const points = [];
   for (const event of events) {
-    if (event?.enabled === false) continue;
+    if (event?.enabled === false || String(event?.kind || 'gain') !== 'gain') continue;
     const start = Number(event?.startSeconds);
     const end = Number(event?.endSeconds);
     const db = Number(event?.gainDb);

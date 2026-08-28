@@ -3,11 +3,13 @@ import { normalizeSectionKind, sectionLabel } from './section-map.mjs';
 import { resolveConfirmedSectionAudition } from './section-audition.mjs';
 import { PABLO_SECTION_VOCAL_GAIN_SOURCE } from './section-vocal-gain.mjs';
 import { PABLO_SECTION_VOCAL_SPACE_SOURCE } from './section-vocal-space.mjs';
+import { PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE } from './section-vocal-brightness.mjs';
 
 export const SECTION_MIX_UNDO_MODES = Object.freeze({
   ALL: 'all',
   VOCAL_GAIN: 'vocal_gain',
   VOCAL_SPACE: 'vocal_space',
+  VOCAL_BRIGHTNESS: 'vocal_brightness',
 });
 
 export function parseSectionMixUndoCommand(message = '') {
@@ -18,7 +20,8 @@ export function parseSectionMixUndoCommand(message = '') {
   if (!section) return null;
 
   let mode = null;
-  if (/\b(ganho|volume)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_GAIN;
+  if (/\b(brilho|brilhante|high shelf|highshelf)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS;
+  else if (/\b(ganho|volume)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_GAIN;
   else if (/\b(espaco|instrumental|base|beat)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_SPACE;
   else if (/\b(o que voce fez|o que o pablo fez|ajustes? do pablo|edicoes? do pablo|mudancas? do pablo)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.ALL;
   if (!mode) return null;
@@ -108,7 +111,12 @@ export function countSectionMixEvents(project, sectionId, mode = SECTION_MIX_UND
 function sourcesForMode(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return [PABLO_SECTION_VOCAL_GAIN_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return [PABLO_SECTION_VOCAL_SPACE_SOURCE];
-  if (mode === SECTION_MIX_UNDO_MODES.ALL) return [PABLO_SECTION_VOCAL_GAIN_SOURCE, PABLO_SECTION_VOCAL_SPACE_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return [PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.ALL) return [
+    PABLO_SECTION_VOCAL_GAIN_SOURCE,
+    PABLO_SECTION_VOCAL_SPACE_SOURCE,
+    PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE,
+  ];
   return [];
 }
 
