@@ -7,6 +7,8 @@ import {
   normalizeArrangementMap,
   normalizeSectionKind,
   parseClockSeconds,
+  removeArrangementSection,
+  replaceConfirmedSection,
   upsertConfirmedSection,
 } from '../../packages/core/src/section-map.mjs';
 
@@ -30,6 +32,25 @@ test('confirmed manual sections are ordered, persisted and resolved by occurrenc
   assert.equal(findConfirmedSection(map, 'chorus')?.startSeconds, 45);
   assert.equal(findConfirmedSection(map, 'refrão', { occurrence: 2 })?.startSeconds, 92);
   assert.equal(findConfirmedSection(map, 'chorus')?.timingStatus, 'confirmed');
+});
+
+test('confirmed sections can be edited and removed through canonical map operations', () => {
+  let map = upsertConfirmedSection(createArrangementMap(), { kind: 'chorus', startSeconds: 45, source: 'user_manual' });
+  const originalId = map.sections[0].id;
+  map = replaceConfirmedSection(map, originalId, { kind: 'chorus', startSeconds: 48.5, endSeconds: 64, source: 'user_manual', confidence: 1 });
+  assert.equal(map.sections.length, 1);
+  assert.equal(map.sections[0].startSeconds, 48.5);
+  assert.equal(map.sections[0].endSeconds, 64);
+  assert.notEqual(map.sections[0].id, originalId);
+
+  map = removeArrangementSection(map, map.sections[0].id);
+  assert.deepEqual(map.sections, []);
+});
+
+test('editing a missing section fails closed instead of creating a surprise marker', () => {
+  assert.throws(() => replaceConfirmedSection(createArrangementMap(), 'missing', {
+    kind: 'chorus', startSeconds: 20,
+  }), /não encontrada/i);
 });
 
 test('unconfirmed or weak timing is never promoted into an executable section', () => {

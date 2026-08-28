@@ -101,6 +101,23 @@ export function upsertConfirmedSection(map, {
   return clean;
 }
 
+export function replaceConfirmedSection(map, sectionIdValue, input = {}) {
+  const id = String(sectionIdValue || '');
+  const clean = normalizeArrangementMap(map);
+  if (!id || !clean.sections.some((section) => section.id === id)) throw new TypeError('Seção para edição não encontrada.');
+  const without = removeArrangementSection(clean, id);
+  return upsertConfirmedSection(without, input);
+}
+
+export function removeArrangementSection(map, sectionIdValue) {
+  const id = String(sectionIdValue || '');
+  const clean = normalizeArrangementMap(map);
+  if (!id) return clean;
+  clean.sections = clean.sections.filter((section) => section.id !== id);
+  clean.updatedAt = Date.now();
+  return clean;
+}
+
 export function findConfirmedSection(map, kind, { occurrence = 1 } = {}) {
   const normalizedKind = normalizeSectionKind(kind);
   if (!normalizedKind) return null;
