@@ -9,6 +9,7 @@ export function detectPlosives(samples, {
   confidenceThreshold = 0.64,
   mergeGapSeconds = 0.025,
   maxEventSeconds = 0.14,
+  refinementSeconds = 0.06,
 } = {}) {
   if (!samples || typeof samples.length !== 'number' || samples.length < frameSize) return { plosiveEvents: [], frames: [] };
   const frames = [];
@@ -39,7 +40,9 @@ export function detectPlosives(samples, {
     });
     previousRms = previousRms == null ? feature.rms : Math.max(feature.rms, previousRms * 0.55);
   }
-  return { plosiveEvents: mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }), frames };
+  const rough = mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds });
+  const plosiveEvents = rough.map((event) => refinePlosiveBand(event, samples, sampleRate, frameSize, refinementSeconds));
+  return { plosiveEvents, frames };
 }
 
 export function analyzePlosiveFrame(samples, start, frameSize, sampleRate = 48000) {
@@ -57,6 +60,27 @@ export function analyzePlosiveFrame(samples, start, frameSize, sampleRate = 4800
   const rms = Math.sqrt(sumSquares / frameSize);
   const zcr = crossings / Math.max(1, frameSize - 1);
   const crestFactor = rms > 1e-9 ? peak / rms : 0;
+  const spectrum = lowBandProfile(samples, start, frameSize, sampleRate);
+  return { rms, peak, zcr, crestFactor, ...spectrum };
+}
+
+function refinePlosiveBand(event, samples, sampleRate, detectionFrameSize, refinementSeconds) {
+  const offsetSeconds = detectionFrameSize / sampleRate / 2;
+  const start = Math.max(0, Math.floor((event.start + offsetSeconds) * sampleRate));
+  const wanted = Math.max(detectionFrameSize, Math.round(Math.max(0.03, Number(refinementSeconds) || 0.06) * sampleRate));
+  const available = Math.max(0, samples.length - start);
+  const frameSize = Math.min(wanted, available);
+  if (frameSize < Math.min(128, detectionFrameSize / 2)) return event;
+  const profile = lowBandProfile(samples, start, frameSize, sampleRate);
+  return {
+    ...event,
+    frequencyHz: Math.round(profile.frequencyHz),
+    spectralConfidence: profile.spectralConfidence,
+    spectralSource: 'plosive-lowband-goertzel-refined-v1',
+  };
+}
+
+function lowBandProfile(samples, start, frameSize, sampleRate) {
   const low = DEFAULT_LOW_GRID.map((frequencyHz) => ({ frequencyHz, power: goertzelPower(samples, start, frameSize, sampleRate, frequencyHz) }));
   const reference = DEFAULT_REFERENCE_GRID.map((frequencyHz) => ({ frequencyHz, power: goertzelPower(samples, start, frameSize, sampleRate, frequencyHz) }));
   const lowPower = low.reduce((sum, item) => sum + item.power, 0);
@@ -66,7 +90,7 @@ export function analyzePlosiveFrame(samples, start, frameSize, sampleRate = 4800
   const best = ranked[0] || { frequencyHz: 140, power: 0 };
   const second = ranked[1]?.power || 0;
   const spectralConfidence = best.power > 0 ? clamp01((best.power - second) / best.power + 0.25 * lowFrequencyRatio) : 0;
-  return { rms, peak, zcr, crestFactor, lowFrequencyRatio, frequencyHz: best.frequencyHz, spectralConfidence };
+  return { lowFrequencyRatio, frequencyHz: best.frequencyHz, spectralConfidence };
 }
 
 function mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
@@ -75,9 +99,7 @@ function mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
   const events = [];
   let current = null;
   for (const frame of selected) {
-    const canMerge = current
-      && frame.start - current.end <= mergeGapSeconds
-      && frame.end - current.start <= maxEventSeconds;
+    const canMerge = current && frame.start - current.end <= mergeGapSeconds && frame.end - current.start <= maxEventSeconds;
     if (!canMerge) {
       if (current) events.push(finalize(current));
       current = {
@@ -114,11 +136,7 @@ function mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
 }
 
 function finalize(event) {
-  return {
-    ...event,
-    confidence: event.confidenceSum / event.frames,
-    frequencyHz: event.frequencyWeighted / Math.max(event.frequencyWeight, 1e-9),
-  };
+  return { ...event, confidence: event.confidenceSum / event.frames, frequencyHz: event.frequencyWeighted / Math.max(event.frequencyWeight, 1e-9) };
 }
 
 function goertzelPower(samples, start, frameSize, sampleRate, frequencyHz) {
