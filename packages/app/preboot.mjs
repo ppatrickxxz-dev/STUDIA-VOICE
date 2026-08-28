@@ -39,6 +39,7 @@ try {
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
   const { installPabloSectionHereAdapter } = await import('./pablo-section-here-adapter.mjs');
   const { installPabloSectionAuditionAdapter } = await import('./pablo-section-audition-adapter.mjs');
+  const { installPabloSectionVocalGainAdapter } = await import('./pablo-section-vocal-gain-adapter.mjs');
   const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
   const { installAcousticEvidenceStatusUI } = await import('./acoustic-evidence-status-ui.mjs');
@@ -54,6 +55,7 @@ try {
   installPabloConversationUI();
   installPabloSectionHereAdapter();
   installPabloSectionAuditionAdapter();
+  installPabloSectionVocalGainAdapter();
   installBreathReviewUI();
   installAdvancedAIStudio();
   installAcousticEvidenceStatusUI();
