@@ -60,20 +60,23 @@ async function onPabloSubmitCapture(event) {
 function scanReply(command, result) {
   const where = occurrenceLabel(command, result.section);
   if (result.clean) {
-    return `Ouvi ${where} e não encontrei respiração forte, sibilância, estouro de P/B, estalos curtos ou picos acima dos gates atuais. Foi só diagnóstico: não alterei nada.`;
+    return `Ouvi ${where} e não encontrei respiração forte, sibilância, estouro de P/B, estalos curtos, picos ou ruído estacionário acima dos gates atuais. Foi só diagnóstico: não alterei nada.`;
   }
 
   const details = result.findings.slice(0, 8).map((finding) => {
     const at = formatClock(finding.timelineStartSeconds);
     const confidence = Math.round((Number(finding.confidence) || 0) * 100);
     const frequency = Number.isFinite(Number(finding.frequencyHz)) ? ` · ${Math.round(finding.frequencyHz)} Hz` : '';
+    const level = Number.isFinite(Number(finding.rmsDb)) ? ` · ${Number(finding.rmsDb).toFixed(1)} dBFS` : '';
     const action = finding.autoEdit ? 'tratável pelo cleanup atual' : 'revisar antes de editar';
-    return `${finding.label} em ${at} · ${confidence}%${frequency} · ${action}`;
+    return `${finding.label} em ${at} · ${confidence}%${frequency}${level} · ${action}`;
   });
   const omitted = Math.max(0, result.findings.length - details.length);
   const observed = result.observed || {};
-  const counts = `respirações ${observed.breaths || 0}, sibilâncias ${observed.sibilance || 0}, P/B ${observed.plosives || 0}, estalos ${observed.clicks || 0}, picos ${observed.peaks || 0}`;
-  return `Ouvi ${where} sem alterar nada. Encontrei ${result.findings.length} ponto(s) acima dos gates atuais (${result.actionableCount} acionável(is), ${result.reviewCount} para revisão). ${details.join('; ')}${omitted ? `; +${omitted} ponto(s) não listado(s)` : ''}. Evidência observada no trecho: ${counts}.`;
+  const counts = `respirações ${observed.breaths || 0}, sibilâncias ${observed.sibilance || 0}, P/B ${observed.plosives || 0}, estalos ${observed.clicks || 0}, picos ${observed.peaks || 0}, ruído ${observed.noise || 0}, hum ${observed.hum || 0}`;
+  const hasNoise = result.findings.some((finding) => finding.type === 'noise' || finding.type === 'hum');
+  const noiseNote = hasNoise ? ' Ruído/hum está em diagnóstico somente; não apliquei redução automática sem um gate próprio de denoise.' : '';
+  return `Ouvi ${where} sem alterar nada. Encontrei ${result.findings.length} ponto(s) acima dos gates atuais (${result.actionableCount} acionável(is), ${result.reviewCount} para revisão). ${details.join('; ')}${omitted ? `; +${omitted} ponto(s) não listado(s)` : ''}. Evidência observada no trecho: ${counts}.${noiseNote}`;
 }
 
 function blockedReply(command, result) {
