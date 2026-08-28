@@ -100,9 +100,9 @@ async function onSubmit(event) {
   event.preventDefault();
   if (!activeProject) return;
 
-  const kind = String(form.elements.kind?.value || '');
-  const startSeconds = parseClockSeconds(form.elements.start?.value);
-  const endText = String(form.elements.end?.value || '').trim();
+  const kind = String(form.elements.namedItem('kind')?.value || '');
+  const startSeconds = parseClockSeconds(form.elements.namedItem('start')?.value);
+  const endText = String(form.elements.namedItem('end')?.value || '').trim();
   const endSeconds = endText ? parseClockSeconds(endText) : null;
   if (startSeconds == null) {
     toast('Informe um início válido, como 45 ou 1:12.', 'error');
@@ -115,12 +115,18 @@ async function onSubmit(event) {
 
   try {
     const input = { kind, startSeconds, endSeconds, source: 'user_manual', confidence: 1 };
-    activeProject.arrangementMap = editingSectionId
+    const nextMap = editingSectionId
       ? replaceConfirmedSection(activeProject.arrangementMap, editingSectionId, input)
       : upsertConfirmedSection(activeProject.arrangementMap, input);
+    const expected = nextMap.sections.find((section) =>
+      section.kind === kind && Math.abs(section.startSeconds - startSeconds) <= 0.001);
+    if (!expected) throw new Error('A seção não entrou no mapa canônico. Nenhuma alteração foi confirmada.');
+
     const label = sectionLabel(kind);
     const revisionLabel = editingSectionId ? `${label} atualizado na timeline` : `${label} marcado na timeline`;
-    activeProject = await saveProject(snapshotProject(activeProject, revisionLabel));
+    activeProject = await persistVerifiedArrangementMap(nextMap, revisionLabel, {
+      mustContainId: expected.id,
+    });
     editingSectionId = null;
     renderSectionMap();
     toast(`${label} salvo em ${formatClock(startSeconds)}.`, 'ok');
@@ -216,8 +222,10 @@ async function removeSection(sectionId) {
   const section = map.sections.find((item) => item.id === sectionId);
   if (!section) return;
   try {
-    activeProject.arrangementMap = removeArrangementSection(map, sectionId);
-    activeProject = await saveProject(snapshotProject(activeProject, `${section.label} removido da timeline`));
+    const nextMap = removeArrangementSection(map, sectionId);
+    activeProject = await persistVerifiedArrangementMap(nextMap, `${section.label} removido da timeline`, {
+      mustNotContainId: sectionId,
+    });
     if (editingSectionId === sectionId) editingSectionId = null;
     renderSectionMap();
     toast(`${section.label} removido do mapa.`, 'ok');
@@ -225,6 +233,27 @@ async function removeSection(sectionId) {
     console.error('SECTION_MAP_REMOVE_FAILED', error);
     toast(error?.message || 'Não consegui remover essa seção.', 'error');
   }
+}
+
+async function persistVerifiedArrangementMap(nextMap, revisionLabel, {
+  mustContainId = null,
+  mustNotContainId = null,
+} = {}) {
+  if (!activeProject?.id) throw new Error('Projeto ativo inválido. Nenhuma alteração foi confirmada.');
+  const nextProject = structuredClone(activeProject);
+  nextProject.arrangementMap = normalizeArrangementMap(nextMap);
+  const snapshotted = snapshotProject(nextProject, revisionLabel);
+  const saved = await saveProject(snapshotted);
+  const verified = await getProject(saved.id);
+  if (!verified) throw new Error('Não consegui confirmar o projeto salvo no aparelho.');
+  verified.arrangementMap = normalizeArrangementMap(verified.arrangementMap);
+  if (mustContainId && !verified.arrangementMap.sections.some((section) => section.id === mustContainId)) {
+    throw new Error('A seção não foi confirmada no armazenamento local. Não marquei como salva.');
+  }
+  if (mustNotContainId && verified.arrangementMap.sections.some((section) => section.id === mustNotContainId)) {
+    throw new Error('A remoção não foi confirmada no armazenamento local. Não marquei como concluída.');
+  }
+  return verified;
 }
 
 function captureCursorPosition() {
