@@ -5,6 +5,7 @@ import { detectBreathAndSibilance } from './breath-sibilance.mjs';
 import { detectPlosives } from './plosive.mjs';
 import { detectVocalPeaks } from './vocal-peaks.mjs';
 import { detectVocalClicks } from './vocal-clicks.mjs';
+import { detectBackgroundNoise } from './background-noise.mjs';
 
 const DEFAULT_INTERACTIVE_PITCH_OPTIONS = Object.freeze({ hopSize: 2048 });
 
@@ -17,6 +18,7 @@ export function analyzeMusicalAudio({
   plosiveEvents = null,
   peakEvents = null,
   clickEvents = null,
+  noiseEvents = null,
   formants = [],
   durationSeconds = null,
   pitchOptions = DEFAULT_INTERACTIVE_PITCH_OPTIONS,
@@ -24,6 +26,7 @@ export function analyzeMusicalAudio({
   plosiveDetectionOptions = undefined,
   peakDetectionOptions = undefined,
   clickDetectionOptions = undefined,
+  noiseDetectionOptions = undefined,
 } = {}) {
   const pitch = analyzePitch(samples, sampleRate, pitchOptions);
   const tempo = analyzeTempo(onsets, { durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : (samples?.length && sampleRate ? samples.length / sampleRate : null) });
@@ -53,6 +56,24 @@ export function analyzeMusicalAudio({
       })
     : { clickEvents: [] };
   const resolvedClicks = Array.isArray(clickEvents) ? clickEvents : detectedClicks.clickEvents;
+
+  const needsNoiseDetection = !Array.isArray(noiseEvents);
+  const detectedNoise = needsNoiseDetection
+    ? detectBackgroundNoise(samples, {
+        sampleRate,
+        pitchContour: pitch.pitchContour,
+        excludedEvents: [
+          ...resolvedBreaths,
+          ...resolvedSibilance,
+          ...resolvedPlosives,
+          ...resolvedPeaks,
+          ...resolvedClicks,
+        ],
+        ...(noiseDetectionOptions || {}),
+      })
+    : { noiseEvents: [] };
+  const resolvedNoise = Array.isArray(noiseEvents) ? noiseEvents : detectedNoise.noiseEvents;
+
   const voice = analyzeVoice({
     pitchContour: pitch.pitchContour,
     breathEvents: resolvedBreaths,
@@ -60,6 +81,7 @@ export function analyzeMusicalAudio({
     plosiveEvents: resolvedPlosives,
     peakEvents: resolvedPeaks,
     clickEvents: resolvedClicks,
+    noiseEvents: resolvedNoise,
     formants,
   });
   return {
@@ -80,7 +102,11 @@ export function analyzeMusicalAudio({
         plosiveCount: resolvedPlosives.length,
         peakCount: resolvedPeaks.length,
         clickCount: resolvedClicks.length,
-      }
+      },
+      noiseDetection: {
+        source: needsNoiseDetection ? 'local-heuristic-v1' : 'provided',
+        count: resolvedNoise.length,
+      },
     },
     confidence: {
       pitch: pitch.confidence,
