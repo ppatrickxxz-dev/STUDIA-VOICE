@@ -142,7 +142,9 @@ test('WEB SECTION MIX A/B GATE: A removes only Pablo section mix in memory and d
   expect(stopped.playing).toBe(false);
 
   await sendPablo(page, 'compara o refrão');
-  const secondPanel = page.locator('[data-section-mix-ab]').last();
+  const panels = page.locator('[data-section-mix-ab]');
+  await expect(panels).toHaveCount(2);
+  const secondPanel = panels.last();
   await expect(secondPanel).toBeVisible();
   await secondPanel.getByRole('button', { name: 'Prefiro A · desfazer' }).click();
   await expect(page.getByText(/Desfiz meus ajustes regionais de mix no Refrão/i).last()).toBeVisible({ timeout: 10_000 });
