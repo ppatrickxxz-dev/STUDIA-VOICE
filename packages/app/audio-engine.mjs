@@ -130,7 +130,10 @@ export class PabloAudioEngine {
   }
 
   async renderTrack(project, trackId, presetName = 'demo') {
-    const exportProject = prepareAudioExport(project, { hasBuffer: (candidateId) => this.buffers.has(candidateId) });
+    const exportProject = prepareAudioExport(project, {
+      hasBuffer: (candidateId) => this.buffers.has(candidateId),
+      trackId,
+    });
     const track = (exportProject.tracks || []).find((candidate) => candidate.id === trackId);
     const buffer = track && this.buffers.get(track.id);
     if (!track || !buffer) throw new Error('Faixa não disponível para exportação.');
