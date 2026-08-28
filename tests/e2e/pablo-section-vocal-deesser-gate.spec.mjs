@@ -143,7 +143,7 @@ test('WEB VOCAL DEESSER GATE: measured sibilance band drives only micro EQ windo
     await storage.saveProject(project);
     return { schemaVersion: project.schemaVersion, events, supportCount: support.regionAutomation.length, sectionId: section.id };
   });
-  expect(saved.schemaVersion).toBe(8);
+  expect(saved.schemaVersion).toBe(9);
   expect(saved.events.length).toBeGreaterThanOrEqual(1);
   expect(saved.supportCount).toBe(0);
   for (const event of saved.events) {
