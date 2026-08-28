@@ -21,6 +21,19 @@ function vocalWithPlosive({ seconds = 1, burstAt = 0.42, burstFrequency = 120 } 
   return out;
 }
 
+function vocalWithBroadbandClick({ seconds = 1, clickAt = 0.42 } = {}) {
+  const length = Math.floor(seconds * sampleRate);
+  const out = new Float32Array(length);
+  for (let i = 0; i < length; i += 1) {
+    const t = i / sampleRate;
+    out[i] = Math.sin(2 * Math.PI * 220 * t) * 0.018;
+  }
+  const start = Math.floor(clickAt * sampleRate);
+  const impulse = [0.56, -0.44, 0.34, -0.25, 0.17, -0.1, 0.05];
+  for (let i = 0; i < impulse.length && start + i < out.length; i += 1) out[start + i] += impulse[i];
+  return out;
+}
+
 function stableLowTone(seconds = 0.8) {
   const length = Math.floor(seconds * sampleRate);
   const out = new Float32Array(length);
@@ -37,6 +50,15 @@ test('short low-frequency burst is detected as plosive evidence with refined mea
   assert.ok(event.frequencyHz >= 100 && event.frequencyHz <= 140, `expected measured burst band near 120 Hz, got ${event.frequencyHz}`);
   assert.ok(event.spectralConfidence >= 0.24);
   assert.equal(event.spectralSource, 'plosive-lowband-goertzel-refined-v1');
+});
+
+test('broadband alternating click on voiced bed is not promoted to P/B merely because the vocal bed is low-frequency', () => {
+  const result = detectPlosives(vocalWithBroadbandClick(), { sampleRate, frameSize: 256, hopSize: 64 });
+  const overlapping = result.plosiveEvents.filter((item) => item.start < 0.48 && item.end > 0.38);
+  assert.equal(overlapping.length, 0);
+  const impulseFrames = result.frames.filter((frame) => frame.start < 0.46 && frame.end > 0.4);
+  assert.ok(impulseFrames.some((frame) => frame.differenceRatio >= 0.62));
+  assert.ok(impulseFrames.every((frame) => frame.label !== 'plosive'));
 });
 
 test('steady low-frequency body does not become a plosive merely because audio starts', () => {
