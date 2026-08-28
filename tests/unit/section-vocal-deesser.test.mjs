@@ -87,12 +87,12 @@ test('applies idempotent de-esser windows only to the resolved vocal track', () 
   assert.equal(second.replacedCount, 2);
 });
 
-test('schema v8 preserves sibilance-band peaking frequency instead of clamping it to presence band', () => {
+test('schema v9 preserves sibilance-band peaking frequency instead of clamping it to presence band', () => {
   const { project } = projectWithVocal();
   const applied = applySectionVocalDeEsser(project, parseSectionVocalDeEsserCommand('tira os esses no refrão'), { sibilanceEvents: evidence });
   const migrated = migrateProject(applied.project);
   const deEsser = migrated.tracks.find((track) => track.kind === 'recording').regionAutomation.filter((event) => event.source === PABLO_SECTION_VOCAL_DEESSER_SOURCE);
-  assert.equal(migrated.schemaVersion, 8);
+  assert.equal(migrated.schemaVersion, 9);
   assert.equal(deEsser.length, 2);
   assert.ok(deEsser.every((event) => event.frequencyHz === 7200));
 });

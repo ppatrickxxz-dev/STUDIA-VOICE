@@ -60,19 +60,22 @@ async function onPabloSubmitCapture(event) {
 function scanReply(command, result) {
   const where = occurrenceLabel(command, result.section);
   if (result.clean) {
-    return `Ouvi ${where} e não encontrei respiração forte, sibilância, estouro de P/B, estalos curtos ou picos acima dos gates atuais. Foi só diagnóstico: não alterei nada.`;
+    return `Ouvi ${where} e não encontrei respiração forte, sibilância, estouro de P/B, estalos curtos, picos, ruído ou reflexo de ambiente acima dos gates atuais. Foi só diagnóstico: não alterei nada.`;
   }
 
   const details = result.findings.slice(0, 8).map((finding) => {
     const at = formatClock(finding.timelineStartSeconds);
     const confidence = Math.round((Number(finding.confidence) || 0) * 100);
     const frequency = Number.isFinite(Number(finding.frequencyHz)) ? ` · ${Math.round(finding.frequencyHz)} Hz` : '';
+    const noise = Number.isFinite(Number(finding.snrDb)) ? ` · SNR ${Number(finding.snrDb).toFixed(1)} dB` : '';
+    const reflection = Number.isFinite(Number(finding.reflectionDelayMs)) ? ` · reflexo ${Number(finding.reflectionDelayMs).toFixed(1)} ms` : '';
+    const timbre = finding.timbreProtected ? ' · timbre protegido' : '';
     const action = finding.autoEdit ? 'tratável pelo cleanup atual' : 'revisar antes de editar';
-    return `${finding.label} em ${at} · ${confidence}%${frequency} · ${action}`;
+    return `${finding.label} em ${at} · ${confidence}%${frequency}${noise}${reflection}${timbre} · ${action}`;
   });
   const omitted = Math.max(0, result.findings.length - details.length);
   const observed = result.observed || {};
-  const counts = `respirações ${observed.breaths || 0}, sibilâncias ${observed.sibilance || 0}, P/B ${observed.plosives || 0}, estalos ${observed.clicks || 0}, picos ${observed.peaks || 0}`;
+  const counts = `respirações ${observed.breaths || 0}, sibilâncias ${observed.sibilance || 0}, P/B ${observed.plosives || 0}, estalos ${observed.clicks || 0}, picos ${observed.peaks || 0}, ruído ${observed.noiseWindows || 0}, reflexo ${observed.reverbWindows || 0}`;
   return `Ouvi ${where} sem alterar nada. Encontrei ${result.findings.length} ponto(s) acima dos gates atuais (${result.actionableCount} acionável(is), ${result.reviewCount} para revisão). ${details.join('; ')}${omitted ? `; +${omitted} ponto(s) não listado(s)` : ''}. Evidência observada no trecho: ${counts}.`;
 }
 

@@ -13,7 +13,7 @@ test('project lifecycle keeps tracks and bounded history', () => {
 
 test('migration clamps unsafe legacy mixer values', () => {
   const migrated = migrateProject({ id: 'legacy', name: 'Legacy', tracks: [{ id: 'track', assetId: 'audio', duration: 4, trimStart: -2, trimEnd: 99, gain: 8, pan: -4 }] });
-  assert.equal(migrated.schemaVersion, 8);
+  assert.equal(migrated.schemaVersion, 9);
   assert.equal(migrated.tracks[0].trimStart, 0); assert.equal(migrated.tracks[0].trimEnd, 4); assert.equal(migrated.tracks[0].gain, 2); assert.equal(migrated.tracks[0].pan, -1);
   assert.equal(migrated.arrangementMap?.schema, 'pablovoice_arrangement_map_v1'); assert.deepEqual(migrated.arrangementMap?.sections, []);
 });
@@ -27,6 +27,39 @@ test('region automation is normalized, persisted and snapshotted independently f
   const snap = snapshotProject(migrated, 'respirações');
   assert.deepEqual(snap.revisions.at(-1).tracks[0].regionAutomation, migrated.tracks[0].regionAutomation);
   assert.equal('regionAutomation' in snap.revisions.at(-1).tracks[0].effects, false);
+});
+
+test('schema v9 preserves safe vocal restoration evidence and revokes forged timbre protection', () => {
+  const migrated = migrateProject({
+    id: 'restoration', name: 'Restoration', tracks: [{
+      id: 'voice', assetId: 'audio', duration: 5, regionAutomation: [
+        {
+          id: 'denoise', kind: 'vocal_denoise', startSeconds: 0.2, endSeconds: 2.2,
+          thresholdDb: -40, reductionDb: 3.2, attackSeconds: 0.008, releaseSeconds: 0.1,
+          noiseFloorDb: -46, voicedLevelDb: -20, snrDb: 26, voicedMarginDb: 20,
+          confidence: 0.88, timbreProtected: true, guardSource: 'bounded-vocal-timbre-guard-v1',
+        },
+        {
+          id: 'dereverb', kind: 'vocal_dereverb', startSeconds: 0.2, endSeconds: 2.2,
+          reflectionDelayMs: 36, amount: 0.16, dampingHz: 5200, correlation: 0.52,
+          prominence: 0.14, confidence: 0.9, timbreProtected: true,
+          guardSource: 'bounded-vocal-timbre-guard-v1',
+        },
+        {
+          id: 'forged', kind: 'vocal_dereverb', startSeconds: 0.2, endSeconds: 2.2,
+          reflectionDelayMs: 180, amount: 0.8, correlation: 0.8, prominence: 0.3,
+          confidence: 1, timbreProtected: true, guardSource: 'bounded-vocal-timbre-guard-v1',
+        },
+      ],
+    }],
+  });
+  assert.equal(migrated.schemaVersion, 9);
+  assert.equal(migrated.tracks[0].regionAutomation.find((event) => event.id === 'denoise').timbreProtected, true);
+  assert.equal(migrated.tracks[0].regionAutomation.find((event) => event.id === 'dereverb').timbreProtected, true);
+  const forged = migrated.tracks[0].regionAutomation.find((event) => event.id === 'forged');
+  assert.equal(forged.reflectionDelayMs, 90);
+  assert.equal(forged.amount, 0.2);
+  assert.equal(forged.timbreProtected, false);
 });
 
 test('validation rejects missing audio identity and inverted trim', () => {

@@ -36,12 +36,12 @@ test('canonical audio engine renders real regional DynamicsCompressorNode in pre
   assert.match(dynamics, /startsInside/);
 });
 
-test('schema v8 persists compressor fields while gain EQ and compressor remain separate automation kinds', async () => {
+test('schema v9 persists compressor fields while gain EQ and compressor remain separate automation kinds', async () => {
   const [project, gain] = await Promise.all([
     read('packages/core/src/project.mjs'),
     read('packages/audio/src/automation/region-gain.mjs'),
   ]);
-  assert.match(project, /PROJECT_SCHEMA_VERSION = 8/);
+  assert.match(project, /PROJECT_SCHEMA_VERSION = 9/);
   assert.match(project, /kind === 'compressor'/);
   assert.match(project, /thresholdDb/);
   assert.match(project, /attackSeconds/);

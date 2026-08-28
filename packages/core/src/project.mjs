@@ -1,6 +1,6 @@
 import { createArrangementMap, normalizeArrangementMap } from './section-map.mjs';
 
-export const PROJECT_SCHEMA_VERSION = 8;
+export const PROJECT_SCHEMA_VERSION = 9;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -203,6 +203,52 @@ function normalizeRegionAutomation(input, duration) {
       normalized.kneeDb = clamp(finite(event?.kneeDb, 6), 0, 20);
       normalized.attackSeconds = clamp(finite(event?.attackSeconds, 0.006), 0.001, 0.08);
       normalized.releaseSeconds = clamp(finite(event?.releaseSeconds, 0.12), 0.03, 0.8);
+    }
+    if (kind === 'vocal_denoise') {
+      const rawReductionDb = Number(event?.reductionDb);
+      const rawThresholdDb = Number(event?.thresholdDb);
+      const rawVoicedLevelDb = Number(event?.voicedLevelDb);
+      const rawSnrDb = Number(event?.snrDb);
+      normalized.thresholdDb = clamp(finite(event?.thresholdDb, -42), -72, -18);
+      normalized.reductionDb = clamp(finite(event?.reductionDb, 3), 0, 5.5);
+      normalized.attackSeconds = clamp(finite(event?.attackSeconds, 0.008), 0.003, 0.03);
+      normalized.releaseSeconds = clamp(finite(event?.releaseSeconds, 0.12), 0.06, 0.28);
+      normalized.noiseFloorDb = clamp(finite(event?.noiseFloorDb, -48), -90, -18);
+      normalized.voicedLevelDb = clamp(finite(event?.voicedLevelDb, -18), -60, 0);
+      normalized.snrDb = clamp(finite(event?.snrDb, 12), 0, 60);
+      normalized.voicedMarginDb = clamp(finite(event?.voicedMarginDb, 10), 0, 60);
+      normalized.timbreProtected = event?.timbreProtected === true
+        && rawReductionDb > 0
+        && rawReductionDb <= 5.5
+        && rawThresholdDb >= -72
+        && rawThresholdDb <= -18
+        && rawVoicedLevelDb >= -60
+        && rawVoicedLevelDb <= 0
+        && rawVoicedLevelDb - rawThresholdDb >= 10
+        && rawSnrDb >= 5.5
+        && rawSnrDb <= 29
+        && event?.guardSource === 'bounded-vocal-timbre-guard-v1';
+      normalized.guardSource = String(event?.guardSource || 'bounded-vocal-timbre-guard-v1');
+    }
+    if (kind === 'vocal_dereverb') {
+      const rawDelayMs = Number(event?.reflectionDelayMs);
+      const rawAmount = Number(event?.amount);
+      const rawCorrelation = Number(event?.correlation);
+      const rawProminence = Number(event?.prominence);
+      normalized.reflectionDelayMs = clamp(finite(event?.reflectionDelayMs, 36), 18, 90);
+      normalized.amount = clamp(finite(event?.amount, 0.1), 0, 0.2);
+      normalized.dampingHz = clamp(finite(event?.dampingHz, 5200), 2800, 6500);
+      normalized.correlation = clamp(finite(event?.correlation, 0), 0, 1);
+      normalized.prominence = clamp(finite(event?.prominence, 0), 0, 1);
+      normalized.timbreProtected = event?.timbreProtected === true
+        && rawDelayMs >= 18
+        && rawDelayMs <= 90
+        && rawAmount > 0
+        && rawAmount <= 0.2
+        && rawCorrelation >= 0.1
+        && rawProminence >= 0.04
+        && event?.guardSource === 'bounded-vocal-timbre-guard-v1';
+      normalized.guardSource = String(event?.guardSource || 'bounded-vocal-timbre-guard-v1');
     }
     return normalized;
   }).filter((event) => event.endSeconds > event.startSeconds);

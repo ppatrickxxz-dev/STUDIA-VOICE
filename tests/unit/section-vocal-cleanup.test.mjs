@@ -43,6 +43,25 @@ function richAnalysis() {
         { start: 12, end: 12.05, confidence: 0.9, intensity: 0.92, peak: 0.7, transientRise: 2.7, source: 'vocal-peak-transient-v1' },
         { start: 13, end: 13.05, confidence: 0.83, intensity: 0.8, peak: 0.61, transientRise: 2.3, source: 'vocal-peak-transient-v1' },
       ],
+      restoration: {
+        source: 'local-vocal-restoration-profile-v1',
+        noiseWindowCount: 1,
+        reverbWindowCount: 1,
+        timbreGuard: {
+          pitchPreserving: true,
+          formantPreserving: true,
+          voicedMarginDb: 10,
+          maxNoiseReductionDb: 5.5,
+          maxDereverbAmount: 0.2,
+          source: 'bounded-vocal-timbre-guard-v1',
+        },
+        windows: [{
+          start: 8.2,
+          end: 9.4,
+          noise: { actionable: true, confidence: 0.86, noiseFloorDb: -43, voicedLevelDb: -20, snrDb: 23, thresholdDb: -38, voicedMarginDb: 18, reductionDb: 3.2, source: 'vocal-noise-floor-v1' },
+          reverb: { actionable: true, delayConsistent: true, confidence: 0.84, reflectionDelayMs: 36, amount: 0.14, dampingHz: 5200, correlation: 0.49, prominence: 0.12, source: 'vocal-early-reflection-v1' },
+        }],
+      },
     },
   };
 }
@@ -62,12 +81,14 @@ test('orchestrates only evidence-backed cleanup modules in the confirmed section
   const command = parseSectionVocalCleanupCommand('limpa minha voz no refrão');
   const plan = planSectionVocalCleanup(project, command, { analysis: richAnalysis() });
   assert.equal(plan.ok, true);
-  assert.equal(plan.appliedModuleCount, 5);
+  assert.equal(plan.appliedModuleCount, 7);
   assert.equal(plan.modules.breath.applied, true);
   assert.equal(plan.modules.deesser.applied, true);
   assert.equal(plan.modules.plosive.applied, true);
   assert.equal(plan.modules.click.applied, true);
   assert.equal(plan.modules.dynamics.applied, true);
+  assert.equal(plan.modules.denoise.applied, true);
+  assert.equal(plan.modules.dereverb.applied, true);
   const sources = new Set(plan.events.map((event) => event.source));
   for (const source of PABLO_SECTION_VOCAL_CLEANUP_SOURCE_LIST) assert.ok(sources.has(source), `missing cleanup source ${source}`);
   assert.ok(plan.events.every((event) => event.startSeconds >= 8 && event.endSeconds <= 16));
@@ -76,6 +97,8 @@ test('orchestrates only evidence-backed cleanup modules in the confirmed section
   assert.ok(plan.events.some((event) => event.source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.PLOSIVE && event.kind === 'peaking_eq' && event.frequencyHz === 120));
   assert.ok(plan.events.some((event) => event.source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.CLICK && event.kind === 'gain' && event.gainDb < 0));
   assert.ok(plan.events.some((event) => event.source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DYNAMICS && event.kind === 'compressor' && event.ratio === 2));
+  assert.ok(plan.events.some((event) => event.source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DENOISE && event.kind === 'vocal_denoise' && event.timbreProtected && event.voicedMarginDb >= 10));
+  assert.ok(plan.events.some((event) => event.source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DEREVERB && event.kind === 'vocal_dereverb' && event.timbreProtected && event.amount <= 0.2));
 });
 
 test('skips unsupported modules and fails closed when there is no cleanup evidence at all', () => {
@@ -132,4 +155,28 @@ test('light cleanup reduces intervention without changing evidence gates', () =>
   assert.ok(click.gainDb >= -3);
   assert.equal(dynamics.ratio, 1.7);
   assert.equal(dynamics.thresholdDb, -15);
+});
+
+test('restoration fails closed when the timbre guard or measured margins are unsafe', () => {
+  const { project } = projectWithVocal();
+  const command = parseSectionVocalCleanupCommand('limpa minha voz no refrão');
+  const analysis = richAnalysis();
+  analysis.voice.breathEvents = [];
+  analysis.voice.sibilanceEvents = [];
+  analysis.voice.plosiveEvents = [];
+  analysis.voice.clickEvents = [];
+  analysis.voice.peakEvents = [];
+  analysis.voice.restoration.timbreGuard.formantPreserving = false;
+  const blockedGuard = planSectionVocalCleanup(project, command, { analysis });
+  assert.equal(blockedGuard.ok, false);
+  assert.equal(blockedGuard.modules.denoise.applied, false);
+  assert.equal(blockedGuard.modules.dereverb.applied, false);
+
+  analysis.voice.restoration.timbreGuard.formantPreserving = true;
+  analysis.voice.restoration.windows[0].noise.thresholdDb = -24;
+  analysis.voice.restoration.windows[0].noise.voicedLevelDb = -20;
+  analysis.voice.restoration.windows[0].reverb.amount = 0.4;
+  const blockedEvidence = planSectionVocalCleanup(project, command, { analysis });
+  assert.equal(blockedEvidence.ok, false);
+  assert.equal(blockedEvidence.reason, 'no_cleanup_evidence');
 });

@@ -5,6 +5,7 @@ import { detectBreathAndSibilance } from './breath-sibilance.mjs';
 import { detectPlosives } from './plosive.mjs';
 import { detectVocalPeaks } from './vocal-peaks.mjs';
 import { detectVocalClicks } from './vocal-clicks.mjs';
+import { analyzeVocalRestoration } from './vocal-restoration.mjs';
 
 const DEFAULT_INTERACTIVE_PITCH_OPTIONS = Object.freeze({ hopSize: 2048 });
 
@@ -24,6 +25,7 @@ export function analyzeMusicalAudio({
   plosiveDetectionOptions = undefined,
   peakDetectionOptions = undefined,
   clickDetectionOptions = undefined,
+  restorationOptions = undefined,
 } = {}) {
   const pitch = analyzePitch(samples, sampleRate, pitchOptions);
   const tempo = analyzeTempo(onsets, { durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : (samples?.length && sampleRate ? samples.length / sampleRate : null) });
@@ -53,6 +55,11 @@ export function analyzeMusicalAudio({
       })
     : { clickEvents: [] };
   const resolvedClicks = Array.isArray(clickEvents) ? clickEvents : detectedClicks.clickEvents;
+  const restoration = analyzeVocalRestoration(samples, {
+    sampleRate,
+    pitchContour: pitch.pitchContour,
+    ...(restorationOptions || {}),
+  });
   const voice = analyzeVoice({
     pitchContour: pitch.pitchContour,
     breathEvents: resolvedBreaths,
@@ -61,6 +68,9 @@ export function analyzeMusicalAudio({
     peakEvents: resolvedPeaks,
     clickEvents: resolvedClicks,
     formants,
+    restoration,
+    snrDb: restoration.summary?.snrDb,
+    roomReverb: restoration.summary?.reflectionCorrelation,
   });
   return {
     music: {
@@ -80,6 +90,8 @@ export function analyzeMusicalAudio({
         plosiveCount: resolvedPlosives.length,
         peakCount: resolvedPeaks.length,
         clickCount: resolvedClicks.length,
+        noiseWindowCount: restoration.noiseWindowCount,
+        reverbWindowCount: restoration.reverbWindowCount,
       }
     },
     confidence: {

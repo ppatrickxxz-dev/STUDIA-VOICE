@@ -106,6 +106,13 @@ function buildFinding(type, event, target, { autoEdit = true } = {}) {
   if (Number.isFinite(Number(event?.gainDb))) finding.suggestedGainDb = roundTenth(Number(event.gainDb));
   if (Number.isFinite(Number(event?.peak))) finding.peak = roundHundredth(Number(event.peak));
   if (Number.isFinite(Number(event?.transientRise))) finding.transientRise = roundHundredth(Number(event.transientRise));
+  if (Number.isFinite(Number(event?.noiseFloorDb))) finding.noiseFloorDb = roundTenth(Number(event.noiseFloorDb));
+  if (Number.isFinite(Number(event?.snrDb))) finding.snrDb = roundTenth(Number(event.snrDb));
+  if (Number.isFinite(Number(event?.reductionDb))) finding.reductionDb = roundTenth(Number(event.reductionDb));
+  if (Number.isFinite(Number(event?.reflectionDelayMs))) finding.reflectionDelayMs = roundTenth(Number(event.reflectionDelayMs));
+  if (Number.isFinite(Number(event?.correlation))) finding.correlation = roundHundredth(Number(event.correlation));
+  if (Number.isFinite(Number(event?.amount))) finding.dereverbAmount = roundHundredth(Number(event.amount));
+  if (event?.timbreProtected === true) finding.timbreProtected = true;
   return finding;
 }
 
@@ -115,6 +122,8 @@ function typeForCleanupSource(source) {
   if (source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.PLOSIVE) return 'plosive';
   if (source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.CLICK) return 'click';
   if (source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DYNAMICS) return 'peak';
+  if (source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DENOISE) return 'noise';
+  if (source === PABLO_SECTION_VOCAL_CLEANUP_SOURCES.DEREVERB) return 'reverb';
   return null;
 }
 
@@ -124,6 +133,8 @@ function findingLabel(type) {
   if (type === 'plosive') return 'Estouro de P/B';
   if (type === 'click') return 'Estalo curto';
   if (type === 'peak') return 'Pico de dinâmica';
+  if (type === 'noise') return 'Ruído de fundo';
+  if (type === 'reverb') return 'Reflexo do ambiente';
   return 'Evidência vocal';
 }
 
@@ -134,7 +145,14 @@ function observedCounts(voice, range) {
     plosives: countOverlap(voice?.plosiveEvents, range),
     clicks: countOverlap(voice?.clickEvents, range),
     peaks: countOverlap(voice?.peakEvents, range),
+    noiseWindows: countRestorationWindows(voice?.restoration?.windows, range, 'noise'),
+    reverbWindows: countRestorationWindows(voice?.restoration?.windows, range, 'reverb'),
   };
+}
+
+function countRestorationWindows(windows, range, family) {
+  if (!Array.isArray(windows)) return 0;
+  return windows.filter((window) => overlapsRange(window, range) && window?.[family]?.actionable === true).length;
 }
 
 function countOverlap(events, range) {
@@ -180,6 +198,8 @@ function emptyModules() {
     plosive: { applied: false, count: 0 },
     click: { applied: false, count: 0 },
     dynamics: { applied: false, count: 0, evidenceCount: 0 },
+    denoise: { applied: false, count: 0, evidenceCount: 0 },
+    dereverb: { applied: false, count: 0, evidenceCount: 0 },
   };
 }
 

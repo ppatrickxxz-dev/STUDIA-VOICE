@@ -8,11 +8,16 @@ import {
 } from './audio/src/automation/region-eq.mjs';
 import { regionalCompressorEvents, compressorAutomationPoints } from './audio/src/automation/region-dynamics.mjs';
 import { sourceRegionsToTrackTime } from './audio/src/automation/region-time.mjs';
+import {
+  cloneWithVocalRestoration,
+  restorationEventFingerprint,
+} from './audio/src/automation/region-restoration.mjs';
 
 export class PabloAudioEngine {
   constructor() {
     this.context = null;
     this.buffers = new Map();
+    this.restorationBuffers = new Map();
     this.sources = [];
     this.playing = false;
     this.startedAt = 0;
@@ -33,12 +38,13 @@ export class PabloAudioEngine {
     const started = performance.now();
     const buffer = await context.decodeAudioData(await blob.arrayBuffer());
     this.buffers.set(trackId, buffer);
+    this.restorationBuffers.delete(trackId);
     return { buffer, decodeMs: performance.now() - started };
   }
 
-  setBuffer(trackId, buffer) { this.buffers.set(trackId, buffer); }
+  setBuffer(trackId, buffer) { this.buffers.set(trackId, buffer); this.restorationBuffers.delete(trackId); }
   getBuffer(trackId) { return this.buffers.get(trackId) || null; }
-  removeBuffer(trackId) { this.buffers.delete(trackId); }
+  removeBuffer(trackId) { this.buffers.delete(trackId); this.restorationBuffers.delete(trackId); }
 
   duration(project) {
     return Math.max(0, ...(project?.tracks || []).map((track) => {
@@ -62,7 +68,9 @@ export class PabloAudioEngine {
     const master = createMaster(context, context.destination);
     const when = context.currentTime + 0.025;
     for (const track of tracks) {
-      const sources = createTrackSources(context, this.buffers.get(track.id), track, mode, start, when, master);
+      const original = this.buffers.get(track.id);
+      const buffer = mode === 'processed' ? this.restoredBuffer(context, track, original) : original;
+      const sources = createTrackSources(context, buffer, track, mode, start, when, master);
       this.sources.push(...sources);
     }
     if (!this.sources.length) throw new Error('O cursor está depois do fim das faixas.');
@@ -111,7 +119,10 @@ export class PabloAudioEngine {
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(channels, frames, preset.sampleRate);
     const master = createMaster(offline, offline.destination);
-    for (const track of tracks) createTrackSources(offline, this.buffers.get(track.id), track, 'processed', 0, 0, master);
+    for (const track of tracks) {
+      const buffer = this.restoredBuffer(offline, track, this.buffers.get(track.id));
+      createTrackSources(offline, buffer, track, 'processed', 0, 0, master);
+    }
     const rendered = await offline.startRendering();
     normalizeInPlace(rendered, preset.peak);
     return rendered;
@@ -125,11 +136,31 @@ export class PabloAudioEngine {
     const duration = Math.max(0.02, this.duration(project));
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(2, frames, preset.sampleRate);
-    createTrackSources(offline, buffer, track, 'processed', 0, 0, offline.destination);
+    createTrackSources(offline, this.restoredBuffer(offline, track, buffer), track, 'processed', 0, 0, offline.destination);
     const rendered = await offline.startRendering();
     const peak = peakOf(rendered);
     if (peak > 1.0001) throw new Error(`A faixa “${track.name || track.id}” ultrapassa 0 dBFS. Abaixe o ganho antes de exportar stems.`);
     return rendered;
+  }
+
+  restoredBuffer(context, track, original) {
+    const fingerprint = restorationEventFingerprint(track?.regionAutomation || []);
+    if (fingerprint === '[]') return original;
+    const cached = this.restorationBuffers.get(track.id);
+    if (cached?.original === original && cached.fingerprint === fingerprint) return cached.buffer;
+    const restored = cloneWithVocalRestoration(context, original, track.regionAutomation);
+    this.restorationBuffers.set(track.id, { original, fingerprint, buffer: restored.buffer });
+    if (restored.applied && typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
+      globalThis.dispatchEvent(new CustomEvent('pablovoice:vocal-restoration-rendered', {
+        detail: {
+          trackId: track.id,
+          denoiseCount: restored.denoiseCount,
+          dereverbCount: restored.dereverbCount,
+          source: 'local-vocal-restoration-dsp-v1',
+        },
+      }));
+    }
+    return restored.buffer;
   }
 }
 

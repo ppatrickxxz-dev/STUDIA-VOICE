@@ -32,7 +32,7 @@ test('conversation boundary persists feedback but never rewrites the lyric itsel
 
 test('current project schema bounds and snapshots authorial memory', () => {
   const migrated = migrateProject({ id: 'p1', name: 'Música', tracks: [], authorialMemory: { schema: 'anything', vocabulary: Array.from({ length: 100 }, (_, index) => `termo-${index}`), avoid: ['promessa'], acceptedPatterns: ['term:malícia'], rejectedPatterns: ['term:promessa'], evidenceCount: 3 } });
-  assert.equal(migrated.schemaVersion, 8);
+  assert.equal(migrated.schemaVersion, 9);
   assert.equal(migrated.authorialMemory.schema, 'pmi_authorial_memory_v1');
   assert.equal(migrated.authorialMemory.vocabulary.length, 80);
   assert.deepEqual(migrated.authorialMemory.avoid, ['promessa']);
