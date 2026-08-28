@@ -58,6 +58,7 @@ function blockedReply(command, result) {
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLEANUP) return `Desfiz a limpeza vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do pacote de limpeza e preservei ajustes de voz aplicados separadamente, automação manual e outras seções.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLICK) return `Desfiz o tratamento de estalos que eu tinha criado no ${where}. Removi ${count} microatenuação(ões) de clicks do Pablo e preservei plosivas, dinâmica, de-esser, limpeza vocal e automação manual.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return `Desfiz o tratamento de plosivas que eu tinha criado no ${where}. Removi ${count} microcorte(s) de P/B do Pablo e preservei corpo, grave contínuo, de-esser, dinâmica, respirações e ajustes manuais.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return `Desfiz o de-esser vocal que eu tinha criado no ${where}. Removi ${count} microcorte(s) de sibilância do Pablo e preservei brilho geral, presença, dinâmica, volume, outros EQs, respirações e ajustes manuais.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfiz a dinâmica vocal que eu tinha criado no ${where}. Removi ${count} compressor regional do Pablo e preservei de-esser, volume, EQ, respirações e ajustes manuais.`;
@@ -71,6 +72,7 @@ function successReply(command, section, count) {
 }
 function undoRevisionLabel(command, section) {
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLEANUP) return `Desfeita limpeza vocal no ${section.label}`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLICK) return `Desfeito tratamento de estalos no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return `Desfeito tratamento de plosivas no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return `Desfeito de-esser vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfeita dinâmica vocal no ${section.label}`;
@@ -84,6 +86,7 @@ function undoRevisionLabel(command, section) {
 }
 function modeLabel(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_CLEANUP) return 'limpeza vocal';
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_CLICK) return 'tratamento de estalos';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return 'tratamento de plosivas';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return 'de-esser vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return 'dinâmica vocal';
