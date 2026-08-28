@@ -52,6 +52,42 @@ function humWindow44100() {
   return { out, contour, sr };
 }
 
+function fullPipelineHum44100() {
+  const sr = 44100;
+  const seconds = 1.8;
+  const out = new Float32Array(Math.floor(seconds * sr));
+  const humWindows = [[0.42, 0.76], [1.34, 1.64]];
+  for (let index = 0; index < out.length; index += 1) {
+    const time = index / sr;
+    let value = Math.sin(2 * Math.PI * 220 * time) * 0.025;
+    for (const [start, end] of humWindows) {
+      if (time < start || time > end) continue;
+      const local = time - start;
+      const remaining = end - time;
+      const fade = Math.min(1, local / 0.035, remaining / 0.035);
+      value = Math.sin(2 * Math.PI * 60 * time) * 0.014 * Math.max(0, fade);
+    }
+    const edge = Math.min(1, index / 500, (out.length - index) / 500);
+    const quantized = Math.round(Math.max(-1, Math.min(1, value * Math.max(0, edge))) * 32767) / 32767;
+    out[index] = quantized;
+  }
+  return { out, sr };
+}
+
+function pipelineDebug(analysis) {
+  return JSON.stringify({
+    noise: analysis.voice.noiseEvents,
+    noiseDetection: analysis.voice.noiseDetection,
+    eventDetection: analysis.voice.eventDetection,
+    pitch: analysis.voice.pitchContour.filter((point) => point.time >= 0.3 && point.time <= 0.9),
+    breaths: analysis.voice.breathEvents,
+    sibilance: analysis.voice.sibilanceEvents,
+    plosives: analysis.voice.plosiveEvents,
+    peaks: analysis.voice.peakEvents,
+    clicks: analysis.voice.clickEvents,
+  });
+}
+
 test('stationary 60 Hz electrical hum becomes separate measured noise evidence', () => {
   const result = detectBackgroundNoise(tone(60, 0.014), {
     sampleRate,
@@ -76,6 +112,15 @@ test('44.1 kHz hum with fade edges remains hum when strong tonal frames cover th
   assert.equal(hum.noiseKind, 'hum');
   assert.equal(hum.frequencyHz, 60);
   assert.ok(hum.humCoverage >= 0.4 || hum.humConfidence >= 0.58);
+});
+
+test('full canonical 44.1 kHz pipeline keeps embedded 60 Hz windows classified as hum', () => {
+  const { out, sr } = fullPipelineHum44100();
+  const analysis = analyzeMusicalAudio({ samples: out, sampleRate: sr });
+  const inside = analysis.voice.noiseEvents.find((event) => event.start < 0.8 && event.end > 0.4);
+  assert.ok(inside, `expected in-section noise event; ${pipelineDebug(analysis)}`);
+  assert.equal(inside.noiseKind, 'hum', pipelineDebug(analysis));
+  assert.equal(inside.frequencyHz, 60, pipelineDebug(analysis));
 });
 
 test('stationary broadband noise is reported without inventing a hum frequency', () => {
