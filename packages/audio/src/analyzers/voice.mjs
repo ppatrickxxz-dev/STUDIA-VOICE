@@ -54,6 +54,7 @@ function normalizeEvents(events) {
     const rmsDb = finiteOrNull(event.rmsDb);
     const stationarity = finiteOrNull(event.stationarity);
     const humConfidence = finiteOrNull(event.humConfidence);
+    const humCoverage = finiteOrNull(event.humCoverage);
     if (frequencyHz !== null) normalized.frequencyHz = frequencyHz;
     if (spectralPeakHz !== null) normalized.spectralPeakHz = spectralPeakHz;
     if (spectralSpreadHz !== null) normalized.spectralSpreadHz = spectralSpreadHz;
@@ -66,6 +67,7 @@ function normalizeEvents(events) {
     if (rmsDb !== null) normalized.rmsDb = rmsDb;
     if (stationarity !== null) normalized.stationarity = stationarity;
     if (humConfidence !== null) normalized.humConfidence = humConfidence;
+    if (humCoverage !== null) normalized.humCoverage = humCoverage;
     if (event.noiseKind) normalized.noiseKind = String(event.noiseKind);
     if (event.spectralSource) normalized.spectralSource = String(event.spectralSource);
     if (event.source) normalized.source = String(event.source);
