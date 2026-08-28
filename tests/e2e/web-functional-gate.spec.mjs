@@ -104,11 +104,39 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
   await expect(page.getByRole('heading', { name: 'Gate Web 2026' })).toBeVisible();
   await expect(page.getByText('gate-tone.wav').first()).toBeVisible();
 
+  const revisionsBeforeExport = await page.evaluate(async () => {
+    const request = indexedDB.open('pablovoice_mobile_v2', 3);
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const project = await new Promise((resolve, reject) => {
+      const read = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+      read.onsuccess = () => resolve(read.result.find((item) => item.name === 'Gate Web 2026'));
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    return project?.revisions?.length ?? -1;
+  });
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-action="export"]').first().click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^Gate_Web_2026-.*\.wav$/);
   expect(await download.path()).toBeTruthy();
+  await expect.poll(async () => page.evaluate(async () => {
+    const request = indexedDB.open('pablovoice_mobile_v2', 3);
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const project = await new Promise((resolve, reject) => {
+      const read = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+      read.onsuccess = () => resolve(read.result.find((item) => item.name === 'Gate Web 2026'));
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    return project?.revisions?.length ?? -1;
+  })).toBe(revisionsBeforeExport);
 
   await page.locator('[data-route="compose"]').first().click();
   await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
