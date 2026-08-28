@@ -21,19 +21,23 @@ export function detectPlosives(samples, {
     const riseScore = smoothStep(1.35, 3.2, rise);
     const crestScore = smoothStep(2.0, 5.5, feature.crestFactor);
     const zcrScore = 1 - smoothStep(0.16, 0.42, feature.zcr);
-    const confidence = feature.rms >= minRms
+    const impulsePenalty = smoothStep(0.62, 1.08, feature.differenceRatio);
+    const baseConfidence = feature.rms >= minRms
       ? clamp01(0.38 * lowScore + 0.30 * riseScore + 0.18 * crestScore + 0.14 * zcrScore)
       : 0;
+    const confidence = clamp01(baseConfidence * (1 - 0.75 * impulsePenalty));
     const label = confidence >= confidenceThreshold ? 'plosive' : 'other';
     frames.push({
       start: start / sampleRate,
       end: (start + frameSize) / sampleRate,
       label,
       confidence,
+      baseConfidence,
       rms: feature.rms,
       peak: feature.peak,
       zcr: feature.zcr,
       lowFrequencyRatio: feature.lowFrequencyRatio,
+      differenceRatio: feature.differenceRatio,
       transientRise: rise,
       frequencyHz: feature.frequencyHz,
       spectralConfidence: feature.spectralConfidence,
@@ -47,6 +51,7 @@ export function detectPlosives(samples, {
 
 export function analyzePlosiveFrame(samples, start, frameSize, sampleRate = 48000) {
   let sumSquares = 0;
+  let differenceSquares = 0;
   let peak = 0;
   let crossings = 0;
   let previous = Number(samples[start]) || 0;
@@ -54,14 +59,20 @@ export function analyzePlosiveFrame(samples, start, frameSize, sampleRate = 4800
     const x = Number(samples[start + i]) || 0;
     sumSquares += x * x;
     peak = Math.max(peak, Math.abs(x));
-    if (i > 0 && ((x >= 0) !== (previous >= 0))) crossings += 1;
+    if (i > 0) {
+      const difference = x - previous;
+      differenceSquares += difference * difference;
+      if ((x >= 0) !== (previous >= 0)) crossings += 1;
+    }
     previous = x;
   }
   const rms = Math.sqrt(sumSquares / frameSize);
+  const differenceRms = Math.sqrt(differenceSquares / Math.max(1, frameSize - 1));
+  const differenceRatio = differenceRms / Math.max(rms, 1e-9);
   const zcr = crossings / Math.max(1, frameSize - 1);
   const crestFactor = rms > 1e-9 ? peak / rms : 0;
   const spectrum = lowBandProfile(samples, start, frameSize, sampleRate);
-  return { rms, peak, zcr, crestFactor, ...spectrum };
+  return { rms, differenceRms, differenceRatio, peak, zcr, crestFactor, ...spectrum };
 }
 
 function refinePlosiveBand(event, samples, sampleRate, detectionFrameSize, refinementSeconds) {
@@ -110,6 +121,7 @@ function mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
         frequencyWeighted: frame.frequencyHz * Math.max(frame.confidence, 0.01),
         frequencyWeight: Math.max(frame.confidence, 0.01),
         spectralConfidence: frame.spectralConfidence,
+        differenceRatio: frame.differenceRatio,
         frames: 1,
       };
     } else {
@@ -119,6 +131,7 @@ function mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
       current.frequencyWeighted += frame.frequencyHz * Math.max(frame.confidence, 0.01);
       current.frequencyWeight += Math.max(frame.confidence, 0.01);
       current.spectralConfidence = Math.max(current.spectralConfidence, frame.spectralConfidence);
+      current.differenceRatio = Math.max(current.differenceRatio, frame.differenceRatio);
       current.frames += 1;
     }
   }
@@ -131,6 +144,7 @@ function mergePlosiveFrames(frames, { mergeGapSeconds, maxEventSeconds }) {
     confidence: clamp01(event.confidence),
     frequencyHz: Math.round(event.frequencyHz),
     spectralConfidence: clamp01(event.spectralConfidence),
+    differenceRatio: event.differenceRatio,
     spectralSource: 'plosive-lowband-goertzel-v1',
   }));
 }
