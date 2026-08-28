@@ -6,6 +6,9 @@ import { resolveVocalTrack, timelineRangeToSourceRegion } from './section-vocal-
 export const PABLO_SECTION_VOCAL_DEESSER_SOURCE = 'pablo_section_vocal_deesser';
 export const DEFAULT_DEESSER = Object.freeze({
   frequencyHz: 7200,
+  minFrequencyHz: 4800,
+  maxFrequencyHz: 10800,
+  spectralConfidenceThreshold: 0.12,
   q: 1.5,
   maxReductionDb: 3.2,
   minReductionDb: 1.2,
@@ -44,6 +47,7 @@ export function parseSectionVocalDeEsserCommand(message = '') {
     label: sectionLabel(section),
     occurrence,
     maxReductionDb: explicitDb ?? inferredReductionDb(text),
+    frequencyMode: 'adaptive',
     frequencyHz: DEFAULT_DEESSER.frequencyHz,
     q: DEFAULT_DEESSER.q,
     blocked: false,
@@ -74,6 +78,7 @@ export function resolveSectionVocalDeEsserTarget(project, command) {
 export function planSectionVocalDeEsser(project, command, {
   sibilanceEvents = null,
   analysisSource = null,
+  adaptiveFrequencyRequired = false,
 } = {}) {
   const target = resolveSectionVocalDeEsserTarget(project, command);
   if (!target.ok) return target;
@@ -82,42 +87,52 @@ export function planSectionVocalDeEsser(project, command, {
   }
 
   const maxReductionDb = roundTenth(clamp(Number(command.maxReductionDb) || DEFAULT_DEESSER.maxReductionDb, 0.5, 5));
-  const frequencyHz = Math.round(clamp(Number(command.frequencyHz) || DEFAULT_DEESSER.frequencyHz, 5000, 10000));
+  const fallbackFrequencyHz = Math.round(clamp(Number(command.frequencyHz) || DEFAULT_DEESSER.frequencyHz, DEFAULT_DEESSER.minFrequencyHz, DEFAULT_DEESSER.maxFrequencyHz));
   const q = roundHundredth(clamp(Number(command.q) || DEFAULT_DEESSER.q, 0.8, 3));
-  const candidates = sibilanceEvents
-    .map((event, index) => normalizeSibilanceCandidate(event, index, target.range, maxReductionDb))
+  const acousticCandidates = sibilanceEvents
+    .map((event, index) => normalizeSibilanceCandidate(event, index, target.range, maxReductionDb, {
+      fallbackFrequencyHz,
+      adaptiveFrequencyRequired,
+    }))
     .filter(Boolean)
     .sort((a, b) => a.startSeconds - b.startSeconds);
-  const windows = mergeCandidateWindows(candidates, target.range);
+  const candidates = acousticCandidates.filter((candidate) => Number.isFinite(candidate.frequencyHz));
 
-  if (!windows.length) {
+  if (!candidates.length) {
+    const missingAdaptiveBand = adaptiveFrequencyRequired && acousticCandidates.some((candidate) => candidate.missingAdaptiveBand);
     return {
       ...target,
       ok: false,
-      reason: 'no_sibilance_evidence',
+      reason: missingAdaptiveBand ? 'adaptive_sibilance_band_required' : 'no_sibilance_evidence',
       analyzedEventCount: sibilanceEvents.length,
       analysisSource: String(analysisSource || 'unknown'),
     };
   }
 
+  const windows = mergeCandidateWindows(candidates, target.range);
   const events = windows.map((window, index) => ({
     id: `${PABLO_SECTION_VOCAL_DEESSER_SOURCE}:${target.track.id}:${index + 1}:${target.section.id}`,
     kind: 'peaking_eq',
     startSeconds: roundMillis(window.startSeconds),
     endSeconds: roundMillis(window.endSeconds),
     gainDb: -roundTenth(window.reductionDb),
-    frequencyHz,
+    frequencyHz: roundTo(window.frequencyHz, 50),
     q,
     confidence: roundHundredth(window.confidence),
     source: PABLO_SECTION_VOCAL_DEESSER_SOURCE,
     enabled: true,
   }));
+  const frequencies = events.map((event) => event.frequencyHz);
+  const frequencyRangeHz = [Math.min(...frequencies), Math.max(...frequencies)];
+  const frequencyHz = roundTo(frequencies.reduce((sum, value) => sum + value, 0) / frequencies.length, 50);
 
   return {
     ...target,
     ok: true,
     maxReductionDb,
     frequencyHz,
+    frequencyRangeHz,
+    frequencyMode: windows.every((window) => window.adaptiveBand) ? 'adaptive' : 'legacy-fallback',
     q,
     events,
     detectedCount: events.length,
@@ -158,7 +173,10 @@ export function isOwnedSectionDeEsserEvent(event, sectionId) {
     && String(event?.id || '').endsWith(`:${sectionId}`);
 }
 
-function normalizeSibilanceCandidate(event, index, range, maxReductionDb) {
+function normalizeSibilanceCandidate(event, index, range, maxReductionDb, {
+  fallbackFrequencyHz,
+  adaptiveFrequencyRequired,
+}) {
   const start = Number(event?.start ?? event?.time);
   const rawEnd = Number(event?.end ?? event?.time);
   const confidence = clamp(Number(event?.confidence) || 0, 0, 1);
@@ -176,12 +194,28 @@ function normalizeSibilanceCandidate(event, index, range, maxReductionDb) {
     DEFAULT_DEESSER.minReductionDb,
     maxReductionDb,
   );
+
+  const measuredFrequency = Number(event?.frequencyHz);
+  const spectralConfidence = clamp(Number(event?.spectralConfidence) || 0, 0, 1);
+  const hasAdaptiveBand = Number.isFinite(measuredFrequency)
+    && measuredFrequency >= DEFAULT_DEESSER.minFrequencyHz
+    && measuredFrequency <= DEFAULT_DEESSER.maxFrequencyHz
+    && spectralConfidence >= DEFAULT_DEESSER.spectralConfidenceThreshold;
+  const frequencyHz = hasAdaptiveBand
+    ? clamp(measuredFrequency, DEFAULT_DEESSER.minFrequencyHz, DEFAULT_DEESSER.maxFrequencyHz)
+    : (adaptiveFrequencyRequired ? null : fallbackFrequencyHz);
+  const frequencyWeight = Math.max(0.05, spectralConfidence) * Math.max(0.15, intensity) * Math.max(0.5, reductionDb);
+
   return {
     index,
     startSeconds: Math.max(range.startSeconds, overlapStart - DEFAULT_DEESSER.preRollSeconds),
     endSeconds: Math.min(range.endSeconds, overlapEnd + DEFAULT_DEESSER.postRollSeconds),
     reductionDb,
     confidence,
+    frequencyHz,
+    frequencyWeight,
+    adaptiveBand: hasAdaptiveBand,
+    missingAdaptiveBand: adaptiveFrequencyRequired && !hasAdaptiveBand,
   };
 }
 
@@ -190,9 +224,15 @@ function mergeCandidateWindows(candidates, range) {
   for (const candidate of candidates) {
     const current = merged.at(-1);
     if (current && candidate.startSeconds - current.endSeconds <= DEFAULT_DEESSER.mergeGapSeconds) {
+      const combinedWeight = current.frequencyWeight + candidate.frequencyWeight;
+      current.frequencyHz = combinedWeight > 0
+        ? ((current.frequencyHz * current.frequencyWeight) + (candidate.frequencyHz * candidate.frequencyWeight)) / combinedWeight
+        : current.frequencyHz;
+      current.frequencyWeight = combinedWeight;
       current.endSeconds = Math.min(range.endSeconds, Math.max(current.endSeconds, candidate.endSeconds));
       current.reductionDb = Math.max(current.reductionDb, candidate.reductionDb);
       current.confidence = Math.max(current.confidence, candidate.confidence);
+      current.adaptiveBand = current.adaptiveBand && candidate.adaptiveBand;
     } else {
       merged.push({ ...candidate });
     }
@@ -231,4 +271,5 @@ function normalizeText(value = '') {
 function roundMillis(value) { return Math.round(Number(value) * 1000) / 1000; }
 function roundTenth(value) { return Math.round(Number(value) * 10) / 10; }
 function roundHundredth(value) { return Math.round(Number(value) * 100) / 100; }
+function roundTo(value, step) { return Math.round(Number(value) / step) * step; }
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }

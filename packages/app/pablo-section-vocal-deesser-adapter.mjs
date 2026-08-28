@@ -59,14 +59,18 @@ async function onPabloSubmitCapture(event) {
     const result = applySectionVocalDeEsser(project, command, {
       sibilanceEvents,
       analysisSource,
+      adaptiveFrequencyRequired: true,
       now: Date.now(),
     });
     if (!result.ok) {
       appendMessage(blockedPlanReply(command, result), 'assistant', { canApply: false });
       return;
     }
+    if (result.frequencyMode !== 'adaptive') {
+      throw new Error('A banda de sibilância não foi medida de forma adaptativa. Não alterei a voz.');
+    }
 
-    const label = `De-esser vocal no ${result.section.label}`;
+    const label = `De-esser vocal adaptativo no ${result.section.label}`;
     const snapshotted = snapshotProject(result.project, label);
     await saveProject(snapshotted);
     const persisted = await getProject(project.id);
@@ -80,20 +84,22 @@ async function onPabloSubmitCapture(event) {
       return planned
         && savedEvent.kind === 'peaking_eq'
         && Number(savedEvent.gainDb) < 0
+        && Number(savedEvent.frequencyHz) >= 4800
+        && Number(savedEvent.frequencyHz) <= 10800
         && Math.abs(Number(savedEvent.gainDb) - planned.gainDb) < 0.001
         && Math.abs(Number(savedEvent.frequencyHz) - planned.frequencyHz) < 0.001
         && Math.abs(Number(savedEvent.q) - planned.q) < 0.001
         && Math.abs(Number(savedEvent.startSeconds) - planned.startSeconds) < 0.001
         && Math.abs(Number(savedEvent.endSeconds) - planned.endSeconds) < 0.001;
     })) {
-      throw new Error('O de-esser regional não foi confirmado no projeto local. Não vou dizer que foi aplicado.');
+      throw new Error('O de-esser adaptativo não foi confirmado no projeto local. Não vou dizer que foi aplicado.');
     }
 
     globalThis.dispatchEvent(new CustomEvent('pablovoice:project-persisted', {
       detail: { projectId: project.id, source: PABLO_SECTION_VOCAL_DEESSER_SOURCE },
     }));
     appendMessage(
-      `Encontrei ${result.detectedCount} sibilância(s) ${trackLabel(result.track)} no ${occurrenceLabel(command, result.section)} e reduzi só esses momentos. O brilho geral da voz e o restante da música ficaram intactos. Corte máximo: ${result.maxReductionDb.toFixed(1)} dB em torno de ${(result.frequencyHz / 1000).toFixed(1)} kHz.`,
+      `Encontrei ${result.detectedCount} sibilância(s) ${trackLabel(result.track)} no ${occurrenceLabel(command, result.section)} e reduzi só esses momentos. Medi a banda dessa voz em ${formatFrequencyRange(result.frequencyRangeHz)}; não usei uma frequência fixa. O brilho geral e o restante da música ficaram intactos. Corte máximo: ${result.maxReductionDb.toFixed(1)} dB.`,
       'assistant',
       { canApply: true },
     );
@@ -120,6 +126,7 @@ function blockedPlanReply(command, result) {
   if (result.reason === 'vocal_track_ambiguous') return 'Há mais de uma faixa vocal possível. Selecione no Studio a voz que você quer editar e repita o pedido; não escolhi por você.';
   if (result.reason === 'section_outside_vocal_track') return `A faixa vocal não cobre o trecho confirmado de ${command.label.toLowerCase()}. Não criei tratamento fora do áudio existente.`;
   if (result.reason === 'no_sibilance_evidence') return `Não encontrei sibilância com confiança suficiente nesse ${command.label.toLowerCase()}. Não escureci a voz por aproximação e não alterei o projeto.`;
+  if (result.reason === 'adaptive_sibilance_band_required') return `Encontrei possível sibilância nesse ${command.label.toLowerCase()}, mas não consegui medir a banda com confiança suficiente. Não usei 7,2 kHz como chute e não alterei o projeto.`;
   if (result.reason === 'sibilance_analysis_required') return 'Preciso analisar a própria faixa vocal antes de tratar os esses. Nenhum corte foi criado sem essa evidência.';
   return 'Não consegui resolver essa seção e faixa vocal com segurança. Não alterei o projeto.';
 }
@@ -134,6 +141,14 @@ function occurrenceLabel(command, section) {
   return `${ordinal} ${section.label.toLowerCase()}`;
 }
 
+function formatFrequencyRange(range = []) {
+  const low = Number(range?.[0]);
+  const high = Number(range?.[1]);
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return 'uma banda medida automaticamente';
+  if (Math.abs(high - low) < 75) return `${(low / 1000).toFixed(1)} kHz`;
+  return `${(low / 1000).toFixed(1)}–${(high / 1000).toFixed(1)} kHz`;
+}
+
 function appendMessage(text, role, result = null) {
   const log = document.querySelector('[data-pablo-log]');
   if (!log) return;
@@ -142,7 +157,7 @@ function appendMessage(text, role, result = null) {
   message.textContent = String(text || '');
   if (role === 'assistant' && result && !result.error) {
     const meta = document.createElement('small');
-    meta.textContent = result.canApply ? 'Studio · de-esser regional salvo' : 'Studio · edição não aplicada';
+    meta.textContent = result.canApply ? 'Studio · de-esser adaptativo salvo' : 'Studio · edição não aplicada';
     message.appendChild(meta);
   }
   log.appendChild(message);
