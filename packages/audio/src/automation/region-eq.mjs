@@ -14,9 +14,17 @@ export function highShelfAutomationPoints(event, cursor = 0, duration = Infinity
   const startCursor = Math.max(0, Number(cursor) || 0);
   const endDuration = Number.isFinite(Number(duration)) ? Math.max(startCursor, Number(duration)) : Infinity;
   if (normalized.endSeconds <= normalized.startSeconds || normalized.endSeconds <= startCursor || normalized.startSeconds >= endDuration) return [];
+  const startsInside = startCursor >= normalized.startSeconds && startCursor < normalized.endSeconds;
   const start = Math.max(startCursor, normalized.startSeconds);
   const end = Math.min(endDuration, normalized.endSeconds);
   const edge = Math.min(Math.max(0, Number(ramp) || 0), Math.max(0, (end - start) / 3));
+  if (startsInside) {
+    return [
+      { time: startCursor, value: normalized.gainDb },
+      { time: Math.max(startCursor, end - edge), value: normalized.gainDb },
+      { time: end, value: 0 },
+    ];
+  }
   return [
     { time: Math.max(startCursor, start - edge), value: 0 },
     { time: start, value: normalized.gainDb },
