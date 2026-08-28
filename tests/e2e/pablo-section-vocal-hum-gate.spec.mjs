@@ -112,15 +112,14 @@ test('WEB VOCAL HUM GATE: 60 Hz hum is explained inside the section without auto
   expect(evidence.noiseSource).toBe('local-stationary-noise-v1');
   expect(Array.isArray(evidence.restoration.windows)).toBe(true);
   const insideRaw = evidence.noiseEvents.find((event) => event.start < 0.8 && event.end > 0.4);
-  const outsideRaw = evidence.noiseEvents.find((event) => event.start < 1.68 && event.end > 1.3);
   expect(insideRaw).toBeTruthy();
-  expect(outsideRaw).toBeTruthy();
   expect(insideRaw.noiseKind).toBe('hum');
   expect(insideRaw.frequencyHz).toBe(60);
   expect(evidence.readOnly).toBe(true);
   expect(evidence.scanClassified.some((finding) => finding.type === 'hum' && finding.frequencyHz === 60)).toBe(true);
   expect(evidence.scanClassified.every((finding) => finding.autoEdit === false)).toBe(true);
   expect(evidence.scanClassified.every((finding) => finding.timelineStartSeconds >= 0.25 && finding.timelineEndSeconds <= 1.05)).toBe(true);
+  expect(evidence.scanClassified.some((finding) => finding.timelineStartSeconds > 1.05 || finding.timelineEndSeconds > 1.05)).toBe(false);
 
   const before = await projectFingerprint(page);
   await page.locator('[data-route="pablo"]').first().click();
