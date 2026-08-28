@@ -17,6 +17,7 @@ test('undo identifies Pablo-owned events by source plus confirmed section id', a
   assert.match(core, /PABLO_SECTION_VOCAL_GAIN_SOURCE/);
   assert.match(core, /PABLO_SECTION_VOCAL_SPACE_SOURCE/);
   assert.match(core, /PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE/);
+  assert.match(core, /PABLO_SECTION_VOCAL_BODY_SOURCE/);
   assert.match(core, /id\.endsWith\(`:\$\{sectionId\}`\)/);
   assert.match(core, /resolveConfirmedSectionAudition/);
   assert.doesNotMatch(core, /user_manual.*sourcesForMode|pablo_breath_intelligence.*sourcesForMode/);
@@ -29,6 +30,7 @@ test('broad undo filters only canonical section-mix sources and preserves unrela
   assert.match(core, /PABLO_SECTION_VOCAL_GAIN_SOURCE/);
   assert.match(core, /PABLO_SECTION_VOCAL_SPACE_SOURCE/);
   assert.match(core, /PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE/);
+  assert.match(core, /PABLO_SECTION_VOCAL_BODY_SOURCE/);
   assert.doesNotMatch(core, /regionAutomation\s*=\s*\[\]/);
 });
 

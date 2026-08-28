@@ -178,17 +178,25 @@ function normalizeRegionAutomation(input, duration) {
     const start = clamp(finite(event?.startSeconds ?? event?.start, 0), 0, duration);
     const end = clamp(finite(event?.endSeconds ?? event?.end, start), start, duration);
     const kind = String(event?.kind || 'gain');
+    const isEq = kind === 'high_shelf' || kind === 'peaking_eq';
     const normalized = {
       id: String(event?.id || `region_${index}`),
       kind,
       startSeconds: start,
       endSeconds: end,
-      gainDb: clamp(finite(event?.gainDb ?? event?.reductionDb, 0), kind === 'high_shelf' ? -12 : -60, 12),
+      gainDb: clamp(finite(event?.gainDb ?? event?.reductionDb, 0), isEq ? -12 : -60, 12),
       confidence: clamp(finite(event?.confidence, 0), 0, 1),
       source: String(event?.source || 'manual'),
       enabled: event?.enabled !== false,
     };
-    if (kind === 'high_shelf') normalized.frequencyHz = clamp(finite(event?.frequencyHz, 6500), 2500, 14000);
+    if (kind === 'high_shelf') {
+      normalized.frequencyHz = clamp(finite(event?.frequencyHz, 6500), 2500, 14000);
+      normalized.q = clamp(finite(event?.q, 1), 0.2, 4);
+    }
+    if (kind === 'peaking_eq') {
+      normalized.frequencyHz = clamp(finite(event?.frequencyHz, 220), 80, 6000);
+      normalized.q = clamp(finite(event?.q, 0.82), 0.35, 6);
+    }
     return normalized;
   }).filter((event) => event.endSeconds > event.startSeconds);
 }
