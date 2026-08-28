@@ -1,5 +1,6 @@
 import { EXPORT_PRESETS, normalizationFactor, peakOf } from './audio/src/presets.mjs';
 import { regionGainEnvelope } from './audio/src/automation/region-gain.mjs';
+import { regionalHighShelfEvents, highShelfAutomationPoints } from './audio/src/automation/region-eq.mjs';
 import { sourceRegionsToTrackTime } from './audio/src/automation/region-time.mjs';
 
 export class PabloAudioEngine {
@@ -182,6 +183,9 @@ function createTrackSources(context, buffer, track, mode, cursor, baseWhen, dest
 
 function connectTreatment(context, input, buffer, track, mode, when, localCursor, duration) {
   const effects = track.effects || {};
+  const localRegions = mode === 'processed' && Array.isArray(track.regionAutomation) && track.regionAutomation.length
+    ? sourceRegionsToTrackTime(track, track.regionAutomation)
+    : [];
   let node = input;
   if (mode === 'processed') {
     if (effects.clean) {
@@ -209,6 +213,7 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
       node.connect(shaper);
       node = shaper;
     }
+    if (localRegions.length) node = connectRegionalHighShelves(context, node, localRegions, when, localCursor, duration);
   }
   const gain = context.createGain();
   const normalize = mode === 'processed' && effects.normalize ? normalizationFactor(buffer) : 1;
@@ -216,9 +221,8 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
   automateGain(gain.gain, level, mode === 'processed' ? effects : {}, when, localCursor, duration);
   node.connect(gain);
   node = gain;
-  if (mode === 'processed' && Array.isArray(track.regionAutomation) && track.regionAutomation.length) {
+  if (localRegions.some((event) => String(event?.kind || 'gain') === 'gain')) {
     const regional = context.createGain();
-    const localRegions = sourceRegionsToTrackTime(track, track.regionAutomation);
     automateRegions(regional.gain, localRegions, when, localCursor, duration);
     node.connect(regional);
     node = regional;
@@ -228,6 +232,25 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
     pan.pan.value = Math.max(-1, Math.min(1, Number(track.pan || 0)));
     node.connect(pan);
     node = pan;
+  }
+  return node;
+}
+
+function connectRegionalHighShelves(context, input, events, when, cursor, duration) {
+  let node = input;
+  for (const event of regionalHighShelfEvents(events, cursor, duration)) {
+    const shelf = context.createBiquadFilter();
+    shelf.type = 'highshelf';
+    shelf.frequency.value = event.frequencyHz;
+    shelf.Q.value = 1;
+    shelf.gain.setValueAtTime(0, when);
+    for (const point of highShelfAutomationPoints(event, cursor, duration)) {
+      const at = when + Math.max(0, point.time - cursor);
+      if (point.time <= cursor + 0.000001) shelf.gain.setValueAtTime(point.value, when);
+      else shelf.gain.linearRampToValueAtTime(point.value, at);
+    }
+    node.connect(shelf);
+    node = shelf;
   }
   return node;
 }
