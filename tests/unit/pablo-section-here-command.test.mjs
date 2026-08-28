@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSectionHereCommand } from '../../packages/app/pablo-section-here-adapter.mjs';
+import { parseSectionHereCommand } from '../../packages/core/src/section-here-command.mjs';
 
 test('Pablo recognizes conversational section here commands', () => {
   assert.deepEqual(parseSectionHereCommand('marca o refrão aqui'), { section: 'chorus', label: 'Refrão' });
