@@ -7,6 +7,7 @@ import {
 } from './section-vocal-cleanup.mjs';
 
 export const PABLO_SECTION_VOCAL_SCAN_SOURCE = 'pablo_section_vocal_scan';
+const NOISE_SCAN_GATE = Object.freeze({ confidence: 0.68, stationarity: 0.55, minRmsDb: -68 });
 
 export function parseSectionVocalScanCommand(message = '') {
   const text = normalizeText(message);
@@ -64,6 +65,12 @@ export function planSectionVocalScan(project, command, { analysis = null } = {})
     }, target, { autoEdit: dynamicsAutoEdit }));
   }
 
+  const noiseEvidence = qualifyingNoiseEvents(analysis.voice.noiseEvents, target.range);
+  for (const event of noiseEvidence) {
+    const type = event.noiseKind === 'hum' ? 'hum' : 'noise';
+    findings.push(buildFinding(type, event, target, { autoEdit: false }));
+  }
+
   findings.sort((a, b) => a.timelineStartSeconds - b.timelineStartSeconds || a.type.localeCompare(b.type));
   const observed = observedCounts(analysis.voice, target.range);
   const actionableCount = findings.filter((finding) => finding.autoEdit).length;
@@ -81,6 +88,7 @@ export function planSectionVocalScan(project, command, { analysis = null } = {})
     reviewCount,
     clean: findings.length === 0,
     analysisSource: String(analysis.voice.eventDetection?.source || 'unknown'),
+    noiseAnalysisSource: String(analysis.voice.noiseDetection?.source || 'unknown'),
   };
 }
 
@@ -106,6 +114,10 @@ function buildFinding(type, event, target, { autoEdit = true } = {}) {
   if (Number.isFinite(Number(event?.gainDb))) finding.suggestedGainDb = roundTenth(Number(event.gainDb));
   if (Number.isFinite(Number(event?.peak))) finding.peak = roundHundredth(Number(event.peak));
   if (Number.isFinite(Number(event?.transientRise))) finding.transientRise = roundHundredth(Number(event.transientRise));
+  if (Number.isFinite(Number(event?.rmsDb))) finding.rmsDb = roundTenth(Number(event.rmsDb));
+  if (Number.isFinite(Number(event?.stationarity))) finding.stationarity = roundHundredth(clamp01(event.stationarity));
+  if (Number.isFinite(Number(event?.humConfidence))) finding.humConfidence = roundHundredth(clamp01(event.humConfidence));
+  if (event?.noiseKind) finding.noiseKind = String(event.noiseKind);
   return finding;
 }
 
@@ -124,16 +136,21 @@ function findingLabel(type) {
   if (type === 'plosive') return 'Estouro de P/B';
   if (type === 'click') return 'Estalo curto';
   if (type === 'peak') return 'Pico de dinâmica';
+  if (type === 'hum') return 'Hum de rede';
+  if (type === 'noise') return 'Ruído de fundo';
   return 'Evidência vocal';
 }
 
 function observedCounts(voice, range) {
+  const noise = (Array.isArray(voice?.noiseEvents) ? voice.noiseEvents : []).filter((event) => overlapsRange(event, range));
   return {
     breaths: countOverlap(voice?.breathEvents, range),
     sibilance: countOverlap(voice?.sibilanceEvents, range),
     plosives: countOverlap(voice?.plosiveEvents, range),
     clicks: countOverlap(voice?.clickEvents, range),
     peaks: countOverlap(voice?.peakEvents, range),
+    noise: noise.length,
+    hum: noise.filter((event) => event?.noiseKind === 'hum').length,
   };
 }
 
@@ -150,6 +167,20 @@ function qualifyingPeakEvents(events, range) {
     const intensity = clamp01(event?.intensity);
     return confidence >= DEFAULT_CLEANUP.peakConfidenceThreshold
       && intensity >= DEFAULT_CLEANUP.peakIntensityThreshold;
+  });
+}
+
+function qualifyingNoiseEvents(events, range) {
+  if (!Array.isArray(events)) return [];
+  return events.filter((event) => {
+    if (!overlapsRange(event, range)) return false;
+    const confidence = clamp01(event?.confidence);
+    const stationarity = clamp01(event?.stationarity);
+    const rmsDb = Number(event?.rmsDb);
+    return confidence >= NOISE_SCAN_GATE.confidence
+      && stationarity >= NOISE_SCAN_GATE.stationarity
+      && Number.isFinite(rmsDb)
+      && rmsDb >= NOISE_SCAN_GATE.minRmsDb;
   });
 }
 
