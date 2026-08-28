@@ -1,3 +1,5 @@
+import { enrichSibilanceEventsWithSpectrum } from './sibilance-spectrum.mjs';
+
 export function detectBreathAndSibilance(samples, {
   sampleRate = 48000,
   frameSize = 1024,
@@ -39,11 +41,10 @@ export function detectBreathAndSibilance(samples, {
     });
   }
 
-  return {
-    breathEvents: mergeFrames(frames, 'breath', { minEventSeconds, mergeGapSeconds }),
-    sibilanceEvents: mergeFrames(frames, 'sibilance', { minEventSeconds, mergeGapSeconds }),
-    frames,
-  };
+  const breathEvents = mergeFrames(frames, 'breath', { minEventSeconds, mergeGapSeconds });
+  const detectedSibilance = mergeFrames(frames, 'sibilance', { minEventSeconds, mergeGapSeconds });
+  const sibilanceEvents = enrichSibilanceEventsWithSpectrum(samples, detectedSibilance, { sampleRate });
+  return { breathEvents, sibilanceEvents, frames };
 }
 
 export function analyzeNoiseFrame(samples, start, frameSize, sampleRate = 48000) {
