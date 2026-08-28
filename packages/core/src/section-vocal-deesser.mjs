@@ -18,7 +18,7 @@ export const DEFAULT_DEESSER = Object.freeze({
 
 export function parseSectionVocalDeEsserCommand(message = '') {
   const text = normalizeText(message);
-  if (!text) return null;
+  if (!text || /\b(desfaz|desfazer|volta|voltar)\b/.test(text)) return null;
   const intent = /\b(de esser|deesser|sibilancia|sibilancias|sibilante|sibilantes|segura os esses|segurar os esses|controla os esses|controlar os esses|reduz os esses|reduzir os esses|tira os esses|tirar os esses|chiado do s|chiado dos esses)\b/.test(text);
   if (!intent) return null;
 
