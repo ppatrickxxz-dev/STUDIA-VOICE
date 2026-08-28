@@ -44,7 +44,10 @@ async function onPabloSubmitCapture(event) {
 
     const explicit = boundary === 'end'
       ? await explicitSectionRange(command, projectId, playhead.seconds)
-      : `marca o ${spokenSection(command.section)} em ${playhead.seconds.toFixed(3)} segundos`;
+      : {
+          ok: true,
+          command: `marca o ${spokenSection(command.section)} em ${playhead.seconds.toFixed(3)} segundos`,
+        };
     if (!explicit.ok) {
       appendMessage(explicit.reply, 'assistant', { domain: 'beat_lab', canApply: false });
       return;
