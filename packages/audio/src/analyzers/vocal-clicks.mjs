@@ -167,6 +167,11 @@ function overlapsLargePeak(event, peakEvents) {
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return false;
     const duration = end - start;
     if (duration < 0.05) return false;
+    const peak = Number(candidate?.peak);
+    const rms = Number(candidate?.rms);
+    const crestFactor = Number.isFinite(peak) && Number.isFinite(rms) && rms > 1e-9 ? peak / rms : null;
+    const sustainedShape = crestFactor == null || crestFactor < 3.2;
+    if (!sustainedShape) return false;
     return overlaps(event, candidate, 0.006);
   });
 }
