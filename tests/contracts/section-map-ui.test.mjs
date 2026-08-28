@@ -54,14 +54,14 @@ test('section clock zero-pads whole and fractional seconds', async () => {
   assert.match(ui, /seconds\.toFixed\(1\)\.padStart\(4, '0'\)/);
 });
 
-test('section UI can use the real or last-heard Studio cursor and remains CSP-safe', async () => {
+test('section UI uses the shared project-scoped Studio playhead and remains CSP-safe', async () => {
   const ui = await read('packages/app/section-map-ui.mjs');
+  assert.match(ui, /studio-playhead-context\.mjs/);
   assert.match(ui, /document\.querySelector\('#current-time'\)/);
   assert.match(ui, /parseClockSeconds/);
-  assert.match(ui, /lastCursorSeconds/);
-  assert.match(ui, /lastCursorProjectId/);
-  assert.match(ui, /if \(projectId !== lastCursorProjectId\)/);
-  assert.match(ui, /live != null && live > 0 \? live : lastCursorSeconds/);
+  assert.match(ui, /recordStudioPlayhead\(projectId, parsed\)/);
+  assert.match(ui, /readStudioPlayhead\(projectId\)/);
+  assert.doesNotMatch(ui, /lastCursorSeconds|lastCursorProjectId/);
   assert.match(ui, /link\.href = '\.\/section-map\.css'/);
   assert.doesNotMatch(ui, /createElement\('style'\)/);
   assert.doesNotMatch(ui, /\.style\./);
