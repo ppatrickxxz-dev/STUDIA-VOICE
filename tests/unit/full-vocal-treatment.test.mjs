@@ -120,6 +120,7 @@ test('continuing treatment skips already treated sections and plans only remaini
 test('continuing treatment fails closed when every actionable section is already treated', () => {
   const { project, vocal } = projectWithSections();
   markSectionTreated(project, vocal, 0);
+  markSectionTreated(project, vocal, 1);
   markSectionTreated(project, vocal, 2);
   const command = parseFullVocalTreatmentCommand('prosseguir tratamento vocal');
   const result = planFullVocalTreatment(project, command, { analysis: richAnalysis() });
