@@ -6,6 +6,7 @@ import {
   regionalPeakingEqEvents,
   peakingEqAutomationPoints,
 } from './audio/src/automation/region-eq.mjs';
+import { regionalCompressorEvents, compressorAutomationPoints } from './audio/src/automation/region-dynamics.mjs';
 import { sourceRegionsToTrackTime } from './audio/src/automation/region-time.mjs';
 
 export class PabloAudioEngine {
@@ -218,7 +219,10 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
       node.connect(shaper);
       node = shaper;
     }
-    if (localRegions.length) node = connectRegionalEq(context, node, localRegions, when, localCursor, duration);
+    if (localRegions.length) {
+      node = connectRegionalEq(context, node, localRegions, when, localCursor, duration);
+      node = connectRegionalDynamics(context, node, localRegions, when, localCursor, duration);
+    }
   }
   const gain = context.createGain();
   const normalize = mode === 'processed' && effects.normalize ? normalizationFactor(buffer) : 1;
@@ -265,6 +269,31 @@ function connectRegionalBiquad(context, input, event, type, points, when, cursor
   }
   input.connect(eq);
   return eq;
+}
+
+function connectRegionalDynamics(context, input, events, when, cursor, duration) {
+  let node = input;
+  for (const event of regionalCompressorEvents(events, cursor, duration)) {
+    const value = context.createDynamicsCompressor();
+    value.knee.value = event.kneeDb;
+    value.attack.value = event.attackSeconds;
+    value.release.value = event.releaseSeconds;
+    value.threshold.setValueAtTime(0, when);
+    value.ratio.setValueAtTime(1, when);
+    for (const point of compressorAutomationPoints(event, cursor, duration)) {
+      const at = when + Math.max(0, point.time - cursor);
+      if (point.time <= cursor + 0.000001) {
+        value.threshold.setValueAtTime(point.thresholdDb, when);
+        value.ratio.setValueAtTime(point.ratio, when);
+      } else {
+        value.threshold.linearRampToValueAtTime(point.thresholdDb, at);
+        value.ratio.linearRampToValueAtTime(point.ratio, at);
+      }
+    }
+    node.connect(value);
+    node = value;
+  }
+  return node;
 }
 
 function filter(context, input, type, frequency, gain = 0, q = 1) {
