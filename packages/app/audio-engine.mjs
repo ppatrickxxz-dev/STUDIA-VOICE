@@ -1,6 +1,11 @@
 import { EXPORT_PRESETS, normalizationFactor, peakOf } from './audio/src/presets.mjs';
 import { regionGainEnvelope } from './audio/src/automation/region-gain.mjs';
-import { regionalHighShelfEvents, highShelfAutomationPoints } from './audio/src/automation/region-eq.mjs';
+import {
+  regionalHighShelfEvents,
+  highShelfAutomationPoints,
+  regionalPeakingEqEvents,
+  peakingEqAutomationPoints,
+} from './audio/src/automation/region-eq.mjs';
 import { sourceRegionsToTrackTime } from './audio/src/automation/region-time.mjs';
 
 export class PabloAudioEngine {
@@ -213,7 +218,7 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
       node.connect(shaper);
       node = shaper;
     }
-    if (localRegions.length) node = connectRegionalHighShelves(context, node, localRegions, when, localCursor, duration);
+    if (localRegions.length) node = connectRegionalEq(context, node, localRegions, when, localCursor, duration);
   }
   const gain = context.createGain();
   const normalize = mode === 'processed' && effects.normalize ? normalizationFactor(buffer) : 1;
@@ -236,23 +241,30 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
   return node;
 }
 
-function connectRegionalHighShelves(context, input, events, when, cursor, duration) {
+function connectRegionalEq(context, input, events, when, cursor, duration) {
   let node = input;
   for (const event of regionalHighShelfEvents(events, cursor, duration)) {
-    const shelf = context.createBiquadFilter();
-    shelf.type = 'highshelf';
-    shelf.frequency.value = event.frequencyHz;
-    shelf.Q.value = 1;
-    shelf.gain.setValueAtTime(0, when);
-    for (const point of highShelfAutomationPoints(event, cursor, duration)) {
-      const at = when + Math.max(0, point.time - cursor);
-      if (point.time <= cursor + 0.000001) shelf.gain.setValueAtTime(point.value, when);
-      else shelf.gain.linearRampToValueAtTime(point.value, at);
-    }
-    node.connect(shelf);
-    node = shelf;
+    node = connectRegionalBiquad(context, node, event, 'highshelf', highShelfAutomationPoints(event, cursor, duration), when, cursor);
+  }
+  for (const event of regionalPeakingEqEvents(events, cursor, duration)) {
+    node = connectRegionalBiquad(context, node, event, 'peaking', peakingEqAutomationPoints(event, cursor, duration), when, cursor);
   }
   return node;
+}
+
+function connectRegionalBiquad(context, input, event, type, points, when, cursor) {
+  const eq = context.createBiquadFilter();
+  eq.type = type;
+  eq.frequency.value = event.frequencyHz;
+  eq.Q.value = event.q ?? 1;
+  eq.gain.setValueAtTime(0, when);
+  for (const point of points) {
+    const at = when + Math.max(0, point.time - cursor);
+    if (point.time <= cursor + 0.000001) eq.gain.setValueAtTime(point.value, when);
+    else eq.gain.linearRampToValueAtTime(point.value, at);
+  }
+  input.connect(eq);
+  return eq;
 }
 
 function filter(context, input, type, frequency, gain = 0, q = 1) {
