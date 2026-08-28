@@ -1,16 +1,53 @@
 export const REGIONAL_HIGH_SHELF_KIND = 'high_shelf';
+export const REGIONAL_PEAKING_EQ_KIND = 'peaking_eq';
 
 export function regionalHighShelfEvents(events = [], cursor = 0, duration = Infinity) {
-  const startCursor = Math.max(0, Number(cursor) || 0);
-  const endDuration = Number.isFinite(Number(duration)) ? Math.max(startCursor, Number(duration)) : Infinity;
-  return (Array.isArray(events) ? events : [])
-    .filter((event) => event?.enabled !== false && event?.kind === REGIONAL_HIGH_SHELF_KIND)
-    .map((event) => normalizeShelfEvent(event))
-    .filter((event) => event.endSeconds > event.startSeconds && event.endSeconds > startCursor && event.startSeconds < endDuration);
+  return regionalEqEvents(events, REGIONAL_HIGH_SHELF_KIND, cursor, duration).map((event) => normalizeShelfEvent(event));
+}
+
+export function regionalPeakingEqEvents(events = [], cursor = 0, duration = Infinity) {
+  return regionalEqEvents(events, REGIONAL_PEAKING_EQ_KIND, cursor, duration).map((event) => normalizePeakingEqEvent(event));
 }
 
 export function highShelfAutomationPoints(event, cursor = 0, duration = Infinity, ramp = 0.018) {
-  const normalized = normalizeShelfEvent(event);
+  return eqAutomationPoints(normalizeShelfEvent(event), cursor, duration, ramp);
+}
+
+export function peakingEqAutomationPoints(event, cursor = 0, duration = Infinity, ramp = 0.018) {
+  return eqAutomationPoints(normalizePeakingEqEvent(event), cursor, duration, ramp);
+}
+
+export function normalizeShelfEvent(event = {}) {
+  const normalized = normalizeBaseEqEvent(event, REGIONAL_HIGH_SHELF_KIND);
+  return {
+    ...normalized,
+    frequencyHz: clamp(finite(event.frequencyHz, 6500), 2500, 14000),
+    q: clamp(finite(event.q, 1), 0.2, 4),
+  };
+}
+
+export function normalizePeakingEqEvent(event = {}) {
+  const normalized = normalizeBaseEqEvent(event, REGIONAL_PEAKING_EQ_KIND);
+  return {
+    ...normalized,
+    frequencyHz: clamp(finite(event.frequencyHz, 220), 80, 6000),
+    q: clamp(finite(event.q, 0.82), 0.35, 6),
+  };
+}
+
+function regionalEqEvents(events, kind, cursor, duration) {
+  const startCursor = Math.max(0, Number(cursor) || 0);
+  const endDuration = Number.isFinite(Number(duration)) ? Math.max(startCursor, Number(duration)) : Infinity;
+  return (Array.isArray(events) ? events : [])
+    .filter((event) => event?.enabled !== false && event?.kind === kind)
+    .filter((event) => {
+      const start = finite(event?.startSeconds, 0);
+      const end = finite(event?.endSeconds, start);
+      return end > start && end > startCursor && start < endDuration;
+    });
+}
+
+function eqAutomationPoints(normalized, cursor, duration, ramp) {
   const startCursor = Math.max(0, Number(cursor) || 0);
   const endDuration = Number.isFinite(Number(duration)) ? Math.max(startCursor, Number(duration)) : Infinity;
   if (normalized.endSeconds <= normalized.startSeconds || normalized.endSeconds <= startCursor || normalized.startSeconds >= endDuration) return [];
@@ -33,16 +70,15 @@ export function highShelfAutomationPoints(event, cursor = 0, duration = Infinity
   ];
 }
 
-export function normalizeShelfEvent(event = {}) {
+function normalizeBaseEqEvent(event, kind) {
   const start = Math.max(0, finite(event.startSeconds, 0));
   const end = Math.max(start, finite(event.endSeconds, start));
   return {
     ...event,
-    kind: REGIONAL_HIGH_SHELF_KIND,
+    kind,
     startSeconds: start,
     endSeconds: end,
     gainDb: clamp(finite(event.gainDb, 0), -12, 12),
-    frequencyHz: clamp(finite(event.frequencyHz, 6500), 2500, 14000),
     enabled: event.enabled !== false,
   };
 }
