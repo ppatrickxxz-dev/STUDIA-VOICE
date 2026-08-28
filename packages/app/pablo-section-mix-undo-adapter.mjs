@@ -22,44 +22,28 @@ async function onPabloSubmitCapture(event) {
   const original = String(input?.value || '').trim();
   const command = parseSectionMixUndoCommand(original);
   if (!command) return;
-
   event.preventDefault();
   event.stopImmediatePropagation();
   if (input) input.value = '';
   appendMessage(original, 'user');
   setBusy(form, true);
-
   try {
     const projectId = activeProjectSessionId();
     const project = projectId ? await getProject(projectId) : null;
-    if (!project) {
-      appendMessage('Não encontrei o projeto ativo. Não desfiz nada.', 'assistant', { canApply: false });
-      return;
-    }
-
+    if (!project) { appendMessage('Não encontrei o projeto ativo. Não desfiz nada.', 'assistant', { canApply: false }); return; }
     const result = applySectionMixUndo(project, command);
-    if (!result.ok) {
-      appendMessage(blockedReply(command, result), 'assistant', { canApply: false });
-      return;
-    }
-
+    if (!result.ok) { appendMessage(blockedReply(command, result), 'assistant', { canApply: false }); return; }
     const beforeCount = result.matches.length;
-    const label = undoRevisionLabel(command, result.section);
-    const snapshotted = snapshotProject(result.project, label);
+    const snapshotted = snapshotProject(result.project, undoRevisionLabel(command, result.section));
     await saveProject(snapshotted);
     const persisted = await getProject(project.id);
     const remaining = countSectionMixEvents(persisted, result.section.id, command.mode);
     if (remaining !== 0) throw new Error('O desfazer não foi confirmado no projeto local. Não vou dizer que foi concluído.');
-
-    globalThis.dispatchEvent(new CustomEvent('pablovoice:project-persisted', {
-      detail: { projectId: project.id, source: 'pablo_section_mix_undo' },
-    }));
+    globalThis.dispatchEvent(new CustomEvent('pablovoice:project-persisted', { detail: { projectId: project.id, source: 'pablo_section_mix_undo' } }));
     appendMessage(successReply(command, result.section, beforeCount), 'assistant', { canApply: true });
   } catch (error) {
     appendMessage(error?.message || 'Não consegui desfazer essa edição com segurança.', 'assistant', { error: true, canApply: false });
-  } finally {
-    setBusy(form, false);
-  }
+  } finally { setBusy(form, false); }
 }
 
 function blockedReply(command, result) {
@@ -73,16 +57,17 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei presença, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei ganho, presença, corpo, brilho, suavização, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei ganho, presença, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, presença, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei ganho, presença, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfiz a presença vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfiz a dinâmica vocal que eu tinha criado no ${where}. Removi ${count} compressor regional do Pablo e preservei volume, EQ, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei dinâmica, presença, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei dinâmica, ganho, presença, corpo, brilho, suavização, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei dinâmica, ganho, presença, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei dinâmica, ganho, presença, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei dinâmica, ganho, presença, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfiz a presença vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei dinâmica, ganho, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
-
 function undoRevisionLabel(command, section) {
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfeita dinâmica vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfeito ganho vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfeito espaço vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfeito brilho vocal no ${section.label}`;
@@ -91,8 +76,8 @@ function undoRevisionLabel(command, section) {
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfeita presença vocal no ${section.label}`;
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
-
 function modeLabel(mode) {
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return 'dinâmica vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return 'ganho vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return 'espaço vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return 'brilho vocal';
@@ -101,30 +86,6 @@ function modeLabel(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return 'presença vocal';
   return 'ajustes regionais de mix';
 }
-
-function occurrenceLabel(command, section) {
-  if (!command.occurrence) return section.label;
-  const ordinal = ({ 1: 'primeiro', 2: 'segundo', 3: 'terceiro' })[command.occurrence] || `${command.occurrence}º`;
-  return `${ordinal} ${section.label.toLowerCase()}`;
-}
-
-function appendMessage(text, role, result = null) {
-  const log = document.querySelector('[data-pablo-log]');
-  if (!log) return;
-  const message = document.createElement('div');
-  message.className = `pv-msg ${role}`;
-  message.textContent = String(text || '');
-  if (role === 'assistant' && result && !result.error) {
-    const meta = document.createElement('small');
-    meta.textContent = result.canApply ? 'Studio · desfazer regional salvo' : 'Studio · nada removido';
-    message.appendChild(meta);
-  }
-  log.appendChild(message);
-  log.scrollTop = log.scrollHeight;
-}
-
-function setBusy(form, busy) {
-  const button = form?.querySelector('button[type="submit"]');
-  if (button) button.disabled = Boolean(busy);
-  form?.setAttribute('aria-busy', busy ? 'true' : 'false');
-}
+function occurrenceLabel(command, section) { if (!command.occurrence) return section.label; const ordinal = ({ 1: 'primeiro', 2: 'segundo', 3: 'terceiro' })[command.occurrence] || `${command.occurrence}º`; return `${ordinal} ${section.label.toLowerCase()}`; }
+function appendMessage(text, role, result = null) { const log = document.querySelector('[data-pablo-log]'); if (!log) return; const message = document.createElement('div'); message.className = `pv-msg ${role}`; message.textContent = String(text || ''); if (role === 'assistant' && result && !result.error) { const meta = document.createElement('small'); meta.textContent = result.canApply ? 'Studio · desfazer regional salvo' : 'Studio · nada removido'; message.appendChild(meta); } log.appendChild(message); log.scrollTop = log.scrollHeight; }
+function setBusy(form, busy) { const button = form?.querySelector('button[type="submit"]'); if (button) button.disabled = Boolean(busy); form?.setAttribute('aria-busy', busy ? 'true' : 'false'); }
