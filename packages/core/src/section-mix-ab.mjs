@@ -3,10 +3,12 @@ import { normalizeSectionKind, sectionLabel } from './section-map.mjs';
 import { resolveConfirmedSectionAudition } from './section-audition.mjs';
 import { PABLO_SECTION_VOCAL_GAIN_SOURCE } from './section-vocal-gain.mjs';
 import { PABLO_SECTION_VOCAL_SPACE_SOURCE } from './section-vocal-space.mjs';
+import { PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE } from './section-vocal-brightness.mjs';
 
 export const PABLO_SECTION_MIX_SOURCES = Object.freeze([
   PABLO_SECTION_VOCAL_GAIN_SOURCE,
   PABLO_SECTION_VOCAL_SPACE_SOURCE,
+  PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE,
 ]);
 
 export function parseSectionMixABCommand(message = '') {
