@@ -10,7 +10,7 @@ export const DEFAULT_PRESENCE_Q = 0.9;
 export function parseSectionVocalPresenceCommand(message = '') {
   const text = normalizeText(message);
   if (!text || !/\b(voz|vocal)\b/.test(text)) return null;
-  const intent = /\b(mais presente|mais na frente|traz a voz pra frente|trazer a voz pra frente|coloca a voz mais na frente|colocar a voz mais na frente|mais definicao|dar definicao|da definicao|mais clareza|dar clareza|da clareza|mais articulada|mais articulado)\b/.test(text);
+  const intent = /\b(mais presente|mais na frente|traz (?:a|minha) voz (?:mais )?pra frente|trazer (?:a|minha) voz (?:mais )?pra frente|coloca (?:a|minha) voz mais na frente|colocar (?:a|minha) voz mais na frente|mais definicao|dar definicao|da definicao|mais clareza|dar clareza|da clareza|mais articulada|mais articulado)\b/.test(text);
   if (!intent) return null;
 
   const sectionMatch = text.match(/\b(pre[- ]?refrao|refrao|verso|ponte|intro|rap|outro)\b/);
