@@ -73,7 +73,7 @@ test('current project schema bounds and snapshots authorial memory', () => {
       evidenceCount: 3,
     },
   });
-  assert.equal(migrated.schemaVersion, 6);
+  assert.equal(migrated.schemaVersion, 7);
   assert.equal(migrated.authorialMemory.schema, 'pmi_authorial_memory_v1');
   assert.equal(migrated.authorialMemory.vocabulary.length, 80);
   assert.deepEqual(migrated.authorialMemory.avoid, ['promessa']);
