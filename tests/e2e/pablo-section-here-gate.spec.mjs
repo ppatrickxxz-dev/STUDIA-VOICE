@@ -31,7 +31,7 @@ async function sendPablo(page, message) {
   await form.getByRole('button', { name: 'Enviar' }).click();
 }
 
-test('WEB PABLO SECTION HERE GATE: here fails closed without playhead and marks the exact project after listening', async ({ page }) => {
+test('WEB PABLO SECTION HERE GATE: contextual start and end use heard playhead without inventing structure', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -69,7 +69,7 @@ test('WEB PABLO SECTION HERE GATE: here fails closed without playhead and marks 
   await expect(page.getByText(/Refrão marcado em .*timing manual confirmado/i).last()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/A seção foi salva como timing manual confirmado/i).last()).toBeVisible();
 
-  const saved = await page.evaluate(async () => {
+  const started = await page.evaluate(async () => {
     const storage = await import('./storage.mjs');
     const project = await storage.getProject(storage.activeProjectSessionId());
     const section = project.arrangementMap.sections[0] || null;
@@ -80,14 +80,57 @@ test('WEB PABLO SECTION HERE GATE: here fails closed without playhead and marks 
     };
   });
 
-  expect(saved.sectionCount).toBe(1);
-  expect(saved.section.kind).toBe('chorus');
-  expect(saved.section.startSeconds).toBeGreaterThan(0);
-  expect(saved.section.startSeconds).toBeLessThan(1.5);
-  expect(saved.section.timingStatus).toBe('confirmed');
-  expect(saved.section.source).toBe('user_manual');
-  expect(saved.section.confidence).toBe(1);
-  expect(saved.revisionLabels.some((label) => /Refrão marcado na timeline/.test(label))).toBe(true);
+  expect(started.sectionCount).toBe(1);
+  expect(started.section.kind).toBe('chorus');
+  expect(started.section.startSeconds).toBeGreaterThan(0);
+  expect(started.section.startSeconds).toBeLessThan(1.5);
+  expect(started.section.endSeconds).toBeNull();
+  expect(started.section.timingStatus).toBe('confirmed');
+  expect(started.section.source).toBe('user_manual');
+  expect(started.section.confidence).toBe(1);
+  expect(started.revisionLabels.some((label) => /Refrão marcado na timeline/.test(label))).toBe(true);
+
+  await page.locator('[data-route="studio"]').first().click();
+  await page.locator('[data-action="play"]').click();
+  await page.waitForTimeout(950);
+  await expect(page.locator('#current-time')).not.toHaveText('0:00.0');
+  await page.locator('[data-action="stop"]').click();
+
+  await page.locator('[data-route="pablo"]').first().click();
+  await sendPablo(page, 'a ponte termina aqui');
+  await expect(page.getByText(/Ainda não existe um início confirmado de ponte/i).last()).toBeVisible();
+
+  const afterRejectedEnd = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    return project.arrangementMap.sections.map((section) => ({ ...section }));
+  });
+  expect(afterRejectedEnd).toHaveLength(1);
+  expect(afterRejectedEnd[0].startSeconds).toBe(started.section.startSeconds);
+  expect(afterRejectedEnd[0].endSeconds).toBeNull();
+
+  await sendPablo(page, 'o refrão termina aqui');
+  await expect(page.getByText(/O fim foi salvo no mesmo timing manual confirmado da seção; o início foi preservado/i).last()).toBeVisible({ timeout: 10_000 });
+
+  const ended = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    const section = project.arrangementMap.sections[0] || null;
+    return {
+      sectionCount: project.arrangementMap.sections.length,
+      section,
+      revisionLabels: project.revisions.map((revision) => revision.label),
+    };
+  });
+  expect(ended.sectionCount).toBe(1);
+  expect(ended.section.kind).toBe('chorus');
+  expect(ended.section.startSeconds).toBe(started.section.startSeconds);
+  expect(ended.section.endSeconds).toBeGreaterThan(ended.section.startSeconds);
+  expect(ended.section.endSeconds).toBeLessThan(1.5);
+  expect(ended.section.timingStatus).toBe('confirmed');
+  expect(ended.section.source).toBe('user_manual');
+  expect(ended.section.confidence).toBe(1);
+  expect(ended.revisionLabels.filter((label) => /Refrão marcado na timeline/.test(label)).length).toBeGreaterThanOrEqual(2);
 
   const unexpected = errors.filter((message) =>
     !/favicon/i.test(message)
