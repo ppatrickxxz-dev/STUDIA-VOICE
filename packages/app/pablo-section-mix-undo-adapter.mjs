@@ -73,11 +73,12 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei ganho, corpo, brilho, suavização, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei ganho, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei ganho, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei presença, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei ganho, presença, corpo, brilho, suavização, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei ganho, presença, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, presença, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei ganho, presença, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfiz a presença vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
 
@@ -87,6 +88,7 @@ function undoRevisionLabel(command, section) {
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfeito brilho vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfeito corpo vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfeita suavização vocal no ${section.label}`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfeita presença vocal no ${section.label}`;
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
 
@@ -96,6 +98,7 @@ function modeLabel(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return 'brilho vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return 'corpo vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return 'suavização vocal';
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return 'presença vocal';
   return 'ajustes regionais de mix';
 }
 
