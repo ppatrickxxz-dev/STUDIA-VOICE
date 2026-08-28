@@ -15,7 +15,10 @@ test('mix export and processed preview share the canonical processed track sourc
 test('export validates a cloned project, creates no treatment, and never persists an export revision', async () => {
   const contract = await read('packages/core/src/audio-export.mjs');
   const app = await read('packages/app/app.js');
+  const engine = await read('packages/app/audio-engine.mjs');
   assert.match(contract, /migrateProject\(structuredClone\(project\)\)/);
+  assert.match(contract, /if \(trackId\)/);
+  assert.match(engine, /trackId,\s*\n\s*\}\)/);
   assert.doesNotMatch(contract, /regionAutomation\s*=|\.push\(|applySection|planSection/);
   const exportBody = app.match(/async function exportMix\(\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(exportBody, /structuredClone\(state\.project\)/);
