@@ -1,6 +1,7 @@
 import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
-import { parseSectionHereCommand } from './core/src/section-here-command.mjs';
-import { activeProjectSessionId } from './storage.mjs';
+import { parseSectionEndHereCommand, parseSectionHereCommand } from './core/src/section-here-command.mjs';
+import { resolveSectionEndTarget } from './core/src/section-end-target.mjs';
+import { activeProjectSessionId, getProject } from './storage.mjs';
 import { readStudioPlayhead } from './studio-playhead-context.mjs';
 
 let mounted = false;
@@ -16,8 +17,11 @@ async function onPabloSubmitCapture(event) {
   if (!form) return;
   const input = form.querySelector('input[name="message"]');
   const original = String(input?.value || '').trim();
-  const command = parseSectionHereCommand(original);
+  const startCommand = parseSectionHereCommand(original);
+  const endCommand = startCommand ? null : parseSectionEndHereCommand(original);
+  const command = startCommand || endCommand;
   if (!command) return;
+  const boundary = endCommand ? 'end' : 'start';
 
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -29,27 +33,77 @@ async function onPabloSubmitCapture(event) {
     const projectId = activeProjectSessionId();
     const playhead = readStudioPlayhead(projectId);
     if (!playhead.ok) {
+      const verb = boundary === 'end' ? 'termina' : 'começa';
       appendMessage(
-        `Não tenho um ponto recente e confirmado dessa música para usar como “aqui”. Dê play, pare onde ${command.label.toLowerCase()} começa e tente de novo — ou diga o tempo, como “marca ${command.label.toLowerCase()} em 45 segundos”. Não alterei o projeto.`,
+        `Não tenho um ponto recente e confirmado dessa música para usar como “aqui”. Dê play, pare onde ${command.label.toLowerCase()} ${verb} e tente de novo. Não alterei o projeto.`,
         'assistant',
         { domain: 'beat_lab', canApply: false },
       );
       return;
     }
 
-    const explicit = `marca o ${spokenSection(command.section)} em ${playhead.seconds.toFixed(3)} segundos`;
-    const result = await executePabloAudioMessage(explicit, { projectId });
+    const explicit = boundary === 'end'
+      ? await explicitSectionRange(command, projectId, playhead.seconds)
+      : {
+          ok: true,
+          command: `marca o ${spokenSection(command.section)} em ${playhead.seconds.toFixed(3)} segundos`,
+        };
+    if (!explicit.ok) {
+      appendMessage(explicit.reply, 'assistant', { domain: 'beat_lab', canApply: false });
+      return;
+    }
+
+    const result = await executePabloAudioMessage(explicit.command, { projectId });
     if (!result?.supported) {
       appendMessage('Não consegui transformar esse ponto em uma marcação segura. Não alterei o projeto.', 'assistant', { domain: 'beat_lab', canApply: false });
       return;
     }
-    appendMessage(result.reply || `${command.label} marcado no ponto ouvido.`, 'assistant', result);
-    if (result.canApply) appendMessage('A seção foi salva como timing manual confirmado e já pode ser usada por comandos de arranjo do Pablo.', 'assistant');
+    appendMessage(result.reply || boundaryReply(command, boundary), 'assistant', result);
+    if (result.canApply) {
+      appendMessage(
+        boundary === 'end'
+          ? 'O fim foi salvo no mesmo timing manual confirmado da seção; o início foi preservado.'
+          : 'A seção foi salva como timing manual confirmado e já pode ser usada por comandos de arranjo do Pablo.',
+        'assistant',
+      );
+    }
   } catch (error) {
     appendMessage(error?.message || 'Não consegui marcar essa seção com segurança.', 'assistant', { error: true });
   } finally {
     setBusy(form, false);
   }
+}
+
+async function explicitSectionRange(command, projectId, endSeconds) {
+  if (!projectId) return { ok: false, reply: 'Não encontrei o projeto ativo. Não alterei nenhuma seção.' };
+  const project = await getProject(projectId);
+  if (!project) return { ok: false, reply: 'Não encontrei o projeto ativo. Não alterei nenhuma seção.' };
+  const resolved = resolveSectionEndTarget(project.arrangementMap, command.section, endSeconds);
+  if (!resolved.ok) {
+    if (resolved.reason === 'missing_confirmed_start') {
+      return {
+        ok: false,
+        reply: `Ainda não existe um início confirmado de ${command.label.toLowerCase()} antes desse ponto. Marque onde ele começa primeiro; não alterei o projeto.`,
+      };
+    }
+    if (resolved.reason === 'crosses_confirmed_section') {
+      return {
+        ok: false,
+        reply: `Há outra seção confirmada (${resolved.blocker?.label || 'seção'}) entre o início de ${command.label.toLowerCase()} e esse ponto. Não criei uma sobreposição; ajuste o mapa ou pare antes.`,
+      };
+    }
+    return { ok: false, reply: 'Esse ponto não forma um fim de seção válido. Não alterei o projeto.' };
+  }
+  return {
+    ok: true,
+    command: `marca o ${spokenSection(command.section)} de ${resolved.target.startSeconds.toFixed(3)} a ${resolved.endSeconds.toFixed(3)} segundos`,
+  };
+}
+
+function boundaryReply(command, boundary) {
+  return boundary === 'end'
+    ? `${command.label} fechado no ponto ouvido.`
+    : `${command.label} marcado no ponto ouvido.`;
 }
 
 function spokenSection(section) {
