@@ -37,7 +37,7 @@ test('audio engine renders regional peaking EQ in the same processed path as hig
 
 test('regional gain remains isolated from both EQ kinds', async () => {
   const gain = await read('packages/audio/src/automation/region-gain.mjs');
-  assert.match(gain, /event\?\.kind !== 'gain'/);
+  assert.match(gain, /String\(event\?\.kind \|\| 'gain'\) !== 'gain'/);
 });
 
 test('A B and selective undo own body only through the Pablo source', async () => {
