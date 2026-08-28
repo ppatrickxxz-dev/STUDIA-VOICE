@@ -16,16 +16,19 @@ test('undo identifies Pablo-owned events by source plus confirmed section id', a
   const core = await read('packages/core/src/section-mix-undo.mjs');
   assert.match(core, /PABLO_SECTION_VOCAL_GAIN_SOURCE/);
   assert.match(core, /PABLO_SECTION_VOCAL_SPACE_SOURCE/);
+  assert.match(core, /PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE/);
   assert.match(core, /id\.endsWith\(`:\$\{sectionId\}`\)/);
   assert.match(core, /resolveConfirmedSectionAudition/);
   assert.doesNotMatch(core, /user_manual.*sourcesForMode|pablo_breath_intelligence.*sourcesForMode/);
 });
 
-test('broad undo filters only the two section-mix sources and preserves unrelated automation', async () => {
+test('broad undo filters only canonical section-mix sources and preserves unrelated automation', async () => {
   const core = await read('packages/core/src/section-mix-undo.mjs');
   assert.match(core, /sourcesForMode\(command\.mode\)/);
   assert.match(core, /else keep\.push\(event\)/);
-  assert.match(core, /PABLO_SECTION_VOCAL_GAIN_SOURCE, PABLO_SECTION_VOCAL_SPACE_SOURCE/);
+  assert.match(core, /PABLO_SECTION_VOCAL_GAIN_SOURCE/);
+  assert.match(core, /PABLO_SECTION_VOCAL_SPACE_SOURCE/);
+  assert.match(core, /PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE/);
   assert.doesNotMatch(core, /regionAutomation\s*=\s*\[\]/);
 });
 
