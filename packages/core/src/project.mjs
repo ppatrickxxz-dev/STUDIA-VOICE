@@ -1,6 +1,6 @@
 import { createArrangementMap, normalizeArrangementMap } from './section-map.mjs';
 
-export const PROJECT_SCHEMA_VERSION = 7;
+export const PROJECT_SCHEMA_VERSION = 8;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -196,6 +196,13 @@ function normalizeRegionAutomation(input, duration) {
     if (kind === 'peaking_eq') {
       normalized.frequencyHz = clamp(finite(event?.frequencyHz, 220), 80, 6000);
       normalized.q = clamp(finite(event?.q, 0.82), 0.35, 6);
+    }
+    if (kind === 'compressor') {
+      normalized.thresholdDb = clamp(finite(event?.thresholdDb, -18), -36, -6);
+      normalized.ratio = clamp(finite(event?.ratio, 2.2), 1, 6);
+      normalized.kneeDb = clamp(finite(event?.kneeDb, 6), 0, 20);
+      normalized.attackSeconds = clamp(finite(event?.attackSeconds, 0.006), 0.001, 0.08);
+      normalized.releaseSeconds = clamp(finite(event?.releaseSeconds, 0.12), 0.03, 0.8);
     }
     return normalized;
   }).filter((event) => event.endSeconds > event.startSeconds);

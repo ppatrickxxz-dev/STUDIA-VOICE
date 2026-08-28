@@ -43,6 +43,7 @@ try {
   const { installPabloSectionVocalBrightnessAdapter } = await import('./pablo-section-vocal-brightness-adapter.mjs');
   const { installPabloSectionVocalBodyAdapter } = await import('./pablo-section-vocal-body-adapter.mjs');
   const { installPabloSectionVocalPresenceAdapter } = await import('./pablo-section-vocal-presence-adapter.mjs');
+  const { installPabloSectionVocalDynamicsAdapter } = await import('./pablo-section-vocal-dynamics-adapter.mjs');
   const { installPabloSectionVocalSoftnessAdapter } = await import('./pablo-section-vocal-softness-adapter.mjs');
   const { installPabloSectionVocalSpaceAdapter } = await import('./pablo-section-vocal-space-adapter.mjs');
   const { installPabloSectionMixUndoAdapter } = await import('./pablo-section-mix-undo-adapter.mjs');
@@ -66,6 +67,7 @@ try {
   installPabloSectionVocalBrightnessAdapter();
   installPabloSectionVocalBodyAdapter();
   installPabloSectionVocalPresenceAdapter();
+  installPabloSectionVocalDynamicsAdapter();
   installPabloSectionVocalSoftnessAdapter();
   installPabloSectionVocalSpaceAdapter();
   installPabloSectionMixUndoAdapter();
