@@ -57,6 +57,8 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DENOISE) return `Desfiz só o denoise que eu tinha criado no ${where}. Removi ${count} trecho(s) de redução de ruído e preservei de-reverb, limpeza vocal restante, automação manual e outras seções.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEREVERB) return `Desfiz só o de-reverb que eu tinha criado no ${where}. Removi ${count} trecho(s) de redução de reflexos e preservei denoise, limpeza vocal restante, automação manual e outras seções.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLEANUP) return `Desfiz a limpeza vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do pacote de limpeza e preservei ajustes de voz aplicados separadamente, automação manual e outras seções.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLICK) return `Desfiz o tratamento de estalos que eu tinha criado no ${where}. Removi ${count} microatenuação(ões) de clicks do Pablo e preservei plosivas, dinâmica, de-esser, limpeza vocal e automação manual.`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return `Desfiz o tratamento de plosivas que eu tinha criado no ${where}. Removi ${count} microcorte(s) de P/B do Pablo e preservei corpo, grave contínuo, de-esser, dinâmica, respirações e ajustes manuais.`;
@@ -71,6 +73,8 @@ function successReply(command, section, count) {
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
 function undoRevisionLabel(command, section) {
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DENOISE) return `Desfeito denoise no ${section.label}`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEREVERB) return `Desfeito de-reverb no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLEANUP) return `Desfeita limpeza vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_CLICK) return `Desfeito tratamento de estalos no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return `Desfeito tratamento de plosivas no ${section.label}`;
@@ -85,6 +89,8 @@ function undoRevisionLabel(command, section) {
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
 function modeLabel(mode) {
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DENOISE) return 'denoise';
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DEREVERB) return 'de-reverb';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_CLEANUP) return 'limpeza vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_CLICK) return 'tratamento de estalos';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_PLOSIVE) return 'tratamento de plosivas';
