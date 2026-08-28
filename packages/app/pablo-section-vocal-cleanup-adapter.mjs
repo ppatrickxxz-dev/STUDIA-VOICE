@@ -93,11 +93,13 @@ function successReply(command, result) {
   if (result.modules.breath?.applied) applied.push(`${result.modules.breath.count} respiração(ões) suavizada(s)`);
   if (result.modules.deesser?.applied) applied.push(`${result.modules.deesser.count} sibilância(s) tratada(s)`);
   if (result.modules.plosive?.applied) applied.push(`${result.modules.plosive.count} plosiva(s) tratada(s)`);
+  if (result.modules.click?.applied) applied.push(`${result.modules.click.count} estalo(s) curto(s) atenuado(s)`);
   if (result.modules.dynamics?.applied) applied.push(`picos controlados (${result.modules.dynamics.evidenceCount} evidência(s))`);
   const skipped = [];
   if (!result.modules.breath?.applied) skipped.push('respirações');
   if (!result.modules.deesser?.applied) skipped.push('sibilância');
   if (!result.modules.plosive?.applied) skipped.push('plosivas');
+  if (!result.modules.click?.applied) skipped.push('estalos');
   if (!result.modules.dynamics?.applied) skipped.push('compressão');
   return `Limpei ${occurrenceLabel(command, result.section)} usando só o que encontrei na própria voz: ${applied.join('; ')}.${skipped.length ? ` Não apliquei ${skipped.join(', ')} porque não havia evidência suficiente.` : ''} Nada fora dessa seção foi alterado.`;
 }
@@ -111,7 +113,7 @@ function blockedReply(command, result) {
   if (result.reason === 'vocal_track_ambiguous') return 'Há mais de uma faixa vocal possível. Selecione a voz no Studio e repita o pedido.';
   if (result.reason === 'section_outside_vocal_track') return `A faixa vocal não cobre o trecho confirmado de ${command.label.toLowerCase()}. Não criei tratamento fora do áudio.`;
   if (result.reason === 'cleanup_analysis_required') return 'Preciso analisar a própria faixa vocal antes da limpeza. Não apliquei um preset sem ouvir o áudio.';
-  if (result.reason === 'no_cleanup_evidence') return `Analisei ${command.label.toLowerCase()} e não encontrei respirações fortes, sibilância, plosivas ou picos com confiança suficiente. Não alterei a voz por aproximação.`;
+  if (result.reason === 'no_cleanup_evidence') return `Analisei ${command.label.toLowerCase()} e não encontrei respirações fortes, sibilância, plosivas, estalos ou picos com confiança suficiente. Não alterei a voz por aproximação.`;
   return 'Não consegui resolver essa limpeza regional com segurança. Não alterei o projeto.';
 }
 
