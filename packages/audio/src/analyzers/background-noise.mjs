@@ -1,9 +1,11 @@
 const HUM_BASES = Object.freeze([50, 60]);
+const DEFAULT_FRAME_SECONDS = 0.064;
+const DEFAULT_HOP_SECONDS = 0.032;
 
 export function detectBackgroundNoise(samples, {
   sampleRate = 48000,
-  frameSize = 2048,
-  hopSize = 1024,
+  frameSize = null,
+  hopSize = null,
   minRmsDb = -72,
   maxRmsDb = -24,
   minFrames = 3,
@@ -12,16 +14,18 @@ export function detectBackgroundNoise(samples, {
   pitchContour = [],
   excludedEvents = [],
 } = {}) {
-  if (!samples || typeof samples.length !== 'number' || samples.length < frameSize || !(sampleRate > 0)) {
+  const resolvedFrameSize = positiveInteger(frameSize) || Math.max(256, Math.round(sampleRate * DEFAULT_FRAME_SECONDS));
+  const resolvedHopSize = positiveInteger(hopSize) || Math.max(128, Math.round(sampleRate * DEFAULT_HOP_SECONDS));
+  if (!samples || typeof samples.length !== 'number' || samples.length < resolvedFrameSize || !(sampleRate > 0)) {
     return { noiseEvents: [], frames: [] };
   }
 
   const frames = [];
-  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
-    const end = start + frameSize;
+  for (let start = 0; start + resolvedFrameSize <= samples.length; start += resolvedHopSize) {
+    const end = start + resolvedFrameSize;
     const startSeconds = start / sampleRate;
     const endSeconds = end / sampleRate;
-    const feature = analyzeNoiseFrame(samples, start, frameSize, sampleRate);
+    const feature = analyzeNoiseFrame(samples, start, resolvedFrameSize, sampleRate);
     const voiced = overlapsVoicedPitch(startSeconds, endSeconds, pitchContour);
     const excluded = overlapsAny(startSeconds, endSeconds, excludedEvents, 0.012);
     const levelEligible = feature.rmsDb >= minRmsDb && feature.rmsDb <= maxRmsDb;
@@ -188,6 +192,10 @@ function goertzelPower(samples, start, frameSize, sampleRate, frequencyHz) {
   return Math.max(0, s1 * s1 + s2 * s2 - coeff * s1 * s2);
 }
 
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 1 ? Math.floor(number) : null;
+}
 function amplitudeToDb(value) {
   return 20 * Math.log10(Math.max(1e-9, Number(value) || 0));
 }
