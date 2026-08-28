@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { createProject, migrateProject, snapshotProject } from '../../packages/core/src/project.mjs';
 import { upsertConfirmedSection } from '../../packages/core/src/section-map.mjs';
 
-test('new projects carry the canonical arrangement map in schema v6', () => {
+test('new projects carry the canonical arrangement map in schema v7', () => {
   const project = createProject('Mapa');
-  assert.equal(project.schemaVersion, 6);
+  assert.equal(project.schemaVersion, 7);
   assert.equal(project.arrangementMap?.schema, 'pablovoice_arrangement_map_v1');
   assert.deepEqual(project.arrangementMap?.sections, []);
 });
@@ -20,7 +20,7 @@ test('legacy projects migrate without inventing section timings', () => {
     revisions: [],
   });
 
-  assert.equal(migrated.schemaVersion, 6);
+  assert.equal(migrated.schemaVersion, 7);
   assert.deepEqual(migrated.arrangementMap.sections, []);
 });
 
