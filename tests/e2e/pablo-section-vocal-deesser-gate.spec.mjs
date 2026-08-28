@@ -8,14 +8,27 @@ function sibilanceWavFixture({ seconds = 1.6, sampleRate = 44100 } = {}) {
   buffer.writeUInt32LE(sampleRate, 24); buffer.writeUInt32LE(sampleRate * 2, 28); buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34);
   buffer.write('data', 36); buffer.writeUInt32LE(samples * 2, 40);
   let noise = 0x12345678;
+  let y1 = 0;
+  let y2 = 0;
   for (let index = 0; index < samples; index += 1) {
     const time = index / sampleRate;
-    const sibilant = (time >= 0.45 && time <= 0.56) || (time >= 1.18 && time <= 1.29);
+    const firstBurst = time >= 0.45 && time <= 0.56;
+    const secondBurst = time >= 1.18 && time <= 1.29;
+    const sibilant = firstBurst || secondBurst;
     let value;
     if (sibilant) {
       noise = (1664525 * noise + 1013904223) >>> 0;
-      value = (((noise / 0xffffffff) * 2) - 1) * 0.16;
+      const input = ((noise / 0xffffffff) * 2) - 1;
+      const centerHz = firstBurst ? 9500 : 10000;
+      const radius = 0.94;
+      const coefficient = 2 * radius * Math.cos(2 * Math.PI * centerHz / sampleRate);
+      const y = input + coefficient * y1 - (radius * radius) * y2;
+      y2 = y1;
+      y1 = y;
+      value = Math.max(-1, Math.min(1, y * 0.025));
     } else {
+      y1 = 0;
+      y2 = 0;
       value = Math.sin(2 * Math.PI * 220 * time) * 0.08;
     }
     const edge = Math.min(1, index / 500, (samples - index) / 500);
@@ -70,7 +83,11 @@ async function biquadEvidence(page) {
   })));
 }
 
-test('WEB VOCAL DEESSER GATE: detected sibilance creates only micro EQ windows and stays A/B/undo isolated', async ({ page }) => {
+function containsAdaptiveBand(nodes, frequencies) {
+  return nodes.some((item) => item.type === 'peaking' && frequencies.some((frequencyHz) => Math.abs(item.frequencyHz - frequencyHz) < 75));
+}
+
+test('WEB VOCAL DEESSER GATE: measured sibilance band drives only micro EQ windows and stays A/B/undo isolated', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -78,19 +95,39 @@ test('WEB VOCAL DEESSER GATE: detected sibilance creates only micro EQ windows a
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
   await page.locator('[data-action="new-project"]').first().click();
-  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate de-esser vocal regional');
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate de-esser vocal adaptativo');
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
-  await page.locator('#audio-picker').setInputFiles({ name: 'deesser.wav', mimeType: 'audio/wav', buffer: sibilanceWavFixture() });
-  await expect(page.getByText('deesser.wav').first()).toBeVisible();
+  await page.locator('#audio-picker').setInputFiles({ name: 'deesser-adaptive.wav', mimeType: 'audio/wav', buffer: sibilanceWavFixture() });
+  await expect(page.getByText('deesser-adaptive.wav').first()).toBeVisible();
   await seedProject(page);
+
+  const measuredEvidence = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const runtime = await import('./audio-analysis-runtime.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    const vocal = project.tracks.find((track) => track.kind === 'recording');
+    const analysis = await runtime.analyzeAudioTrack(vocal);
+    return analysis.voice.sibilanceEvents.map((event) => ({
+      start: event.start,
+      end: event.end,
+      frequencyHz: event.frequencyHz,
+      spectralConfidence: event.spectralConfidence,
+      spectralSource: event.spectralSource,
+    }));
+  });
+  const inChorusEvidence = measuredEvidence.filter((event) => event.start < 0.95 && event.end > 0.3);
+  expect(inChorusEvidence.length).toBeGreaterThanOrEqual(1);
+  expect(inChorusEvidence.some((event) => Number.isFinite(event.frequencyHz) && event.frequencyHz >= 8000 && event.frequencyHz <= 10800)).toBe(true);
+  expect(inChorusEvidence.some((event) => event.spectralConfidence >= 0.12)).toBe(true);
+  expect(inChorusEvidence.some((event) => event.spectralSource === 'local-sibilance-spectrum-v1')).toBe(true);
 
   await page.locator('[data-route="pablo"]').first().click();
   await sendPablo(page, 'tira os esses da minha voz 8 dB no refrão');
   await expect(page.getByText(/só aplico automaticamente entre 0,5 e 5 dB/i).last()).toBeVisible();
 
   await sendPablo(page, 'segura os esses da minha voz só no refrão');
-  await expect(page.getByText(/Encontrei \d+ sibilância\(s\).*reduzi só esses momentos/i).last()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/Studio · de-esser regional salvo/i).last()).toBeVisible();
+  await expect(page.getByText(/Encontrei \d+ sibilância\(s\).*não usei uma frequência fixa/i).last()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Studio · de-esser adaptativo salvo/i).last()).toBeVisible();
 
   const saved = await page.evaluate(async () => {
     const storage = await import('./storage.mjs');
@@ -111,13 +148,16 @@ test('WEB VOCAL DEESSER GATE: detected sibilance creates only micro EQ windows a
   expect(saved.supportCount).toBe(0);
   for (const event of saved.events) {
     expect(event.kind).toBe('peaking_eq');
-    expect(event.frequencyHz).toBe(7200);
+    expect(event.frequencyHz).toBeGreaterThanOrEqual(8000);
+    expect(event.frequencyHz).toBeLessThanOrEqual(10800);
+    expect(Math.abs(event.frequencyHz - 7200)).toBeGreaterThan(300);
     expect(event.gainDb).toBeLessThan(0);
     expect(event.startSeconds).toBeGreaterThanOrEqual(0.3);
     expect(event.endSeconds).toBeLessThanOrEqual(0.95);
     expect(event.endSeconds - event.startSeconds).toBeLessThan(0.5);
     expect(event.id.endsWith(`:${saved.sectionId}`)).toBe(true);
   }
+  const adaptiveFrequencies = saved.events.map((event) => event.frequencyHz);
 
   await installBiquadEvidence(page);
   await sendPablo(page, 'compara o refrão');
@@ -127,7 +167,7 @@ test('WEB VOCAL DEESSER GATE: detected sibilance creates only micro EQ windows a
   await page.waitForTimeout(140);
   const a = await biquadEvidence(page);
   expect(a.some((item) => item.type === 'peaking' && Math.abs(item.frequencyHz - 900) < 5)).toBe(true);
-  expect(a.some((item) => item.type === 'peaking' && Math.abs(item.frequencyHz - 7200) < 5)).toBe(false);
+  expect(containsAdaptiveBand(a, adaptiveFrequencies)).toBe(false);
 
   const persistedAfterA = await page.evaluate(async () => {
     const storage = await import('./storage.mjs');
@@ -142,7 +182,7 @@ test('WEB VOCAL DEESSER GATE: detected sibilance creates only micro EQ windows a
   await page.waitForTimeout(140);
   const b = await biquadEvidence(page);
   expect(b.some((item) => item.type === 'peaking' && Math.abs(item.frequencyHz - 900) < 5)).toBe(true);
-  expect(b.some((item) => item.type === 'peaking' && Math.abs(item.frequencyHz - 7200) < 5)).toBe(true);
+  expect(containsAdaptiveBand(b, adaptiveFrequencies)).toBe(true);
 
   await sendPablo(page, 'desfaz o de-esser no refrão');
   await expect(page.getByText(/Desfiz o de-esser vocal que eu tinha criado no Refrão/i).last()).toBeVisible({ timeout: 10_000 });
