@@ -351,15 +351,15 @@ async function saveCurrent(label = 'Salvamento manual') {
 
 async function exportMix() {
   if (!state.project?.tracks.length) throw new Error('Adicione uma faixa antes de exportar.');
+  const projectBeforeExport = structuredClone(state.project);
   engine.stop(false);
   render();
   const started = performance.now();
-  const buffer = await engine.render(state.project, state.project.preset);
+  const buffer = await engine.render(projectBeforeExport, projectBeforeExport.preset);
   state.lastRenderMs = performance.now() - started;
   const blob = new Blob([encodeWav(buffer)], { type: 'audio/wav' });
   const filename = `${state.project.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice'}-${state.project.preset}.wav`;
   await saveBlob(blob, filename);
-  await saveCurrent('Exportação WAV');
   toast(`WAV exportado · ${formatTime(buffer.duration)} · ${Math.round(buffer.sampleRate / 1000)} kHz`, 'ok');
 }
 

@@ -12,6 +12,7 @@ import {
   cloneWithVocalRestoration,
   restorationEventFingerprint,
 } from './audio/src/automation/region-restoration.mjs';
+import { prepareAudioExport } from './core/src/audio-export.mjs';
 
 export class PabloAudioEngine {
   constructor() {
@@ -111,10 +112,10 @@ export class PabloAudioEngine {
   }
 
   async render(project, presetName = 'demo') {
-    const tracks = audibleTracks(project).filter((track) => this.buffers.has(track.id));
-    if (!tracks.length) throw new Error('Nenhuma faixa disponível para exportação.');
+    const exportProject = prepareAudioExport(project, { hasBuffer: (trackId) => this.buffers.has(trackId) });
+    const tracks = audibleTracks(exportProject);
     const preset = EXPORT_PRESETS[presetName] || EXPORT_PRESETS.demo;
-    const duration = Math.max(0.02, this.duration(project));
+    const duration = Math.max(0.02, this.duration(exportProject));
     const channels = Math.max(1, Math.min(2, Math.max(...tracks.map((track) => this.buffers.get(track.id).numberOfChannels))));
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(channels, frames, preset.sampleRate);
@@ -129,11 +130,12 @@ export class PabloAudioEngine {
   }
 
   async renderTrack(project, trackId, presetName = 'demo') {
-    const track = (project?.tracks || []).find((candidate) => candidate.id === trackId);
+    const exportProject = prepareAudioExport(project, { hasBuffer: (candidateId) => this.buffers.has(candidateId) });
+    const track = (exportProject.tracks || []).find((candidate) => candidate.id === trackId);
     const buffer = track && this.buffers.get(track.id);
     if (!track || !buffer) throw new Error('Faixa não disponível para exportação.');
     const preset = EXPORT_PRESETS[presetName] || EXPORT_PRESETS.demo;
-    const duration = Math.max(0.02, this.duration(project));
+    const duration = Math.max(0.02, this.duration(exportProject));
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(2, frames, preset.sampleRate);
     createTrackSources(offline, this.restoredBuffer(offline, track, buffer), track, 'processed', 0, 0, offline.destination);
