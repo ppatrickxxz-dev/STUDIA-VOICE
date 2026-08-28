@@ -31,12 +31,24 @@ export function classifyBreathAction(event, { autoThreshold = 0.82, suggestThres
 
 function normalizeEvents(events) {
   if (!Array.isArray(events)) return [];
-  return events.filter(Boolean).map((event) => ({
-    start: finiteOrNull(event.start ?? event.time),
-    end: finiteOrNull(event.end ?? event.time),
-    intensity: finiteOrNull(event.intensity),
-    confidence: finiteOrNull(event.confidence)
-  }));
+  return events.filter(Boolean).map((event) => {
+    const normalized = {
+      start: finiteOrNull(event.start ?? event.time),
+      end: finiteOrNull(event.end ?? event.time),
+      intensity: finiteOrNull(event.intensity),
+      confidence: finiteOrNull(event.confidence)
+    };
+    const frequencyHz = finiteOrNull(event.frequencyHz);
+    const spectralPeakHz = finiteOrNull(event.spectralPeakHz);
+    const spectralSpreadHz = finiteOrNull(event.spectralSpreadHz);
+    const spectralConfidence = finiteOrNull(event.spectralConfidence);
+    if (frequencyHz !== null) normalized.frequencyHz = frequencyHz;
+    if (spectralPeakHz !== null) normalized.spectralPeakHz = spectralPeakHz;
+    if (spectralSpreadHz !== null) normalized.spectralSpreadHz = spectralSpreadHz;
+    if (spectralConfidence !== null) normalized.spectralConfidence = spectralConfidence;
+    if (event.spectralSource) normalized.spectralSource = String(event.spectralSource);
+    return normalized;
+  });
 }
 
 function pitchStability(points) {
