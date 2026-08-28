@@ -57,16 +57,18 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfiz a dinâmica vocal que eu tinha criado no ${where}. Removi ${count} compressor regional do Pablo e preservei volume, EQ, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei dinâmica, presença, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei dinâmica, ganho, presença, corpo, brilho, suavização, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei dinâmica, ganho, presença, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei dinâmica, ganho, presença, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei dinâmica, ganho, presença, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfiz a presença vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei dinâmica, ganho, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return `Desfiz o de-esser vocal que eu tinha criado no ${where}. Removi ${count} microcorte(s) de sibilância do Pablo e preservei brilho geral, presença, dinâmica, volume, outros EQs, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfiz a dinâmica vocal que eu tinha criado no ${where}. Removi ${count} compressor regional do Pablo e preservei de-esser, volume, EQ, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei de-esser, dinâmica, presença, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei de-esser, dinâmica, ganho, presença, corpo, brilho, suavização, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei de-esser, dinâmica, ganho, presença, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei de-esser, dinâmica, ganho, presença, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei de-esser, dinâmica, ganho, presença, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_PRESENCE) return `Desfiz a presença vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei de-esser, dinâmica, ganho, corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
 function undoRevisionLabel(command, section) {
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return `Desfeito de-esser vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return `Desfeita dinâmica vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfeito ganho vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfeito espaço vocal no ${section.label}`;
@@ -77,6 +79,7 @@ function undoRevisionLabel(command, section) {
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
 function modeLabel(mode) {
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DEESSER) return 'de-esser vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_DYNAMICS) return 'dinâmica vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return 'ganho vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return 'espaço vocal';
