@@ -297,7 +297,9 @@ function formatClock(value) {
   const minutes = Math.floor(total / 60);
   const seconds = total - minutes * 60;
   const whole = Math.abs(seconds - Math.round(seconds)) < 0.001;
-  const rendered = (whole ? String(Math.round(seconds)) : seconds.toFixed(1)).padStart(2, '0');
+  const rendered = whole
+    ? String(Math.round(seconds)).padStart(2, '0')
+    : seconds.toFixed(1).padStart(4, '0');
   return `${minutes}:${rendered}`;
 }
 
