@@ -5,6 +5,7 @@ import { PABLO_SECTION_VOCAL_GAIN_SOURCE } from './section-vocal-gain.mjs';
 import { PABLO_SECTION_VOCAL_SPACE_SOURCE } from './section-vocal-space.mjs';
 import { PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE } from './section-vocal-brightness.mjs';
 import { PABLO_SECTION_VOCAL_BODY_SOURCE } from './section-vocal-body.mjs';
+import { PABLO_SECTION_VOCAL_SOFTNESS_SOURCE } from './section-vocal-softness.mjs';
 
 export const SECTION_MIX_UNDO_MODES = Object.freeze({
   ALL: 'all',
@@ -12,6 +13,7 @@ export const SECTION_MIX_UNDO_MODES = Object.freeze({
   VOCAL_SPACE: 'vocal_space',
   VOCAL_BRIGHTNESS: 'vocal_brightness',
   VOCAL_BODY: 'vocal_body',
+  VOCAL_SOFTNESS: 'vocal_softness',
 });
 
 export function parseSectionMixUndoCommand(message = '') {
@@ -22,7 +24,8 @@ export function parseSectionMixUndoCommand(message = '') {
   if (!section) return null;
 
   let mode = null;
-  if (/\b(corpo|calor|quente|encorpada|encorpado)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_BODY;
+  if (/\b(suavizacao|suavidade|estridencia|aspereza|menos brilho|escurecimento)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS;
+  else if (/\b(corpo|calor|quente|encorpada|encorpado)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_BODY;
   else if (/\b(brilho|brilhante|high shelf|highshelf)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS;
   else if (/\b(ganho|volume)\b/.test(text) && /\b(voz|vocal)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_GAIN;
   else if (/\b(espaco|instrumental|base|beat)\b/.test(text)) mode = SECTION_MIX_UNDO_MODES.VOCAL_SPACE;
@@ -116,11 +119,13 @@ function sourcesForMode(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return [PABLO_SECTION_VOCAL_SPACE_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return [PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return [PABLO_SECTION_VOCAL_BODY_SOURCE];
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return [PABLO_SECTION_VOCAL_SOFTNESS_SOURCE];
   if (mode === SECTION_MIX_UNDO_MODES.ALL) return [
     PABLO_SECTION_VOCAL_GAIN_SOURCE,
     PABLO_SECTION_VOCAL_SPACE_SOURCE,
     PABLO_SECTION_VOCAL_BRIGHTNESS_SOURCE,
     PABLO_SECTION_VOCAL_BODY_SOURCE,
+    PABLO_SECTION_VOCAL_SOFTNESS_SOURCE,
   ];
   return [];
 }
