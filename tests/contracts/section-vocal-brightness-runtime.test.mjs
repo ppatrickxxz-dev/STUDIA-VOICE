@@ -23,9 +23,10 @@ test('audio engine renders high shelf automation in the same processed path used
   const engine = await read('packages/app/audio-engine.mjs');
   assert.match(engine, /regionalHighShelfEvents/);
   assert.match(engine, /highShelfAutomationPoints/);
-  assert.match(engine, /connectRegionalHighShelves/);
-  assert.match(engine, /shelf\.type = 'highshelf'/);
-  assert.match(engine, /shelf\.frequency\.value = event\.frequencyHz/);
+  assert.match(engine, /connectRegionalEq/);
+  assert.match(engine, /connectRegionalBiquad/);
+  assert.match(engine, /'highshelf', highShelfAutomationPoints/);
+  assert.match(engine, /eq\.frequency\.value = event\.frequencyHz/);
   assert.match(engine, /createTrackSources\(offline, .*'processed'/s);
 });
 
