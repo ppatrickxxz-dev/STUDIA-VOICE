@@ -29,6 +29,7 @@ function richAnalysis() {
   return {
     voice: {
       eventDetection: { source: 'local-heuristic-v1' },
+      noiseDetection: { source: 'local-heuristic-v1' },
       breathEvents: [
         { start: 8.7, end: 8.9, confidence: 0.92, intensity: 0.9 },
         { start: 20, end: 20.2, confidence: 0.96, intensity: 1 },
@@ -46,6 +47,7 @@ function richAnalysis() {
         { start: 12, end: 12.05, confidence: 0.9, intensity: 0.93, peak: 0.7, transientRise: 2.8, source: 'vocal-peak-transient-v1' },
         { start: 13.2, end: 13.25, confidence: 0.84, intensity: 0.82, peak: 0.62, transientRise: 2.3, source: 'vocal-peak-transient-v1' },
       ],
+      noiseEvents: [],
     },
   };
 }
@@ -59,7 +61,7 @@ test('parses explicit diagnostic language with a named section and does not hija
   assert.equal(parseSectionVocalScanCommand('trata minha voz no refrão'), null);
 });
 
-test('reports five evidence families from the same cleanup gates and keeps positions sorted', () => {
+test('reports five cleanup evidence families from the same gates and keeps positions sorted', () => {
   const { project } = projectWithVocal();
   const command = parseSectionVocalScanCommand('analisa minha voz no refrão');
   const result = planSectionVocalScan(project, command, { analysis: richAnalysis() });
@@ -75,6 +77,56 @@ test('reports five evidence families from the same cleanup gates and keeps posit
   assert.ok(result.findings.some((finding) => finding.type === 'plosive' && finding.frequencyHz === 120));
   assert.equal(result.modules.dynamics.applied, true);
   assert.ok(result.findings.filter((finding) => finding.type === 'peak').every((finding) => finding.autoEdit));
+});
+
+test('stationary hum and broadband noise are visible but never promoted to automatic cleanup', () => {
+  const { project } = projectWithVocal();
+  const analysis = richAnalysis();
+  analysis.voice.breathEvents = [];
+  analysis.voice.sibilanceEvents = [];
+  analysis.voice.plosiveEvents = [];
+  analysis.voice.clickEvents = [];
+  analysis.voice.peakEvents = [];
+  analysis.voice.noiseEvents = [
+    { start: 9, end: 10, confidence: 0.9, intensity: 0.65, noiseKind: 'hum', frequencyHz: 60, rmsDb: -42, stationarity: 0.93, humConfidence: 0.91 },
+    { start: 12, end: 13, confidence: 0.82, intensity: 0.55, noiseKind: 'broadband', rmsDb: -48, stationarity: 0.88, humConfidence: 0.1 },
+    { start: 20, end: 21, confidence: 0.95, intensity: 0.8, noiseKind: 'hum', frequencyHz: 50, rmsDb: -35, stationarity: 0.95, humConfidence: 0.95 },
+  ];
+  const result = planSectionVocalScan(project, parseSectionVocalScanCommand('analisa minha voz no refrão'), { analysis });
+  assert.equal(result.ok, true);
+  assert.equal(result.clean, false);
+  assert.equal(result.findings.length, 2);
+  assert.deepEqual(result.findings.map((finding) => finding.type), ['hum', 'noise']);
+  assert.ok(result.findings.every((finding) => finding.autoEdit === false));
+  assert.equal(result.actionableCount, 0);
+  assert.equal(result.reviewCount, 2);
+  assert.equal(result.observed.noise, 2);
+  assert.equal(result.observed.hum, 1);
+  const hum = result.findings[0];
+  assert.equal(hum.frequencyHz, 60);
+  assert.equal(hum.rmsDb, -42);
+  assert.equal(hum.stationarity, 0.93);
+  assert.equal(result.noiseAnalysisSource, 'local-heuristic-v1');
+});
+
+test('weak or unstable noise remains observed but does not become a finding', () => {
+  const { project } = projectWithVocal();
+  const analysis = richAnalysis();
+  analysis.voice.breathEvents = [];
+  analysis.voice.sibilanceEvents = [];
+  analysis.voice.plosiveEvents = [];
+  analysis.voice.clickEvents = [];
+  analysis.voice.peakEvents = [];
+  analysis.voice.noiseEvents = [
+    { start: 9, end: 10, confidence: 0.5, noiseKind: 'broadband', rmsDb: -44, stationarity: 0.9 },
+    { start: 11, end: 12, confidence: 0.9, noiseKind: 'hum', frequencyHz: 60, rmsDb: -44, stationarity: 0.3 },
+    { start: 13, end: 14, confidence: 0.9, noiseKind: 'broadband', rmsDb: -80, stationarity: 0.9 },
+  ];
+  const result = planSectionVocalScan(project, parseSectionVocalScanCommand('analisa minha voz no refrão'), { analysis });
+  assert.equal(result.clean, true);
+  assert.equal(result.findings.length, 0);
+  assert.equal(result.observed.noise, 3);
+  assert.equal(result.actionableCount, 0);
 });
 
 test('peak diagnosis exposes review-only evidence when one moderate peak is not enough for automatic dynamics', () => {
@@ -100,11 +152,13 @@ test('weak or out-of-section observations stay visible only in raw counts and ne
   const analysis = {
     voice: {
       eventDetection: { source: 'provided' },
+      noiseDetection: { source: 'provided' },
       breathEvents: [{ start: 9, end: 9.1, confidence: 0.6, intensity: 0.5 }],
       sibilanceEvents: [{ start: 20, end: 20.1, confidence: 0.95, intensity: 0.95, frequencyHz: 9000, spectralConfidence: 0.8 }],
       plosiveEvents: [{ start: 10, end: 10.05, confidence: 0.4, intensity: 0.2, frequencyHz: 120, spectralConfidence: 0.2 }],
       clickEvents: [{ start: 11, end: 11.01, confidence: 0.5, intensity: 0.2, differenceRatio: 0.3, lowFrequencyRatio: 0.2 }],
       peakEvents: [{ start: 12, end: 12.04, confidence: 0.5, intensity: 0.4 }],
+      noiseEvents: [{ start: 20, end: 21, confidence: 0.95, intensity: 0.9, noiseKind: 'hum', frequencyHz: 60, rmsDb: -38, stationarity: 0.95 }],
     },
   };
   const result = planSectionVocalScan(project, parseSectionVocalScanCommand('quais problemas tem na minha voz no refrão'), { analysis });
@@ -116,13 +170,16 @@ test('weak or out-of-section observations stay visible only in raw counts and ne
   assert.equal(result.observed.plosives, 1);
   assert.equal(result.observed.clicks, 1);
   assert.equal(result.observed.peaks, 1);
+  assert.equal(result.observed.noise, 0);
   assert.equal(result.actionableCount, 0);
 });
 
 test('scan is pure read-only planning: project automation revisions and timestamps remain byte-for-byte unchanged', () => {
   const { project } = projectWithVocal();
   const before = JSON.stringify(project);
-  const result = planSectionVocalScan(project, parseSectionVocalScanCommand('escaneia minha voz no refrão'), { analysis: richAnalysis() });
+  const analysis = richAnalysis();
+  analysis.voice.noiseEvents = [{ start: 9, end: 10, confidence: 0.9, intensity: 0.6, noiseKind: 'hum', frequencyHz: 60, rmsDb: -42, stationarity: 0.9 }];
+  const result = planSectionVocalScan(project, parseSectionVocalScanCommand('escaneia minha voz no refrão'), { analysis });
   assert.equal(result.ok, true);
   assert.equal(JSON.stringify(project), before);
   assert.equal(project.revisions.length, JSON.parse(before).revisions.length);
@@ -140,7 +197,8 @@ test('missing analysis fails closed while a genuinely clean diagnosis succeeds w
     analysis: {
       voice: {
         eventDetection: { source: 'provided' },
-        breathEvents: [], sibilanceEvents: [], plosiveEvents: [], clickEvents: [], peakEvents: [],
+        noiseDetection: { source: 'provided' },
+        breathEvents: [], sibilanceEvents: [], plosiveEvents: [], clickEvents: [], peakEvents: [], noiseEvents: [],
       },
     },
   });
