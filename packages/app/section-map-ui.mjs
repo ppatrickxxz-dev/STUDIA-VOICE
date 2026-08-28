@@ -64,18 +64,18 @@ function mountEntryPoint() {
 async function onClick(event) {
   const button = event.target.closest('button');
   if (!button) return;
-  if (button.dataset.sectionMapOpen) { await showSectionMap(); return; }
-  if (button.dataset.sectionMapClose) { hideSectionMap(); return; }
+  if (button.hasAttribute('data-section-map-open')) { await showSectionMap(); return; }
+  if (button.hasAttribute('data-section-map-close')) { hideSectionMap(); return; }
   if (!document.querySelector('[data-section-map-modal]')) return;
 
-  if (button.dataset.sectionSave) {
+  if (button.hasAttribute('data-section-save')) {
     event.preventDefault();
     const form = button.closest('[data-section-form]');
     if (form) await saveSectionForm(form);
     return;
   }
 
-  if (button.dataset.sectionUseCursor) {
+  if (button.hasAttribute('data-section-use-cursor')) {
     const value = currentCursorSeconds();
     const input = document.querySelector('[data-section-start]');
     if (!input) return;
@@ -90,7 +90,7 @@ async function onClick(event) {
     return;
   }
 
-  if (button.dataset.sectionCancelEdit) {
+  if (button.hasAttribute('data-section-cancel-edit')) {
     editingSectionId = null;
     renderSectionMap();
     return;
