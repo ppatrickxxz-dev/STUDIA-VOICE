@@ -37,6 +37,7 @@ try {
   installAudioPlaybackRecovery();
   await import('./app.js');
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
+  const { installPabloSectionHereAdapter } = await import('./pablo-section-here-adapter.mjs');
   const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
   const { installAcousticEvidenceStatusUI } = await import('./acoustic-evidence-status-ui.mjs');
@@ -50,6 +51,7 @@ try {
   const { installBeatLab } = await import('./beat-lab-ui.mjs');
   const { installSectionMapUI } = await import('./section-map-ui.mjs');
   installPabloConversationUI();
+  installPabloSectionHereAdapter();
   installBreathReviewUI();
   installAdvancedAIStudio();
   installAcousticEvidenceStatusUI();
