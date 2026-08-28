@@ -46,6 +46,7 @@ try {
   const { installPabloSectionVocalDynamicsAdapter } = await import('./pablo-section-vocal-dynamics-adapter.mjs');
   const { installPabloSectionVocalDeEsserAdapter } = await import('./pablo-section-vocal-deesser-adapter.mjs');
   const { installPabloSectionVocalPlosiveAdapter } = await import('./pablo-section-vocal-plosive-adapter.mjs');
+  const { installPabloSectionVocalCleanupAdapter } = await import('./pablo-section-vocal-cleanup-adapter.mjs');
   const { installPabloSectionVocalSoftnessAdapter } = await import('./pablo-section-vocal-softness-adapter.mjs');
   const { installPabloSectionVocalSpaceAdapter } = await import('./pablo-section-vocal-space-adapter.mjs');
   const { installPabloSectionMixUndoAdapter } = await import('./pablo-section-mix-undo-adapter.mjs');
@@ -72,6 +73,7 @@ try {
   installPabloSectionVocalDynamicsAdapter();
   installPabloSectionVocalDeEsserAdapter();
   installPabloSectionVocalPlosiveAdapter();
+  installPabloSectionVocalCleanupAdapter();
   installPabloSectionVocalSoftnessAdapter();
   installPabloSectionVocalSpaceAdapter();
   installPabloSectionMixUndoAdapter();
