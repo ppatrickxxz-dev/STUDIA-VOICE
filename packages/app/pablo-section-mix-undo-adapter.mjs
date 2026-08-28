@@ -65,7 +65,7 @@ async function onPabloSubmitCapture(event) {
 function blockedReply(command, result) {
   if (result.reason === 'missing_confirmed_section') return `Não encontrei ${command.label.toLowerCase()} com timing confirmado. Não desfiz nenhuma automação.`;
   if (result.reason === 'missing_confirmed_end') return `${command.label} ainda não tem um intervalo completo confirmado. Não removi automações por aproximação.`;
-  if (result.reason === 'ambiguous_occurrence') return `Há ${result.sectionResult?.count || 'várias'} ocorrências de ${command.label.toLowerCase()}. Diga qual, por exemplo “desfaz o ganho da voz no primeiro ${command.label.toLowerCase()}”.`;
+  if (result.reason === 'ambiguous_occurrence') return `Há ${result.sectionResult?.count || 'várias'} ocorrências de ${command.label.toLowerCase()}. Diga qual trecho você quer desfazer.`;
   if (result.reason === 'missing_occurrence') return `Não encontrei essa ocorrência de ${command.label.toLowerCase()}. Não desfiz nada.`;
   if (result.reason === 'nothing_to_undo') return `Não encontrei ${modeLabel(command.mode)} criado pelo Pablo nesse ${command.label.toLowerCase()}. Automação manual e outras edições foram preservadas.`;
   return 'Não consegui identificar com segurança qual edição regional desfazer. Não alterei o projeto.';
@@ -73,10 +73,11 @@ function blockedReply(command, result) {
 
 function successReply(command, section, count) {
   const where = occurrenceLabel(command, section);
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei corpo, brilho, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei ganho, corpo, brilho da voz, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei ganho, corpo, espaço instrumental, respirações e ajustes manuais.`;
-  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, brilho, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_GAIN) return `Desfiz o ganho vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei corpo, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfiz o espaço vocal que eu tinha criado no ${where}. Removi ${count} automação(ões) do Pablo e preservei ganho, corpo, brilho, suavização, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfiz o brilho vocal que eu tinha criado no ${where}. Removi ${count} high-shelf regional do Pablo e preservei ganho, corpo, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfiz o corpo vocal que eu tinha criado no ${where}. Removi ${count} EQ regional do Pablo e preservei ganho, brilho, suavização, espaço instrumental, respirações e ajustes manuais.`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfiz a suavização vocal que eu tinha criado no ${where}. Removi ${count} EQ regional redutivo do Pablo e preservei ganho, corpo, brilho positivo, espaço instrumental, respirações e ajustes manuais.`;
   return `Desfiz meus ajustes regionais de mix no ${where}. Removi ${count} automação(ões) do Pablo; respirações, automação manual e edições de outras seções ficaram intactas.`;
 }
 
@@ -85,6 +86,7 @@ function undoRevisionLabel(command, section) {
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return `Desfeito espaço vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return `Desfeito brilho vocal no ${section.label}`;
   if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return `Desfeito corpo vocal no ${section.label}`;
+  if (command.mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return `Desfeita suavização vocal no ${section.label}`;
   return `Desfeitos ajustes do Pablo no ${section.label}`;
 }
 
@@ -93,6 +95,7 @@ function modeLabel(mode) {
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SPACE) return 'espaço vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BRIGHTNESS) return 'brilho vocal';
   if (mode === SECTION_MIX_UNDO_MODES.VOCAL_BODY) return 'corpo vocal';
+  if (mode === SECTION_MIX_UNDO_MODES.VOCAL_SOFTNESS) return 'suavização vocal';
   return 'ajustes regionais de mix';
 }
 
