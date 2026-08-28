@@ -65,6 +65,7 @@ function appendABPanel({ projectId, command, section, eventCount }) {
   const b = button('Ouvir B', () => playVariant(projectId, section.id, 'B', panel));
   const keep = button('Manter B', () => {
     stopSectionMixAB();
+    panel.dataset.decisionLocked = 'true';
     disableDecisionButtons(panel);
     appendPlainMessage(`Mantive os ajustes atuais no ${occurrenceLabel(command, section)}. O projeto não precisou ser regravado porque B já era o estado salvo.`, 'assistant');
   });
@@ -116,7 +117,10 @@ function button(text, action) {
     value.disabled = true;
     try { await action(); }
     catch (error) { appendPlainMessage(error?.message || 'Não consegui executar essa ação de A/B.', 'assistant'); }
-    finally { if (value.isConnected) value.disabled = false; }
+    finally {
+      const locked = value.closest('[data-decision-locked="true"]');
+      if (value.isConnected && !locked) value.disabled = false;
+    }
   });
   return value;
 }
