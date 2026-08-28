@@ -57,7 +57,7 @@ test('canonical musical pipeline exposes plosiveEvents and count without a secon
 test('explicit plosive event arrays are preserved and bypass local plosive detection', () => {
   const samples = vocalWithPlosive();
   const provided = [{ start: 0.2, end: 0.25, intensity: 0.7, confidence: 0.9, frequencyHz: 140, spectralConfidence: 0.8, spectralSource: 'provided-gate' }];
-  const analysis = analyzeMusicalAudio({ samples, sampleRate, breathEvents: [], sibilanceEvents: [], plosiveEvents: provided, peakEvents: [], pitchOptions: { frameSize: 512, hopSize: 512 } });
+  const analysis = analyzeMusicalAudio({ samples, sampleRate, breathEvents: [], sibilanceEvents: [], plosiveEvents: provided, peakEvents: [], clickEvents: [], pitchOptions: { frameSize: 512, hopSize: 512 } });
   assert.equal(analysis.voice.eventDetection.source, 'provided');
   assert.equal(analysis.voice.plosiveEvents.length, 1);
   assert.equal(analysis.voice.plosiveEvents[0].frequencyHz, 140);
