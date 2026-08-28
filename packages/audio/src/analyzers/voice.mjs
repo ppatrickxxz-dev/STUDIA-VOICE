@@ -1,4 +1,4 @@
-export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], peakEvents = [], clickEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
+export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEvents = [], plosiveEvents = [], peakEvents = [], clickEvents = [], noiseEvents = [], formants = [], snrDb = null, roomReverb = null } = {}) {
   const voiced = pitchContour.filter((point) => point?.voiced && Number.isFinite(point.hz));
   const hzValues = voiced.map((point) => point.hz).sort((a,b)=>a-b);
   const confidence = voiced.length ? voiced.reduce((sum, point) => sum + (Number(point.confidence) || 0), 0) / voiced.length : 0;
@@ -19,6 +19,7 @@ export function analyzeVoice({ pitchContour = [], breathEvents = [], sibilanceEv
     plosiveEvents: normalizeEvents(plosiveEvents),
     peakEvents: normalizeEvents(peakEvents),
     clickEvents: normalizeEvents(clickEvents),
+    noiseEvents: normalizeEvents(noiseEvents),
     formants: Array.isArray(formants) ? formants : [],
     confidence
   };
@@ -50,6 +51,9 @@ function normalizeEvents(events) {
     const transientRise = finiteOrNull(event.transientRise);
     const differenceRatio = finiteOrNull(event.differenceRatio);
     const lowFrequencyRatio = finiteOrNull(event.lowFrequencyRatio);
+    const rmsDb = finiteOrNull(event.rmsDb);
+    const stationarity = finiteOrNull(event.stationarity);
+    const humConfidence = finiteOrNull(event.humConfidence);
     if (frequencyHz !== null) normalized.frequencyHz = frequencyHz;
     if (spectralPeakHz !== null) normalized.spectralPeakHz = spectralPeakHz;
     if (spectralSpreadHz !== null) normalized.spectralSpreadHz = spectralSpreadHz;
@@ -59,6 +63,10 @@ function normalizeEvents(events) {
     if (transientRise !== null) normalized.transientRise = transientRise;
     if (differenceRatio !== null) normalized.differenceRatio = differenceRatio;
     if (lowFrequencyRatio !== null) normalized.lowFrequencyRatio = lowFrequencyRatio;
+    if (rmsDb !== null) normalized.rmsDb = rmsDb;
+    if (stationarity !== null) normalized.stationarity = stationarity;
+    if (humConfidence !== null) normalized.humConfidence = humConfidence;
+    if (event.noiseKind) normalized.noiseKind = String(event.noiseKind);
     if (event.spectralSource) normalized.spectralSource = String(event.spectralSource);
     if (event.source) normalized.source = String(event.source);
     return normalized;
