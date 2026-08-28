@@ -68,6 +68,13 @@ async function onClick(event) {
   if (button.dataset.sectionMapClose) { hideSectionMap(); return; }
   if (!document.querySelector('[data-section-map-modal]')) return;
 
+  if (button.dataset.sectionSave) {
+    event.preventDefault();
+    const form = button.closest('[data-section-form]');
+    if (form) await saveSectionForm(form);
+    return;
+  }
+
   if (button.dataset.sectionUseCursor) {
     const value = currentCursorSeconds();
     const input = document.querySelector('[data-section-start]');
@@ -98,6 +105,10 @@ async function onSubmit(event) {
   const form = event.target.closest('[data-section-form]');
   if (!form) return;
   event.preventDefault();
+  await saveSectionForm(form);
+}
+
+async function saveSectionForm(form) {
   if (!activeProject) return;
 
   const kind = String(form.elements.namedItem('kind')?.value || '');
@@ -182,7 +193,7 @@ function renderSectionMap() {
         <div class="pv-section-form-actions">
           <button class="pv-btn" type="button" data-section-use-cursor>Usar cursor</button>
           ${editing ? '<button class="pv-btn" type="button" data-section-cancel-edit>Cancelar</button>' : ''}
-          <button class="pv-btn primary" type="submit">${editing ? 'Atualizar' : 'Salvar seção'}</button>
+          <button class="pv-btn primary" type="submit" data-section-save>${editing ? 'Atualizar' : 'Salvar seção'}</button>
         </div>
       </form>
       <p class="pv-section-hint">Aceita segundos ou relógio, como 45, 1:12 ou 1:12.5. “Usar cursor” pega a posição atual ou o último ponto ouvido antes de parar.</p>
