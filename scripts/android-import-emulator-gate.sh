@@ -190,7 +190,7 @@ expression = r"""
     }
   };
   poll();
-}))
+}))()
 """
 command = {
     'id': 1,
