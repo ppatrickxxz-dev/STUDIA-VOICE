@@ -58,6 +58,23 @@ jobs:
           echo "::add-mask::$USER_TOKEN"
           printf 'PV_USER_TOKEN=%s\n' "$USER_TOKEN" >> "$GITHUB_ENV"
 
+      - name: Freeze one model and reference binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH=(-H "Authorization: Bearer $PV_USER_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+          MODEL_JSON="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/voice_models?select=id&is_active=eq.true&status=eq.ready&order=updated_at.desc&limit=1")"
+          VOICE_MODEL_ID="$(printf '%s' "$MODEL_JSON" | jq -er 'if length == 1 then .[0].id else error("active_voice_model_not_unique") end')"
+          REF_JSON="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/voice_identity_references?select=id,asset_id,source_sha256,voice_model_id&voice_model_id=eq.$VOICE_MODEL_ID&is_active=eq.true")"
+          REFERENCE_ID="$(printf '%s' "$REF_JSON" | jq -er 'if length == 1 then .[0].id else error("active_identity_reference_not_unique") end')"
+          REFERENCE_ASSET_ID="$(printf '%s' "$REF_JSON" | jq -er '.[0].asset_id')"
+          REFERENCE_SHA="$(printf '%s' "$REF_JSON" | jq -er '.[0].source_sha256 | ascii_downcase')"
+          test "$(printf '%s' "$REF_JSON" | jq -r '.[0].voice_model_id')" = "$VOICE_MODEL_ID"
+          printf 'PV_VOICE_MODEL_ID=%s\nPV_REFERENCE_ID=%s\nPV_REFERENCE_ASSET_ID=%s\nPV_REFERENCE_SHA=%s\n' \
+            "$VOICE_MODEL_ID" "$REFERENCE_ID" "$REFERENCE_ASSET_ID" "$REFERENCE_SHA" >> "$GITHUB_ENV"
+
       - name: Install pinned scoring runtime
         shell: bash
         run: |
@@ -72,49 +89,41 @@ jobs:
           snapshot_download(repo_id=os.environ['MODEL'], revision=os.environ['MODEL_REVISION'], local_dir='/tmp/pv-ecapa-model')
           PY
 
-      - name: Score and persist preserved variants
+      - name: Score preserved variants against frozen reference
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p test-results/speaker-identity-recipe-matrix
           : > test-results/speaker-identity-recipe-matrix/results.jsonl
+          AUTH=(-H "Authorization: Bearer $PV_USER_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+
+          REF_ASSET="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/audio_assets?select=id,sha256,storage_bucket,storage_path&id=eq.$PV_REFERENCE_ASSET_ID")"
+          test "$(printf '%s' "$REF_ASSET" | jq -er 'if length == 1 then .[0].id else error("reference_asset_missing") end')" = "$PV_REFERENCE_ASSET_ID"
+          test "$(printf '%s' "$REF_ASSET" | jq -er '.[0].sha256 | ascii_downcase')" = "$PV_REFERENCE_SHA"
+          REF_BUCKET="$(printf '%s' "$REF_ASSET" | jq -er '.[0].storage_bucket')"
+          REF_PATH="$(printf '%s' "$REF_ASSET" | jq -er '.[0].storage_path | @uri')"
+          curl --fail-with-body --silent --show-error -L "${AUTH[@]}" \
+            "$SUPABASE_URL/storage/v1/object/authenticated/$REF_BUCKET/$REF_PATH" -o /tmp/pv-reference.bin
+          test "$(sha256sum /tmp/pv-reference.bin | awk '{print $1}')" = "$PV_REFERENCE_SHA"
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/pv-reference.bin -ar 16000 -ac 1 -c:a pcm_s16le /tmp/pv-reference.wav
+
           IFS=',' read -ra ITEMS <<< "$VARIANTS"
           for ITEM in "${ITEMS[@]}"; do
             NAME="${ITEM%%=*}"
             CANDIDATE_ID="${ITEM#*=}"
             echo "Scoring $NAME ($CANDIDATE_ID)"
-
-            DISPATCH="$(curl --fail-with-body --silent --show-error \
-              -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
-              -H "Authorization: Bearer $PV_USER_TOKEN" \
-              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-              -H 'content-type: application/json' \
-              --data "{\"action\":\"dispatch\",\"candidate_asset_id\":\"$CANDIDATE_ID\"}")"
-            JOB_ID="$(printf '%s' "$DISPATCH" | jq -er '.job_id')"
-
-            CLAIM="$(curl --fail-with-body --silent --show-error \
-              -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
-              -H "Authorization: Bearer $PV_OIDC_TOKEN" \
-              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-              -H 'content-type: application/json' \
-              --data '{"action":"worker_claim"}')"
-            CLAIMED_ID="$(printf '%s' "$CLAIM" | jq -er '.job.id')"
-            test "$CLAIMED_ID" = "$JOB_ID"
-
-            CANDIDATE_URL="$(printf '%s' "$CLAIM" | jq -er '.job.candidate_url')"
-            REFERENCE_URL="$(printf '%s' "$CLAIM" | jq -er '.job.reference_url')"
-            CANDIDATE_SHA="$(printf '%s' "$CLAIM" | jq -er '.job.candidate_sha256')"
-            REFERENCE_SHA="$(printf '%s' "$CLAIM" | jq -er '.job.reference_sha256')"
-            REFERENCE_ID="$(printf '%s' "$CLAIM" | jq -er '.job.reference_id')"
-            VOICE_MODEL_ID="$(printf '%s' "$CLAIM" | jq -er '.job.voice_model_id')"
-
-            curl --fail-with-body --silent --show-error -L "$CANDIDATE_URL" -o "/tmp/pv-${NAME}-candidate.bin"
-            curl --fail-with-body --silent --show-error -L "$REFERENCE_URL" -o "/tmp/pv-${NAME}-reference.bin"
+            ASSET="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+              "$SUPABASE_URL/rest/v1/audio_assets?select=id,sha256,storage_bucket,storage_path&id=eq.$CANDIDATE_ID")"
+            test "$(printf '%s' "$ASSET" | jq -er 'if length == 1 then .[0].id else error("candidate_asset_missing") end')" = "$CANDIDATE_ID"
+            CANDIDATE_SHA="$(printf '%s' "$ASSET" | jq -er '.[0].sha256 | ascii_downcase')"
+            test "$CANDIDATE_SHA" != "$PV_REFERENCE_SHA"
+            BUCKET="$(printf '%s' "$ASSET" | jq -er '.[0].storage_bucket')"
+            PATH_ENC="$(printf '%s' "$ASSET" | jq -er '.[0].storage_path | @uri')"
+            curl --fail-with-body --silent --show-error -L "${AUTH[@]}" \
+              "$SUPABASE_URL/storage/v1/object/authenticated/$BUCKET/$PATH_ENC" -o "/tmp/pv-${NAME}-candidate.bin"
             test "$(sha256sum "/tmp/pv-${NAME}-candidate.bin" | awk '{print $1}')" = "$CANDIDATE_SHA"
-            test "$(sha256sum "/tmp/pv-${NAME}-reference.bin" | awk '{print $1}')" = "$REFERENCE_SHA"
-            test "$CANDIDATE_SHA" != "$REFERENCE_SHA"
             ffmpeg -hide_banner -loglevel error -y -i "/tmp/pv-${NAME}-candidate.bin" -ar 16000 -ac 1 -c:a pcm_s16le "/tmp/pv-${NAME}-candidate.wav"
-            ffmpeg -hide_banner -loglevel error -y -i "/tmp/pv-${NAME}-reference.bin" -ar 16000 -ac 1 -c:a pcm_s16le "/tmp/pv-${NAME}-reference.wav"
 
             SCORE_JSON="$(NAME="$NAME" python - <<'PY'
           import json, os, torch
@@ -123,7 +132,7 @@ jobs:
           name=os.environ['NAME']
           model=EncoderClassifier.from_hparams(source='/tmp/pv-ecapa-model', savedir='/tmp/pv-ecapa-runtime', run_opts={'device':'cpu'})
           c,csr=sf.read(f'/tmp/pv-{name}-candidate.wav', dtype='float32', always_2d=True)
-          r,rsr=sf.read(f'/tmp/pv-{name}-reference.wav', dtype='float32', always_2d=True)
+          r,rsr=sf.read('/tmp/pv-reference.wav', dtype='float32', always_2d=True)
           if csr != 16000 or rsr != 16000 or c.shape[1] != 1 or r.shape[1] != 1:
               raise RuntimeError('normalized_audio_contract_mismatch')
           c=torch.from_numpy(c[:,0]).unsqueeze(0)
@@ -140,28 +149,22 @@ jobs:
             SCORE="$(printf '%s' "$SCORE_JSON" | jq -er '.score')"
             PASSED="$(printf '%s' "$SCORE_JSON" | jq -r '.passed')"
             case "$PASSED" in true|false) ;; *) exit 1 ;; esac
-
-            BODY="$(jq -nc \
-              --arg action complete \
-              --arg job_id "$JOB_ID" \
-              --arg csha "$CANDIDATE_SHA" \
-              --arg rsha "$REFERENCE_SHA" \
-              --arg reference_id "$REFERENCE_ID" \
-              --arg voice_model_id "$VOICE_MODEL_ID" \
+            jq -nc \
+              --arg name "$NAME" \
+              --arg candidate_asset_id "$CANDIDATE_ID" \
+              --arg candidate_sha256 "$CANDIDATE_SHA" \
+              --arg reference_id "$PV_REFERENCE_ID" \
+              --arg reference_asset_id "$PV_REFERENCE_ASSET_ID" \
+              --arg reference_sha256 "$PV_REFERENCE_SHA" \
+              --arg voice_model_id "$PV_VOICE_MODEL_ID" \
               --arg engine "$MODEL" \
               --arg engine_version "$ENGINE_VERSION" \
               --arg model_revision "$MODEL_REVISION" \
+              --argjson threshold "$THRESHOLD" \
               --argjson score "$SCORE" \
               --argjson passed "$PASSED" \
-              '{action:$action,job_id:$job_id,candidate_sha256:$csha,reference_sha256:$rsha,reference_id:$reference_id,voice_model_id:$voice_model_id,engine:$engine,engine_version:$engine_version,model_revision:$model_revision,score:$score,passed:$passed,device:"cpu"}')"
-            COMPLETE="$(curl --fail-with-body --silent --show-error \
-              -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
-              -H "Authorization: Bearer $PV_OIDC_TOKEN" \
-              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-              -H 'content-type: application/json' \
-              --data "$BODY")"
-            printf '%s' "$COMPLETE" | jq -e '.ok == true and .proof.verified == true' >/dev/null
-            jq -nc --arg name "$NAME" --arg candidate_asset_id "$CANDIDATE_ID" --arg candidate_sha256 "$CANDIDATE_SHA" --arg reference_sha256 "$REFERENCE_SHA" --argjson score "$SCORE" --argjson passed "$PASSED" '{name:$name,candidate_asset_id:$candidate_asset_id,candidate_sha256:$candidate_sha256,reference_sha256:$reference_sha256,score:$score,passed:$passed}' >> test-results/speaker-identity-recipe-matrix/results.jsonl
+              '{name:$name,candidate_asset_id:$candidate_asset_id,candidate_sha256:$candidate_sha256,reference_id:$reference_id,reference_asset_id:$reference_asset_id,reference_sha256:$reference_sha256,voice_model_id:$voice_model_id,engine:$engine,engine_version:$engine_version,model_revision:$model_revision,threshold:$threshold,score:$score,passed:$passed,diagnostic_only:true}' \
+              >> test-results/speaker-identity-recipe-matrix/results.jsonl
           done
           jq -s '.' test-results/speaker-identity-recipe-matrix/results.jsonl > test-results/speaker-identity-recipe-matrix/results.json
           cat test-results/speaker-identity-recipe-matrix/results.json
