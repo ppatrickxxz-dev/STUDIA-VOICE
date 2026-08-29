@@ -1,9 +1,0 @@
-{
-  "name": "wrangler",
-  "version": "4.127.1-pablovoice-preview-shim",
-  "private": true,
-  "type": "module",
-  "bin": {
-    "wrangler": "./bin.mjs"
-  }
-}
