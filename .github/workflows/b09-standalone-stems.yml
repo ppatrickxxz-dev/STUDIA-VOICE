@@ -128,12 +128,14 @@ jobs:
             --arg source_sha256 "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d" \
             --arg github_sha "$GITHUB_SHA" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             '{
               verdict:"B09_STANDALONE_ROUTE_VALIDATED",
               source_asset_id:$source_asset_id,
               source_sha256:$source_sha256,
               github_sha:$github_sha,
               github_run_id:$run_id,
+              github_run_attempt:$run_attempt,
               job:$job[0],
               assets:$assets[0],
               checks:{
@@ -151,7 +153,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: b09-standalone-evidence-${{ github.sha }}
+          name: b09-standalone-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/b09-standalone
           if-no-files-found: error
           retention-days: 30
