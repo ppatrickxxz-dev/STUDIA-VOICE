@@ -72,12 +72,15 @@ jobs:
               .fallback_allowed == false and
               (.retry_after_ms | type == "number" and . >= 0)
             ' >/dev/null
-            RETRY_MS="$(printf '%s' "$RESPONSE" | jq -r '.retry_after_ms // 250')"
-            RETRY_SECONDS="$(( (RETRY_MS + 999) / 1000 ))"
-            if [ "$RETRY_SECONDS" -gt 2 ]; then RETRY_SECONDS=2; fi
-            echo "Provider rate-limited the canary; applying the single bounded retry allowed by the runtime contract after ${RETRY_SECONDS}s."
-            sleep "$RETRY_SECONDS"
-            call_provider
+            PROVIDER_ERROR_CODE="$(printf '%s' "$RESPONSE" | jq -r '.provider_error_code // .provider_error_type // ""')"
+            if [ "$PROVIDER_ERROR_CODE" != 'billing_not_active' ] && [ "$PROVIDER_ERROR_CODE" != 'insufficient_quota' ]; then
+              RETRY_MS="$(printf '%s' "$RESPONSE" | jq -r '.retry_after_ms // 250')"
+              RETRY_SECONDS="$(( (RETRY_MS + 999) / 1000 ))"
+              if [ "$RETRY_SECONDS" -gt 2 ]; then RETRY_SECONDS=2; fi
+              echo "Provider rate-limited the canary; applying the single bounded retry allowed by the runtime contract after ${RETRY_SECONDS}s."
+              sleep "$RETRY_SECONDS"
+              call_provider
+            fi
           fi
 
           if [ "$HTTP_CODE" != '200' ]; then
@@ -88,7 +91,7 @@ jobs:
               'del(.reply,.text) + {verdict:"AI_RUNTIME_PROVIDER_BLOCKED",http_status:($http_status|tonumber),github_sha:$github_sha,github_run_id:$run_id}' \
               > test-results/composer-provider/evidence.json
             jq '.' test-results/composer-provider/evidence.json
-            echo "::error::Composer provider round-trip remained blocked after the single bounded retry (HTTP $HTTP_CODE)."
+            echo "::error::Composer provider round-trip is blocked (HTTP $HTTP_CODE)."
             exit 1
           fi
 
@@ -124,3 +127,4 @@ jobs:
           path: test-results/composer-provider/evidence.json
           if-no-files-found: error
           retention-days: 30
+
