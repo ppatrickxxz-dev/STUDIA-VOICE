@@ -29,6 +29,14 @@ test('release tag is created only after signed artifacts are uploaded', async ()
   assert.ok(tagIndex > uploadIndex);
 });
 
+test('tag and GitHub release mutation remain manual-dispatch only', async () => {
+  const { workflow } = await load();
+  const tagStep = workflow.slice(workflow.indexOf('- name: Create or verify release tag'));
+  assert.match(tagStep, /if: github\.event_name == 'workflow_dispatch'/);
+  const releaseStep = workflow.slice(workflow.indexOf('- name: Create or refresh draft GitHub release'));
+  assert.match(releaseStep, /if: github\.event_name == 'workflow_dispatch'/);
+});
+
 test('existing release tags fail closed on SHA drift and are never force-pushed', async () => {
   const { workflow } = await load();
   assert.match(workflow, /TAG_SHA="\$\(git rev-parse "\$RELEASE_TAG\^\{commit\}"\)"/);
