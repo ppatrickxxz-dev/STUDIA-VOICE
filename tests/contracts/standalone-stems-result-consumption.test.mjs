@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const runtime = await readFile(new URL('../../packages/app/stems-result-runtime.mjs', import.meta.url), 'utf8');
+const canary = await readFile(new URL('../../packages/app/stems-canary.mjs', import.meta.url), 'utf8');
+
+test('standalone stems are read only through the authenticated job and asset ownership path', () => {
+  assert.match(runtime, /rest\/v1\/render_jobs/);
+  assert.match(runtime, /authorization = `Bearer \$\{token\}`/);
+  assert.match(runtime, /job\.job_type !== 'stems'/);
+  assert.match(runtime, /job\.output_asset_ids\.length !== 2/);
+  assert.match(runtime, /String\(asset\.project_id\) !== String\(job\.project_id\)/);
+  assert.doesNotMatch(runtime, /service_role/i);
+  assert.doesNotMatch(runtime, /render_jobs[^\n]*POST/i);
+});
+
+test('private outputs must retain the expected canonical pair and pass byte-level SHA-256 verification', () => {
+  assert.match(runtime, /EXPECTED_KINDS = new Set\(\['guide_vocal', 'instrumental'\]\)/);
+  assert.match(runtime, /asset\.storage_bucket !== 'audio-private'/);
+  assert.match(runtime, /storage\/v1\/object\/authenticated/);
+  assert.match(runtime, /blob\.size !== Number\(asset\.size_bytes\)/);
+  assert.match(runtime, /stem_sha256_mismatch/);
+  assert.match(runtime, /crypto\.subtle\.digest\('SHA-256'/);
+});
+
+test('completed outputs are promoted into the same local project with durable job and asset provenance', () => {
+  assert.match(runtime, /saveAudioAsset/);
+  assert.match(runtime, /createTrack/);
+  assert.match(runtime, /renderJobId: job\.id/);
+  assert.match(runtime, /remoteAssetId: remoteAsset\.id/);
+  assert.match(runtime, /remoteProjectId: job\.project_id/);
+  assert.match(runtime, /remoteSha256: downloaded\.sha256/);
+  assert.match(runtime, /await saveProject\(project\)/);
+  assert.match(canary, /waitForStandaloneStems/);
+  assert.match(canary, /importStandaloneStems/);
+  assert.match(canary, /stems:consumed\.imported/);
+});
+
+test('canary remains candidate-only until real B09 evidence exists', () => {
+  assert.match(canary, /routeValidated:false/);
+  assert.match(canary, /dispatcher:DISPATCHER,engine:'Demucs',model:'htdemucs'/);
+});
