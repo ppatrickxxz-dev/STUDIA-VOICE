@@ -72,7 +72,6 @@ if (/^[0-9a-f]{40}$/.test(sha)) {
     method: 'POST',
     headers: {
       apikey: SUPABASE_PUBLISHABLE_KEY,
-      authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
       'content-type': 'application/json',
       prefer: 'resolution=ignore-duplicates,return=minimal',
     },
