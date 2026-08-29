@@ -4,9 +4,6 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
-  "dependencies": {
-    "@vercel/oidc": "3.8.5"
-  },
   "scripts": {
     "build": "npm run build:web",
     "build:web": "node scripts/build-web.mjs",
