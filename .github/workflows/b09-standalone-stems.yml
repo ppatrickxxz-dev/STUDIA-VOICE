@@ -1,0 +1,157 @@
+name: B09 standalone stems live canary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/b09-standalone-stems.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  B09_PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  B09_SOURCE_ASSET_ID: a5bc5f31-a546-4ded-99fb-9a0867980202
+
+jobs:
+  standalone-stems:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire OIDC-backed PabloVoice user session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$RESPONSE" | jq -er '.session.access_token')"
+          PROJECT_ID="$(printf '%s' "$RESPONSE" | jq -er '.project_id')"
+          test "$PROJECT_ID" = "$B09_PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
+          unset OIDC_JSON OIDC_TOKEN RESPONSE ACCESS_TOKEN
+
+      - name: Dispatch real standalone stems job
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/compute-kaggle-v54" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "{\"project_id\":\"$B09_PROJECT_ID\",\"source_asset_id\":\"$B09_SOURCE_ASSET_ID\"}")"
+          JOB_ID="$(printf '%s' "$RESPONSE" | jq -er '.job_id')"
+          test -n "$JOB_ID"
+          printf 'B09_JOB_ID=%s\n' "$JOB_ID" >> "$GITHUB_ENV"
+          mkdir -p test-results/b09-standalone
+          printf '%s\n' "$RESPONSE" | jq '{dispatch_response:.}' > test-results/b09-standalone/dispatch.json
+          echo "B09 standalone job dispatched: $JOB_ID"
+
+      - name: Wait for provider callback and persisted outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=''
+          for attempt in $(seq 1 90); do
+            JOB_JSON="$(curl --fail-with-body --silent --show-error \
+              "$SUPABASE_URL/rest/v1/render_jobs?id=eq.$B09_JOB_ID&select=id,project_id,user_id,job_type,engine,status,progress,input_asset_ids,output_asset_ids,proof,error_message,created_at,started_at,finished_at,updated_at,current_stage,provider,external_job_id" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+            ROW="$(printf '%s' "$JOB_JSON" | jq -c '.[0] // empty')"
+            test -n "$ROW"
+            STATUS="$(printf '%s' "$ROW" | jq -r '.status')"
+            PROGRESS="$(printf '%s' "$ROW" | jq -r '.progress // 0')"
+            echo "attempt=$attempt status=$STATUS progress=$PROGRESS"
+            case "$STATUS" in
+              completed) terminal='completed'; printf '%s\n' "$ROW" > test-results/b09-standalone/job.json; break ;;
+              error|failed|cancelled) printf '%s\n' "$ROW" > test-results/b09-standalone/job.json; echo "B09 job terminal failure: $STATUS" >&2; exit 1 ;;
+            esac
+            sleep 20
+          done
+          test "$terminal" = 'completed'
+
+      - name: Verify standalone evidence through user RLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          JOB="$(cat test-results/b09-standalone/job.json)"
+          printf '%s' "$JOB" | jq -e \
+            --arg project "$B09_PROJECT_ID" \
+            --arg source "$B09_SOURCE_ASSET_ID" '
+              .project_id == $project and
+              .job_type == "stems" and
+              .status == "completed" and
+              (.proof.verified == true) and
+              (.input_asset_ids | index($source) != null) and
+              (.output_asset_ids | type == "array" and length == 2)
+            ' >/dev/null
+
+          ID1="$(printf '%s' "$JOB" | jq -r '.output_asset_ids[0]')"
+          ID2="$(printf '%s' "$JOB" | jq -r '.output_asset_ids[1]')"
+          ASSETS="$(curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/rest/v1/audio_assets?id=in.($ID1,$ID2)&select=id,project_id,user_id,kind,storage_bucket,storage_path,original_name,mime_type,size_bytes,duration_seconds,sample_rate,channels,bit_depth,sha256,metadata,created_at" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+          printf '%s\n' "$ASSETS" | jq '.' > test-results/b09-standalone/assets.json
+
+          printf '%s' "$ASSETS" | jq -e \
+            --arg project "$B09_PROJECT_ID" \
+            --arg sourceSha "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d" '
+              length == 2 and
+              (all(.[]; .project_id == $project and .storage_bucket == "audio-private" and (.size_bytes // 0) > 4096 and (.sha256 | test("^[a-f0-9]{64}$")))) and
+              ([.[].kind] | sort == ["guide_vocal","instrumental"]) and
+              ([.[].sha256] | unique | length == 2) and
+              (all(.[]; .sha256 != $sourceSha))
+            ' >/dev/null
+
+          jq -n \
+            --slurpfile job test-results/b09-standalone/job.json \
+            --slurpfile assets test-results/b09-standalone/assets.json \
+            --arg source_asset_id "$B09_SOURCE_ASSET_ID" \
+            --arg source_sha256 "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d" \
+            --arg github_sha "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            '{
+              verdict:"B09_STANDALONE_ROUTE_VALIDATED",
+              source_asset_id:$source_asset_id,
+              source_sha256:$source_sha256,
+              github_sha:$github_sha,
+              github_run_id:$run_id,
+              job:$job[0],
+              assets:$assets[0],
+              checks:{
+                standalone_job:true,
+                proof_verified:true,
+                two_persisted_outputs:true,
+                distinct_hashes:true,
+                non_trivial_sizes:true,
+                output_ids_resolve:true
+              }
+            }' > test-results/b09-standalone/evidence.json
+          jq '.' test-results/b09-standalone/evidence.json
+
+      - name: Upload B09 retained evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: b09-standalone-evidence-${{ github.sha }}
+          path: test-results/b09-standalone
+          if-no-files-found: error
+          retention-days: 30
