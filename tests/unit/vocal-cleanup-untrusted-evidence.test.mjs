@@ -30,6 +30,8 @@ test('cleanup caller cannot inject measurable acoustic facts or speaker identity
   assert.deepEqual(sanitized.candidate, {
     requestId: 'req-123',
   });
+  assert.equal('medianFormantDriftCents' in sanitized.candidate, false);
+  assert.equal('identityPassed' in sanitized.candidate, false);
   assert.deepEqual(sanitized.alignment, { sameContent: true, source: 'caller' });
 });
 
