@@ -30,6 +30,7 @@ function safeLog(fields:Record<string,unknown>){console.info(JSON.stringify({sco
 function boundedRetryAfter(value:string|null){if(!value)return 250;const seconds=Number(value);if(Number.isFinite(seconds))return Math.max(0,Math.min(1500,Math.round(seconds*1000)));const date=Date.parse(value);return Number.isFinite(date)?Math.max(0,Math.min(1500,date-Date.now())):250}
 function providerError(status:number){if(status===401||status===403)return 'provider_auth_failed';if(status===429)return 'provider_rate_limited';if(status>=500)return 'provider_unavailable';return 'remote_provider_failed'}
 function providerHttpStatus(status:number){if(status===429)return 429;if(status===401||status===403||status>=500)return 502;return 502}
+function safeProviderMeta(value:unknown){return typeof value==='string'&&/^[A-Za-z0-9._-]{1,80}$/.test(value)?value:null}
 
 async function serverKey(admin:any){const {data,error}=await admin.rpc('get_pablovoice_openai_api_key');if(error||!data)throw new Error('composer_key_unavailable');return String(data)}
 async function userAndProject(pubClient:any,jwt:string,projectId:string){
@@ -40,7 +41,7 @@ async function userAndProject(pubClient:any,jwt:string,projectId:string){
   return {user:ud.user,project:p}
 }
 
-async function callComposerProvider(req:Request,key:string,instructions:string,input:string,id:string){
+async function callComposerProvider(req:Request,key:string,instructions:string,input:string,id:string):Promise<any>{
   const started=Date.now()
   const controller=new AbortController()
   const abortFromClient=()=>controller.abort('client_cancelled')
@@ -53,24 +54,25 @@ async function callComposerProvider(req:Request,key:string,instructions:string,i
     }catch{
       const errorType=req.signal.aborted?'request_cancelled':controller.signal.aborted?'provider_timeout':'provider_connection_failed'
       safeLog({request_id:id,provider:'openai_backend',model:MODEL,status:'error',latency_ms:Date.now()-started,error_type:errorType})
-      return {ok:false,error:errorType,httpStatus:errorType==='request_cancelled'?499:502,retryAfterMs:0,latencyMs:Date.now()-started}
+      return {ok:false,error:errorType,httpStatus:errorType==='request_cancelled'?499:502,retryAfterMs:0,latencyMs:Date.now()-started,providerErrorType:null,providerErrorCode:null}
     }
     const latencyMs=Date.now()-started
     const raw=await upstream.text()
     let data:any={}
     try{data=raw?JSON.parse(raw):{}}catch{
       safeLog({request_id:id,provider:'openai_backend',model:MODEL,status:upstream.status,latency_ms:latencyMs,error_type:'provider_invalid_response'})
-      return {ok:false,error:'provider_invalid_response',httpStatus:502,retryAfterMs:0,latencyMs}
+      return {ok:false,error:'provider_invalid_response',httpStatus:502,retryAfterMs:0,latencyMs,providerErrorType:null,providerErrorCode:null}
     }
     if(!upstream.ok){
       const error=providerError(upstream.status),retryAfterMs=error==='provider_rate_limited'?boundedRetryAfter(upstream.headers.get('retry-after')):0
-      safeLog({request_id:id,provider:'openai_backend',model:MODEL,status:upstream.status,latency_ms:latencyMs,error_type:error})
-      return {ok:false,error,httpStatus:providerHttpStatus(upstream.status),retryAfterMs,latencyMs}
+      const providerErrorType=safeProviderMeta(data?.error?.type),providerErrorCode=safeProviderMeta(data?.error?.code)
+      safeLog({request_id:id,provider:'openai_backend',model:MODEL,status:upstream.status,latency_ms:latencyMs,error_type:error,provider_error_type:providerErrorType,provider_error_code:providerErrorCode})
+      return {ok:false,error,httpStatus:providerHttpStatus(upstream.status),retryAfterMs,latencyMs,providerErrorType,providerErrorCode}
     }
     const text=outputText(data)
     if(!text){
       safeLog({request_id:id,provider:'openai_backend',model:String(data?.model||MODEL),status:upstream.status,latency_ms:latencyMs,error_type:'remote_empty_response'})
-      return {ok:false,error:'remote_empty_response',httpStatus:502,retryAfterMs:0,latencyMs}
+      return {ok:false,error:'remote_empty_response',httpStatus:502,retryAfterMs:0,latencyMs,providerErrorType:null,providerErrorCode:null}
     }
     const model=String(data?.model||MODEL).slice(0,160)
     safeLog({request_id:id,provider:'openai_backend',model,status:upstream.status,latency_ms:latencyMs,error_type:null})
@@ -100,7 +102,7 @@ Deno.serve(async(req:Request)=>{
     const instructions=['Você é o motor de composição do PabloVoice.','Execute somente o comando solicitado: generate, continue_section, rewrite ou adapt_genre.','Escreva em português brasileiro quando a tarefa estiver em português.','Preserve intenção, perspectiva, oralidade e voz autoral; em rewrite altere o mínimo necessário.','Rima, métrica e prosódia devem servir ao sentido e à musicalidade.','Não imite literalmente artistas, melodias ou letras existentes.','Retorne material criativo pronto para revisão, sem explicar raciocínio.'].join(' ')
     const input=JSON.stringify({command,task,project:scope.project,context_pack:body?.context_pack||null,constraints:body?.constraints||null,author_samples:body?.author_samples||null})
     const provider=await callComposerProvider(req,key,instructions,input,id)
-    if(!provider.ok)return json({ok:false,error:provider.error,request_id:id,retry_after_ms:provider.retryAfterMs,latency_ms:provider.latencyMs,fallback_allowed:false},provider.httpStatus)
+    if(!provider.ok)return json({ok:false,error:provider.error,request_id:id,retry_after_ms:provider.retryAfterMs,latency_ms:provider.latencyMs,provider_error_type:provider.providerErrorType,provider_error_code:provider.providerErrorCode,fallback_allowed:false},provider.httpStatus)
     return json({ok:true,service:'pablovoice-agent-router',provider:'openai_backend',model:provider.model,command,project_id:scope.project.id,reply:provider.text,text:provider.text,request_id:id,latency_ms:provider.latencyMs,fallback_allowed:false})
   }catch(e){
     const type=e instanceof Error&&e.message==='composer_key_unavailable'?'composer_key_unavailable':'agent_backend_error'
