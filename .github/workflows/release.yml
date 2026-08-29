@@ -6,13 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag (for example v2.4.0-rc.1)
+        description: Release tag matching package version (for example v2.4.0-rc.1)
         required: true
         type: string
 
 permissions:
   contents: write
   id-token: write
+
+concurrency:
+  group: pablovoice-signed-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   signed-release:
@@ -35,6 +39,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Validate release tag intent
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION="$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('package.json','utf8')).version)")"
+          EXPECTED_TAG="v${PACKAGE_VERSION}"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "RELEASE_TAG_MISMATCH: requested '$RELEASE_TAG', package requires '$EXPECTED_TAG'" >&2
+            exit 1
+          fi
+          case "$RELEASE_TAG" in
+            v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*|v[0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "RELEASE_TAG_INVALID: '$RELEASE_TAG' is not a supported PabloVoice release tag" >&2
+              exit 1
+              ;;
+          esac
       - name: Fetch protected signing material via GitHub OIDC
         env:
           SIGNING_BROKER_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/device-auth
@@ -99,16 +122,47 @@ jobs:
             apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
           if-no-files-found: error
           retention-days: 14
-      - name: Create draft GitHub release
+      - name: Create or verify release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            TAG_SHA="$(git rev-parse "$RELEASE_TAG^{commit}")"
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "RELEASE_TAG_DRIFT: '$RELEASE_TAG' points to '$TAG_SHA', expected '$GITHUB_SHA'" >&2
+              exit 1
+            fi
+            echo "Release tag already points to the approved SHA."
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "PabloVoice $RELEASE_TAG"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+      - name: Create or refresh draft GitHub release
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          git rev-parse "$RELEASE_TAG"
-          gh release create "$RELEASE_TAG" \
-            apps/android/app/build/outputs/apk/release/app-release.apk \
-            apps/android/app/build/outputs/apk/release/app-release.apk.sha256 \
-            apps/android/app/build/outputs/bundle/release/app-release.aab \
-            apps/android/app/build/outputs/bundle/release/app-release.aab.sha256 \
-            --draft --verify-tag --generate-notes --title "PabloVoice $RELEASE_TAG"
+          set -euo pipefail
+          RELEASE_FILES=(
+            apps/android/app/build/outputs/apk/release/app-release.apk
+            apps/android/app/build/outputs/apk/release/app-release.apk.sha256
+            apps/android/app/build/outputs/bundle/release/app-release.aab
+            apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
+          )
+          if gh release view "$RELEASE_TAG" --json isDraft >/tmp/pablovoice-release.json 2>/dev/null; then
+            if [ "$(jq -r '.isDraft' /tmp/pablovoice-release.json)" != "true" ]; then
+              echo "RELEASE_ALREADY_PUBLISHED: refusing to overwrite published release '$RELEASE_TAG'" >&2
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" "${RELEASE_FILES[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "${RELEASE_FILES[@]}" \
+              --draft --verify-tag --generate-notes --title "PabloVoice $RELEASE_TAG"
+          fi
