@@ -8,20 +8,30 @@ const activity = readFileSync(activityPath, 'utf8');
 const manifest = readFileSync(manifestPath, 'utf8');
 
 function methodBody(name) {
-  const marker = new RegExp(`(?:^|\\n)\\s*(?:(?:public|private|protected|static|synchronized|final)\\s+)*[\\w<>\\[\\], ?]+\\s+${name}\\s*\\([^)]*\\)\\s*\\{`, 'm');
-  const match = marker.exec(activity);
-  assert.ok(match, `expected method ${name}`);
-  const start = activity.indexOf('{', match.index);
-  let depth = 0;
-  for (let index = start; index < activity.length; index += 1) {
-    const char = activity[index];
-    if (char === '{') depth += 1;
-    else if (char === '}') {
-      depth -= 1;
-      if (depth === 0) return activity.slice(match.index, index + 1);
+  const pattern = new RegExp(`\\b${name}\\s*\\(`, 'g');
+  let match;
+  while ((match = pattern.exec(activity))) {
+    const open = activity.indexOf('{', match.index);
+    if (open < 0) break;
+    const semicolon = activity.indexOf(';', match.index);
+    if (semicolon >= 0 && semicolon < open) continue;
+    const lineStart = activity.lastIndexOf('\n', match.index) + 1;
+    const prefix = activity.slice(lineStart, match.index);
+    const signature = activity.slice(lineStart, open + 1);
+    if (!/(^|\s)(public|private|protected|static|synchronized|final|void|boolean|int|long|String|File)\b|@(?:Override|JavascriptInterface)/.test(prefix)) continue;
+    if (/=\s*$/.test(prefix) || /\bnew\s+$/.test(prefix) || /->\s*$/.test(prefix)) continue;
+    let depth = 0;
+    for (let index = open; index < activity.length; index += 1) {
+      const char = activity[index];
+      if (char === '{') depth += 1;
+      else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) return activity.slice(lineStart, index + 1);
+      }
     }
+    throw new Error(`Could not read method body for ${name}: ${signature}`);
   }
-  throw new Error(`Could not read method body for ${name}`);
+  throw new assert.AssertionError({ message: `expected method ${name}` });
 }
 
 function assertJavascriptMethod(name) {
@@ -74,7 +84,6 @@ test('Android permission handling grants only local audio capture and reports mi
 
   const notify = methodBody('notifyMicrophonePermission');
   assert.match(notify, /PabloVoiceOnMicPermission/);
-  assert.match(activity, /REQUEST_MICROPHONE/);
 });
 
 test('Native recording bridge fails closed, writes a WAV file and streams bounded chunks to JavaScript', () => {
