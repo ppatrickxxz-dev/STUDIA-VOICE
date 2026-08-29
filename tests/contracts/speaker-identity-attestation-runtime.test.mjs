@@ -84,7 +84,8 @@ test('manual identity canary is main-only and uses a real user session before tr
   assert.match(worker, /IDENTITY_CANARY_CANDIDATE_ID:\s*6f4ade75-6106-4a28-ae52-d0d9e89af00a/);
   assert.match(worker, /functions\/v1\/device-auth/);
   assert.match(worker, /"action":"b09_session"/);
-  assert.match(worker, /"action":"dispatch"/);
+  assert.match(worker, /\\"action\\":\\"dispatch\\"/);
+  assert.match(worker, /candidate_asset_id/);
   assert.match(worker, /waiting_trusted_worker/);
   assert.match(worker, /github_repository_oidc/);
 });
