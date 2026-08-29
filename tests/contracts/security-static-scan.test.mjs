@@ -18,6 +18,12 @@ test('security scanner detects credential-shaped content without ripgrep', () =>
   assert.equal(findings[0].line, 2);
 });
 
+test('security scanner detects private-key headers as credential evidence', () => {
+  const findings = findPatternLines('-----BEGIN PRIVATE KEY-----\nredacted\n-----END PRIVATE KEY-----', CREDENTIAL_PATTERN);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].line, 1);
+});
+
 test('security scanner detects unsafe Android WebView configuration', () => {
   assert.equal(findPatternLines('android:usesCleartextTraffic="true"', WEBVIEW_PATTERN).length, 1);
   assert.equal(findPatternLines('webSettings.setAllowFileAccess(true);', WEBVIEW_PATTERN).length, 1);
