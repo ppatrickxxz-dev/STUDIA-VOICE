@@ -1,0 +1,31 @@
+name: Cloudflare Runtime Gate
+
+on:
+  pull_request:
+    paths:
+      - 'cloudflare/**'
+      - 'wrangler.jsonc'
+      - 'packages/app/**'
+      - 'services/api/**'
+      - 'tests/contracts/cloudflare-runtime.test.mjs'
+      - '.github/workflows/cloudflare-runtime-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build canonical Web
+        run: npm run build:web
+      - name: Verify Cloudflare runtime contract
+        run: node --test tests/contracts/cloudflare-runtime.test.mjs
+      - name: Bundle Worker and Static Assets without deployment
+        run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
