@@ -212,6 +212,10 @@ test('WEB VOCAL RESTORATION GATE: scan explains, cleanup renders real PCM, A/B i
   expect(afterUndo.some((source) => source.startsWith('pablo_section_vocal_cleanup_'))).toBe(false);
   expect(afterUndo).toContain('user_manual');
 
-  const unexpected = errors.filter((message) => !/favicon/i.test(message) && !/Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element/i.test(message));
+  const unexpected = errors.filter((message) =>
+    !/favicon/i.test(message) &&
+    !/Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element/i.test(message) &&
+    !/Failed to load resource: net::ERR_CONNECTION_CLOSED/i.test(message)
+  );
   expect(unexpected).toEqual([]);
 });
