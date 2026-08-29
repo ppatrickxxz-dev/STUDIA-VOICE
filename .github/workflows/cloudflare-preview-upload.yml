@@ -43,8 +43,9 @@ jobs:
       - name: Upload version without production deployment
         env:
           PV_COMMIT: ${{ github.sha }}
+          PREVIEW_ALIAS: pr-${{ github.event.pull_request.number }}
         run: |
           npx --yes wrangler@4.127.1 versions upload \
             --var "PV_COMMIT:${PV_COMMIT}" \
             --message "PabloVoice PR #${{ github.event.pull_request.number }} merge-candidate ${PV_COMMIT}" \
-            --tag "pr-${{ github.event.pull_request.number }}"
+            --preview-alias "${PREVIEW_ALIAS}"
