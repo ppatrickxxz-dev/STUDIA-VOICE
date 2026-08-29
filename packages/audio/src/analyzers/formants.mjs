@@ -79,15 +79,7 @@ function estimateFrameFormants(frame, sampleRate) {
   const maxBin = Math.min(halfBins, Math.floor(maxFrequency * frame.length / sampleRate));
 
   for (let bin = 1; bin <= maxBin; bin += 1) {
-    let real = 0;
-    let imag = 0;
-    const angleStep = -2 * Math.PI * bin / frame.length;
-    for (let index = 0; index < frame.length; index += 1) {
-      const angle = angleStep * index;
-      real += frame[index] * Math.cos(angle);
-      imag += frame[index] * Math.sin(angle);
-    }
-    power[bin] = Math.log10(1e-12 + real * real + imag * imag);
+    power[bin] = Math.log10(1e-12 + goertzelPower(frame, bin));
   }
 
   const binHz = sampleRate / frame.length;
@@ -117,6 +109,19 @@ function estimateFrameFormants(frame, sampleRate) {
   const meanProminence = prominenceDb.reduce((sum, value) => sum + value, 0) / prominenceDb.length;
   const confidence = ordered ? clamp01(0.45 + 0.55 * smoothStep(2, 10, meanProminence)) : 0;
   return { formantsHz: ordered ? selected : [], prominenceDb, confidence: roundHundredth(confidence) };
+}
+
+function goertzelPower(frame, bin) {
+  const omega = 2 * Math.PI * bin / frame.length;
+  const coefficient = 2 * Math.cos(omega);
+  let previous = 0;
+  let previous2 = 0;
+  for (let index = 0; index < frame.length; index += 1) {
+    const current = frame[index] + coefficient * previous - previous2;
+    previous2 = previous;
+    previous = current;
+  }
+  return Math.max(0, previous2 * previous2 + previous * previous - coefficient * previous * previous2);
 }
 
 function prepareFrame(samples, start, size) {
