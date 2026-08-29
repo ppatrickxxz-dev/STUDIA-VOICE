@@ -246,8 +246,13 @@ snapshot_expression = r"""
 (() => new Promise((resolve) => {
   const bodyText = document.body?.innerText || '';
   const ready = document.documentElement.dataset.pvReady === 'true';
-  const request = indexedDB.open('pablovoice_mobile_v2', 3);
-  const finish = (value) => resolve({ ready, state: document.readyState, href: location.href, bodyLength: bodyText.length, ...value });
+  const databaseName = 'pablovoice_mobile_v2';
+  let finished = false;
+  const finish = (value) => {
+    if (finished) return;
+    finished = true;
+    resolve({ ready, state: document.readyState, href: location.href, bodyLength: bodyText.length, ...value });
+  };
   const timer = setTimeout(() => finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_TIMEOUT' }), 4500);
   const getAll = (database, store) => new Promise((resolveStore, rejectStore) => {
     const tx = database.transaction(store, 'readonly');
@@ -255,45 +260,77 @@ snapshot_expression = r"""
     request.onsuccess = () => resolveStore(request.result || []);
     request.onerror = () => rejectStore(request.error || new Error(`GET_ALL_${store}`));
   });
-  request.onerror = () => { clearTimeout(timer); finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_OPEN_FAILED', message: String(request.error || '') }); };
-  request.onsuccess = async () => {
-    clearTimeout(timer);
-    const db = request.result;
+  const inspectDatabase = async () => {
     try {
-      const [projects, audio] = await Promise.all([getAll(db, 'projects'), getAll(db, 'audio')]);
-      const match = projects.flatMap((project) => (project.tracks || []).map((track) => ({ project, track })))
-        .find(({ track }) => String(track.name || '').includes('pv-android-import-smoke'));
-      const asset = match && audio.find((item) => item.id === match.track.assetId);
-      const blobSize = asset?.blob?.size || 0;
-      if (match && asset && blobSize > 44 && Number(match.track.duration) > 0 && Number(match.track.sampleRate) > 0) {
-        finish({
-          marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_PASSED',
-          projectId: match.project.id,
-          trackId: match.track.id,
-          trackName: match.track.name,
-          assetId: match.track.assetId,
-          duration: match.track.duration,
-          sampleRate: match.track.sampleRate,
-          channels: match.track.channels,
-          blobSize,
-          visible: bodyText.includes(match.track.name),
-        });
+      if (typeof indexedDB.databases !== 'function') {
+        clearTimeout(timer);
+        finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_DATABASES_UNAVAILABLE' });
         return;
       }
-      finish({
-        marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING',
-        reason: 'NOT_FOUND_YET',
-        projects: projects.length,
-        audio: audio.length,
-        hasMatch: Boolean(match),
-        blobSize,
-      });
+      const databases = await indexedDB.databases();
+      if (!databases.some((database) => database.name === databaseName)) {
+        clearTimeout(timer);
+        finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_NOT_CREATED_YET' });
+        return;
+      }
+      const request = indexedDB.open(databaseName);
+      request.onerror = () => {
+        clearTimeout(timer);
+        finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_OPEN_FAILED', message: String(request.error || '') });
+      };
+      request.onsuccess = async () => {
+        clearTimeout(timer);
+        const db = request.result;
+        try {
+          const requiredStores = ['projects', 'audio'];
+          if (!requiredStores.every((store) => db.objectStoreNames.contains(store))) {
+            finish({
+              marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING',
+              reason: 'INDEXEDDB_SCHEMA_NOT_READY',
+              stores: Array.from(db.objectStoreNames),
+            });
+            return;
+          }
+          const [projects, audio] = await Promise.all([getAll(db, 'projects'), getAll(db, 'audio')]);
+          const match = projects.flatMap((project) => (project.tracks || []).map((track) => ({ project, track })))
+            .find(({ track }) => String(track.name || '').includes('pv-android-import-smoke'));
+          const asset = match && audio.find((item) => item.id === match.track.assetId);
+          const blobSize = asset?.blob?.size || 0;
+          if (match && asset && blobSize > 44 && Number(match.track.duration) > 0 && Number(match.track.sampleRate) > 0) {
+            finish({
+              marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_PASSED',
+              projectId: match.project.id,
+              trackId: match.track.id,
+              trackName: match.track.name,
+              assetId: match.track.assetId,
+              duration: match.track.duration,
+              sampleRate: match.track.sampleRate,
+              channels: match.track.channels,
+              blobSize,
+              visible: bodyText.includes(match.track.name),
+            });
+            return;
+          }
+          finish({
+            marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING',
+            reason: 'NOT_FOUND_YET',
+            projects: projects.length,
+            audio: audio.length,
+            hasMatch: Boolean(match),
+            blobSize,
+          });
+        } catch (error) {
+          finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'SNAPSHOT_ERROR', message: String(error?.message || error) });
+        } finally {
+          db.close();
+        }
+      };
     } catch (error) {
-      finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'SNAPSHOT_ERROR', message: String(error?.message || error) });
-    } finally {
-      db.close();
+      clearTimeout(timer);
+      finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_DISCOVERY_FAILED', message: String(error?.message || error) });
     }
   };
+  inspectDatabase();
 }))()
 """
 
