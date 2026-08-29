@@ -36,6 +36,13 @@ test('local formant analyzer extracts a stable three-band vocal spectral profile
   assert.ok(result.frameCount >= 3);
 });
 
+test('local formant analyzer is deterministic for the same PCM and options', () => {
+  const samples = syntheticVowel();
+  const first = analyzeFormants(samples, { sampleRate: SAMPLE_RATE, maxFrames: 10 });
+  const second = analyzeFormants(samples, { sampleRate: SAMPLE_RATE, maxFrames: 10 });
+  assert.deepEqual(second, first);
+});
+
 test('local formant analyzer fails closed on silence and invalid audio', () => {
   const silent = analyzeFormants(new Float32Array(SAMPLE_RATE), { sampleRate: SAMPLE_RATE });
   assert.deepEqual(silent.formantsHz, []);
