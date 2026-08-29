@@ -1,6 +1,11 @@
 name: Trusted speaker identity worker
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/speaker-identity-trusted-worker.yml'
+      - 'supabase/functions/test-voice-v71-identity-once/**'
   workflow_dispatch:
   schedule:
     - cron: '*/5 * * * *'
@@ -43,7 +48,7 @@ jobs:
           printf 'PV_OIDC_TOKEN=%s\n' "$OIDC_TOKEN" >> "$GITHUB_ENV"
 
       - name: Dispatch canonical identity canary
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'schedule'
         shell: bash
         run: |
           set -euo pipefail
