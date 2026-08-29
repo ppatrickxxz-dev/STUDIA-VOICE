@@ -38,3 +38,18 @@ test('Canonical CI runs open-with then complete flow in the same emulator sessio
   assert.match(ci, /test-results\/android-open-with-project-emulator/);
   assert.match(ci, /test-results\/android-complete-user-flow/);
 });
+
+test('complete flow retries transient DevTools websocket loss but still fails closed at its deadline', () => {
+  assert.match(gate, /deadline = time\.monotonic\(\) \+ 75/);
+  assert.match(gate, /retryableError/);
+  assert.match(gate, /time\.sleep\(1\)/);
+  assert.match(gate, /ANDROID_COMPLETE_USER_FLOW_PHASE_MISSING/);
+  assert.match(gate, /ANDROID_COMPLETE_USER_FLOW_PHASE_FAILED/);
+});
+
+test('complete flow captures diagnostics for missing render, DevTools and export evidence', () => {
+  assert.match(gate, /capture_diagnostics "\$\{label\}-render-failure"/);
+  assert.match(gate, /capture_diagnostics complete-flow-devtools-missing/);
+  assert.match(gate, /capture_diagnostics export-file-missing/);
+  assert.match(gate, /ANDROID_COMPLETE_USER_FLOW_EXPORT_FILE_MISSING/);
+});
