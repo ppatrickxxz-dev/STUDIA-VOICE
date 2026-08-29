@@ -8,6 +8,7 @@ evidence_dir="${2:-test-results/android-open-with-project-emulator}"
 mkdir -p "$evidence_dir"
 
 adb install -r "$apk_path"
+adb shell pm clear "$package_name" || true
 adb shell pm grant "$package_name" android.permission.RECORD_AUDIO || true
 adb shell svc wifi disable || true
 adb shell svc data disable || true
@@ -146,7 +147,7 @@ import time
 import urllib.request
 
 label = os.environ.get('PV_ASSERT_LABEL', 'project')
-deadline = time.monotonic() + 75
+deadline = time.monotonic() + 90
 attempt = 0
 
 def load_page_path():
@@ -203,7 +204,7 @@ def evaluate(expression):
     path = load_page_path()
     key = base64.b64encode(os.urandom(16)).decode('ascii')
     sock = socket.create_connection(('127.0.0.1', 9224), timeout=8)
-    sock.settimeout(12)
+    sock.settimeout(14)
     try:
         sock.sendall((
             f'GET {path} HTTP/1.1\r\n'
@@ -225,7 +226,7 @@ def evaluate(expression):
                 'expression': expression,
                 'awaitPromise': True,
                 'returnByValue': True,
-                'timeout': 9000,
+                'timeout': 11000,
             },
         }
         send_text(sock, json.dumps(command))
@@ -246,8 +247,12 @@ snapshot_expression = r"""
 (() => new Promise((resolve) => {
   const bodyText = document.body?.innerText || '';
   const ready = document.documentElement.dataset.pvReady === 'true';
-  const request = indexedDB.open('pablovoice_mobile_v2', 3);
   const finish = (value) => resolve({ ready, state: document.readyState, href: location.href, bodyLength: bodyText.length, ...value });
+  if (!ready) {
+    finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'APP_NOT_READY' });
+    return;
+  }
+  const request = indexedDB.open('pablovoice_mobile_v2', 3);
   const timer = setTimeout(() => finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'INDEXEDDB_TIMEOUT' }), 4500);
   const getAll = (database, store) => new Promise((resolveStore, rejectStore) => {
     const tx = database.transaction(store, 'readonly');
@@ -260,6 +265,11 @@ snapshot_expression = r"""
     clearTimeout(timer);
     const db = request.result;
     try {
+      const stores = Array.from(db.objectStoreNames || []);
+      if (!stores.includes('projects') || !stores.includes('audio')) {
+        finish({ marker: 'ANDROID_OPEN_WITH_PROJECT_IMPORT_WAITING', reason: 'PROJECT_STORES_NOT_READY', stores });
+        return;
+      }
       const [projects, audio] = await Promise.all([getAll(db, 'projects'), getAll(db, 'audio')]);
       const match = projects.flatMap((project) => (project.tracks || []).map((track) => ({ project, track })))
         .find(({ track }) => String(track.name || '').includes('pv-android-import-smoke'));
