@@ -157,7 +157,11 @@ jobs:
         run: |
           set -euo pipefail
           SCORE="$(jq -er '.score' test-results/speaker-identity/score.json)"
-          PASSED="$(jq -er '.passed' test-results/speaker-identity/score.json)"
+          PASSED="$(jq -r '.passed' test-results/speaker-identity/score.json)"
+          case "$PASSED" in
+            true|false) ;;
+            *) echo 'speaker_identity_passed_not_boolean' >&2; exit 1 ;;
+          esac
           BODY="$(jq -nc \
             --arg action complete \
             --arg job_id "$JOB_ID" \
