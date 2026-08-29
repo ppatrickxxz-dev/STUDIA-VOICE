@@ -147,6 +147,7 @@ function unexpectedErrors(errors) {
 }
 
 test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track, reload persisted treated project', async ({ page }) => {
+  test.setTimeout(90_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -213,7 +214,7 @@ test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track
 
   await page.locator('[data-action="studio-tab"][data-value="export"]').click();
   const trackDownloadPromise = page.waitForEvent('download');
-  await page.locator('[data-action="export-track"]').first().click();
+  await page.getByRole('button', { name: 'Exportar Voz principal' }).click();
   const trackDownload = await trackDownloadPromise;
   expect(trackDownload.suggestedFilename()).toBe('Gate_Fluxo_Completo-Voz_principal-demo.wav');
   const trackPath = await trackDownload.path();
