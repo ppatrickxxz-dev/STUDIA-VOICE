@@ -39,6 +39,12 @@ test('Canonical CI runs open-with then complete flow in the same emulator sessio
   assert.match(ci, /test-results\/android-complete-user-flow/);
 });
 
+test('complete flow is chained exactly once instead of spawning a duplicate emulator path', () => {
+  const references = ci.match(/android-complete-user-flow-gate\.sh/g) || [];
+  assert.equal(references.length, 1);
+  assert.doesNotMatch(ci, /^\s*android-complete-user-flow-emulator:/m);
+});
+
 test('complete flow retries transient DevTools websocket loss but still fails closed at its deadline', () => {
   assert.match(gate, /deadline = time\.monotonic\(\) \+ 75/);
   assert.match(gate, /retryableError/);
