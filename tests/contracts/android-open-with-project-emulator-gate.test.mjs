@@ -32,6 +32,15 @@ test('Android open-with project gate fails closed and captures evidence', () => 
   assert.match(gate, /\$\{label\}-devtools-pages\.txt/);
 });
 
+test('Android open-with project gate waits for the app-owned IndexedDB schema', () => {
+  assert.match(gate, /pm clear/);
+  assert.match(gate, /APP_NOT_READY/);
+  assert.match(gate, /PROJECT_STORES_NOT_READY/);
+  assert.match(gate, /document\.documentElement\.dataset\.pvReady === 'true'/);
+  assert.match(gate, /indexedDB\.open\('pablovoice_mobile_v2', 3\)/);
+  assert.ok(gate.indexOf('APP_NOT_READY') < gate.indexOf("indexedDB.open('pablovoice_mobile_v2', 3)"));
+});
+
 test('Android open-with project gate retries DevTools while the WebView is still booting', () => {
   assert.match(gate, /retryableError/);
   assert.match(gate, /NO_PAGE_TARGET/);
