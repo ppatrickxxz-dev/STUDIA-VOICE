@@ -36,7 +36,6 @@ jobs:
         run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
 
   publish-preview:
-    # Repository secrets must never be exposed to untrusted fork code.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     needs: dry-run
     runs-on: ubuntu-24.04
@@ -116,7 +115,6 @@ jobs:
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-
           fetch_200() {
             local path="$1" out="$2" headers="$3"
             code="$(curl --fail-with-body --silent --show-error -D "$headers" -o "$out" -w '%{http_code}' "$BASE_URL$path" || true)"
@@ -126,140 +124,16 @@ jobs:
               exit 1
             fi
           }
-
           fetch_200 '/' "$tmp/root.html" "$tmp/root.headers"
           fetch_200 '/site/' "$tmp/site.html" "$tmp/site.headers"
           grep -qi '^x-content-type-options: nosniff' "$tmp/root.headers"
-
           fetch_200 '/api/health' "$tmp/health.json" "$tmp/health.headers"
           jq -e --arg sha "$HEAD_SHA" '.ok == true and .commit == $sha' "$tmp/health.json" >/dev/null
-
           fetch_200 '/api/provider-readiness' "$tmp/readiness.json" "$tmp/readiness.headers"
           jq -e '.ok == true and .providers.pablovoice.transport == "openai_responses_api" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null
-
           fetch_200 '/api/pablo-agent' "$tmp/agent.json" "$tmp/agent.headers"
           jq -e '.ok == true and .provider == "openai_responses_api" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
-
           code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/unauth.json" >/dev/null
-
-          printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"
-name: Cloudflare Runtime Gate
-
-on:
-  pull_request:
-    paths:
-      - 'cloudflare/**'
-      - 'wrangler.jsonc'
-      - 'packages/app/**'
-      - 'services/api/**'
-      - 'tests/contracts/cloudflare-runtime.test.mjs'
-      - '.github/workflows/cloudflare-runtime-gate.yml'
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  deployments: read
-  pull-requests: read
-  checks: read
-
-concurrency:
-  group: cloudflare-runtime-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  dry-run:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Build canonical Web
-        run: npm run build:web
-      - name: Verify Cloudflare runtime contract
-        run: node --test tests/contracts/cloudflare-runtime.test.mjs
-      - name: Bundle Worker and Static Assets without deployment
-        run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
-
-  physical-preview:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 6
-    steps:
-      - name: Discover Cloudflare public URL for this exact head
-        id: discover
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          api="https://api.github.com/repos/$REPOSITORY"
-          auth=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
-          url=''
-          for attempt in $(seq 1 36); do
-            deployments="$(curl --fail-with-body --silent --show-error "${auth[@]}" "$api/deployments?sha=$HEAD_SHA&per_page=100")"
-            while IFS= read -r statuses_url; do
-              [ -n "$statuses_url" ] || continue
-              statuses="$(curl --fail-with-body --silent --show-error "${auth[@]}" "$statuses_url?per_page=100")"
-              candidate="$(printf '%s' "$statuses" | jq -r '[.[] | select(.state == "success") | .environment_url // empty] | map(select(test("^https://"))) | first // empty')"
-              if [ -n "$candidate" ]; then url="$candidate"; break; fi
-            done < <(printf '%s' "$deployments" | jq -r '.[].statuses_url // empty')
-            if [ -z "$url" ]; then
-              comments="$(curl --fail-with-body --silent --show-error "${auth[@]}" "$api/issues/$PR_NUMBER/comments?per_page=100")"
-              candidate="$(printf '%s' "$comments" | jq -r '.[].body // empty' | grep -Eo 'https://[^ )<"]+\.workers\.dev[^ )<"]*' | tail -n 1 || true)"
-              if [ -n "$candidate" ]; then url="$candidate"; fi
-            fi
-            if [ -n "$url" ]; then break; fi
-            sleep 5
-          done
-          if [ -z "$url" ]; then
-            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: no public workers.dev/environment URL was published for this exact head.' >&2
-            exit 1
-          fi
-          url="${url%/}"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          printf 'Cloudflare URL: %s\nHead SHA: %s\n' "$url" "$HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Smoke physical Studio, Site Vivo and Cloudflare APIs
-        env:
-          BASE_URL: ${{ steps.discover.outputs.url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-
-          fetch_200() {
-            local path="$1" out="$2" headers="$3"
-            code="$(curl --fail-with-body --silent --show-error -D "$headers" -o "$out" -w '%{http_code}' "$BASE_URL$path" || true)"
-            if [ "$code" != '200' ]; then
-              echo "CLOUDFLARE_PHYSICAL_GATE_FAILED: $path returned HTTP $code" >&2
-              cat "$out" >&2 2>/dev/null || true
-              exit 1
-            fi
-          }
-
-          fetch_200 '/' "$tmp/root.html" "$tmp/root.headers"
-          fetch_200 '/site/' "$tmp/site.html" "$tmp/site.headers"
-          grep -qi '^x-content-type-options: nosniff' "$tmp/root.headers"
-
-          fetch_200 '/api/health' "$tmp/health.json" "$tmp/health.headers"
-          jq -e '.ok == true' "$tmp/health.json" >/dev/null
-
-          fetch_200 '/api/provider-readiness' "$tmp/readiness.json" "$tmp/readiness.headers"
-          jq -e '.ok == true and .providers.pablovoice.transport == "openai_responses_api" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null
-
-          fetch_200 '/api/pablo-agent' "$tmp/agent.json" "$tmp/agent.headers"
-          jq -e '.ok == true and .provider == "openai_responses_api" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
-
-          code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
-          test "$code" = '401'
-          jq -e '.ok == false and .error == "auth_required"' "$tmp/unauth.json" >/dev/null
-
           printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"
