@@ -1,0 +1,85 @@
+name: Composer provider live canary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+
+jobs:
+  provider-roundtrip:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire OIDC-backed PabloVoice user session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          SESSION="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
+          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Execute real Composer provider round-trip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/composer-provider
+          BODY="$(jq -nc --arg project "$PROJECT_ID" '{command:"rewrite",project_id:$project,task:"Reescreva em português brasileiro, mantendo a intenção e a oralidade: Hoje eu saí sem procurar. Retorne somente uma linha curta para revisão.",constraints:{canary:true,max_lines:1}}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/validate-app-js-v71" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          printf '%s' "$RESPONSE" | jq -e \
+            --arg project "$PROJECT_ID" '
+              .ok == true and
+              .provider == "openai_backend" and
+              (.model | type == "string" and length > 0) and
+              .command == "rewrite" and
+              .project_id == $project and
+              (.request_id | type == "string" and length > 0) and
+              (.latency_ms | type == "number" and . >= 0) and
+              (.reply | type == "string" and length > 0) and
+              .fallback_allowed == false
+            ' >/dev/null
+          REPLY="$(printf '%s' "$RESPONSE" | jq -r '.reply')"
+          REPLY_SHA="$(printf '%s' "$REPLY" | sha256sum | awk '{print $1}')"
+          REPLY_BYTES="$(printf '%s' "$REPLY" | wc -c | tr -d ' ')"
+          printf '%s' "$RESPONSE" | jq \
+            --arg reply_sha256 "$REPLY_SHA" \
+            --argjson reply_bytes "$REPLY_BYTES" \
+            --arg github_sha "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            'del(.reply,.text) + {verdict:"AI_RUNTIME_PRODUCTION_PROVIDER_ROUNDTRIP_VALIDATED",reply_sha256:$reply_sha256,reply_bytes:$reply_bytes,github_sha:$github_sha,github_run_id:$run_id}' \
+            > test-results/composer-provider/evidence.json
+          jq '.' test-results/composer-provider/evidence.json
+
+      - name: Retain provider evidence without generated content
+        uses: actions/upload-artifact@v4
+        with:
+          name: composer-provider-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/composer-provider/evidence.json
+          if-no-files-found: error
+          retention-days: 30
