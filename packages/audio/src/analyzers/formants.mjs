@@ -6,7 +6,7 @@ export const FORMANT_PROFILE = Object.freeze({
   minFrameRmsDb: -52,
   minConfidence: 0.58,
   bandsHz: Object.freeze([
-    Object.freeze([180, 1000]),
+    Object.freeze([180, 1100]),
     Object.freeze([700, 3000]),
     Object.freeze([1800, 4200]),
   ]),
@@ -85,30 +85,66 @@ function estimateFrameFormants(frame, sampleRate) {
   const binHz = sampleRate / frame.length;
   const smoothingRadius = Math.max(2, Math.round(140 / binHz));
   const smooth = smoothSpectrum(power, maxBin, smoothingRadius);
-  const selected = [];
-  const prominenceDb = [];
+  const candidates = spectralPeakCandidates(smooth, maxBin, binHz, smoothingRadius);
+  const triplet = selectFormantTriplet(candidates);
+  if (!triplet) return { formantsHz: [], prominenceDb: [], confidence: 0 };
 
-  for (let bandIndex = 0; bandIndex < FORMANT_PROFILE.bandsHz.length; bandIndex += 1) {
-    const [lowHz, highHz] = FORMANT_PROFILE.bandsHz[bandIndex];
-    const minimumHz = selected.length ? Math.max(lowHz, selected.at(-1) + 180) : lowHz;
-    const lowBin = Math.max(1, Math.ceil(minimumHz / binHz));
-    const highBin = Math.min(maxBin - 1, Math.floor(highHz / binHz));
-    if (highBin <= lowBin) return { formantsHz: [], prominenceDb: [], confidence: 0 };
-
-    let bestBin = lowBin;
-    for (let bin = lowBin + 1; bin <= highBin; bin += 1) {
-      if (smooth[bin] > smooth[bestBin]) bestBin = bin;
-    }
-    const baseline = median(Array.from(smooth.slice(lowBin, highBin + 1))) ?? smooth[bestBin];
-    const prominence = Math.max(0, (smooth[bestBin] - baseline) * 10);
-    selected.push(roundTenth(bestBin * binHz));
-    prominenceDb.push(roundTenth(prominence));
-  }
-
-  const ordered = selected[0] < selected[1] && selected[1] < selected[2];
+  const formantsHz = triplet.map((candidate) => roundTenth(candidate.frequencyHz));
+  const prominenceDb = triplet.map((candidate) => roundTenth(candidate.prominenceDb));
   const meanProminence = prominenceDb.reduce((sum, value) => sum + value, 0) / prominenceDb.length;
-  const confidence = ordered ? clamp01(0.45 + 0.55 * smoothStep(2, 10, meanProminence)) : 0;
-  return { formantsHz: ordered ? selected : [], prominenceDb, confidence: roundHundredth(confidence) };
+  const confidence = clamp01(0.45 + 0.55 * smoothStep(2, 10, meanProminence));
+  return { formantsHz, prominenceDb, confidence: roundHundredth(confidence) };
+}
+
+function spectralPeakCandidates(smooth, maxBin, binHz, smoothingRadius) {
+  const candidates = [];
+  const minBin = Math.max(2, Math.ceil(FORMANT_PROFILE.bandsHz[0][0] / binHz));
+  const upperHz = FORMANT_PROFILE.bandsHz[2][1];
+  const upperBin = Math.min(maxBin - 2, Math.floor(upperHz / binHz));
+  for (let bin = minBin; bin <= upperBin; bin += 1) {
+    if (!(smooth[bin] > smooth[bin - 1] && smooth[bin] >= smooth[bin + 1])) continue;
+    const baselineStart = Math.max(minBin, bin - smoothingRadius * 3);
+    const baselineEnd = Math.min(upperBin, bin + smoothingRadius * 3);
+    const baseline = median(Array.from(smooth.slice(baselineStart, baselineEnd + 1))) ?? smooth[bin];
+    const prominenceDb = Math.max(0, (smooth[bin] - baseline) * 10);
+    if (prominenceDb < 0.8) continue;
+    candidates.push({
+      bin,
+      frequencyHz: bin * binHz,
+      prominenceDb,
+      level: smooth[bin],
+    });
+  }
+  return candidates;
+}
+
+function selectFormantTriplet(candidates) {
+  let best = null;
+  let bestScore = -Infinity;
+  const [f1Band, f2Band, f3Band] = FORMANT_PROFILE.bandsHz;
+  for (const f1 of candidates) {
+    if (!within(f1.frequencyHz, f1Band)) continue;
+    for (const f2 of candidates) {
+      if (!within(f2.frequencyHz, f2Band) || f2.frequencyHz - f1.frequencyHz < 280) continue;
+      for (const f3 of candidates) {
+        if (!within(f3.frequencyHz, f3Band) || f3.frequencyHz - f2.frequencyHz < 320) continue;
+        const prominence = f1.prominenceDb + f2.prominenceDb + f3.prominenceDb;
+        const priorPenalty = 0.00045 * Math.abs(f1.frequencyHz - 600)
+          + 0.00028 * Math.abs(f2.frequencyHz - 1600)
+          + 0.0002 * Math.abs(f3.frequencyHz - 2700);
+        const score = prominence - priorPenalty;
+        if (score > bestScore) {
+          bestScore = score;
+          best = [f1, f2, f3];
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function within(value, [low, high]) {
+  return value >= low && value <= high;
 }
 
 function goertzelPower(frame, bin) {
