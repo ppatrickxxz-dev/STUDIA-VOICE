@@ -113,3 +113,42 @@ jobs:
           path: test-results/android-emulator
           if-no-files-found: warn
           retention-days: 14
+
+  android-import-emulator:
+    needs: android-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pablovoice-android-validation-${{ github.sha }}
+          path: artifacts/android
+      - name: Resolve validation APK
+        run: find artifacts/android -name app-debug.apk -type f -print -quit | tee /tmp/pv-apk-path
+      - name: Enable KVM acceleration when available
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            test -r /dev/kvm
+            test -w /dev/kvm
+            ls -l /dev/kvm
+            echo 'KVM acceleration enabled for Android import gate.'
+          else
+            echo 'KVM device unavailable; emulator runner will use its supported fallback.'
+          fi
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/android-import-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pablovoice-android-import-emulator-evidence-${{ github.sha }}
+          path: test-results/android-import-emulator
+          if-no-files-found: warn
+          retention-days: 14
