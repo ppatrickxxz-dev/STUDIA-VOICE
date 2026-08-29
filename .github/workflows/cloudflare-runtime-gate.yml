@@ -23,9 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-      - name: Install canonical dependencies
-        run: npm ci
       - name: Build canonical Web
         run: npm run build:web
       - name: Verify Cloudflare runtime contract
