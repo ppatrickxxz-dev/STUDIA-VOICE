@@ -9,7 +9,7 @@ const packageJson = JSON.parse(await readFile(new URL('../../package.json', impo
 const vercelQuarantine = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
 
 test('Cloudflare runtime serves canonical static build with API-first routing', () => {
-  assert.equal(wrangler.name, 'pablovoice-web');
+  assert.equal(wrangler.name, 'studia-voice');
   assert.equal(wrangler.main, './cloudflare/worker.mjs');
   assert.equal(wrangler.workers_dev, true);
   assert.equal(wrangler.preview_urls, true);
