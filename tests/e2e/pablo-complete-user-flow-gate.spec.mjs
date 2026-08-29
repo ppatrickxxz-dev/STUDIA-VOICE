@@ -229,9 +229,9 @@ test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
   await reopenProject(page);
-  await expect(page.getByText('voz-fluxo-completo.wav').first()).toBeVisible();
 
   const afterReload = await projectState(page);
+  expect(afterReload.trackCount).toBe(2);
   expect(afterReload.revisions).toBe(revisionCountBeforeExport);
   expect(afterReload.cleanupBySection[afterReload.sectionIds[0]]).toBe(afterContinue.cleanupBySection[afterContinue.sectionIds[0]]);
   expect(afterReload.cleanupBySection[afterReload.sectionIds[1]]).toBe(afterContinue.cleanupBySection[afterContinue.sectionIds[1]]);
