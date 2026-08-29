@@ -8,11 +8,12 @@ const activity = readFileSync(activityPath, 'utf8');
 const manifest = readFileSync(manifestPath, 'utf8');
 
 function methodBody(name) {
-  const marker = new RegExp(`(?:public|private|protected)[^{;=]*\\b${name}\\s*\\([^)]*\\)\\s*\\{`, 'm');
+  const marker = new RegExp(`(?:^|\\n)\\s*(?:(?:public|private|protected|static|synchronized|final)\\s+)*[\\w<>\\[\\], ?]+\\s+${name}\\s*\\([^)]*\\)\\s*\\{`, 'm');
   const match = marker.exec(activity);
   assert.ok(match, `expected method ${name}`);
+  const start = activity.indexOf('{', match.index);
   let depth = 0;
-  for (let index = match.index; index < activity.length; index += 1) {
+  for (let index = start; index < activity.length; index += 1) {
     const char = activity[index];
     if (char === '{') depth += 1;
     else if (char === '}') {
