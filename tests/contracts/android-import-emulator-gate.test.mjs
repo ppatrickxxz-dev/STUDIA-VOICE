@@ -16,6 +16,16 @@ test('Android import emulator gate proves open-with pending import through nativ
   assert.match(gate, /ANDROID_IMPORT_OPEN_WITH_GATE_PASSED/);
 });
 
+test('Android import emulator gate accepts app-consumed project evidence after boot', () => {
+  assert.match(gate, /pm clear/);
+  assert.match(gate, /CONSUMED_BEFORE_PENDING_INSPECTION/);
+  assert.match(gate, /document\.documentElement\.dataset\.pvReady === 'true'/);
+  assert.match(gate, /indexedDB\.open\('pablovoice_mobile_v2', 3\)/);
+  assert.match(gate, /PROJECT_STORES_NOT_READY/);
+  assert.match(gate, /projects/);
+  assert.match(gate, /audio/);
+});
+
 test('Android import emulator gate fails closed and captures evidence', () => {
   assert.match(gate, /ANDROID_IMPORT_OPEN_WITH_DEVTOOLS_SOCKET_MISSING/);
   assert.match(gate, /ANDROID_IMPORT_OPEN_WITH_PENDING_SMOKE_MISSING/);
