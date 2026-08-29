@@ -38,3 +38,19 @@ test('Android emulator gate captures installed native package contract before li
   assert.match(gate, /ANDROID_NATIVE_PACKAGE_CONTRACT_PASSED/);
   assert.match(gate, /ANDROID_NATIVE_PACKAGE_CONTRACT_EVIDENCE_CAPTURED/);
 });
+
+test('Android emulator gate physically proves export through WebView bridge into Downloads/PabloVoice', () => {
+  assert.match(gate, /assert_export_bridge_smoke/);
+  assert.match(gate, /webview_devtools_remote_/);
+  assert.match(gate, /Runtime\.evaluate/);
+  assert.match(gate, /PabloVoiceAndroid/);
+  assert.match(gate, /beginSave\('pv-android-export-smoke\.wav', 'audio\/wav'\)/);
+  assert.match(gate, /appendBase64\(payload\)/);
+  assert.match(gate, /finishSave\(\)/);
+  assert.match(gate, /\/sdcard\/Download\/PabloVoice\/\$\{smoke_name\}/);
+  assert.match(gate, /export-smoke-devtools\.txt/);
+  assert.match(gate, /export-smoke-file\.txt/);
+  assert.match(gate, /ANDROID_EXPORT_BRIDGE_MEDIASTORE_SMOKE_PASSED/);
+  assert.match(gate, /ANDROID_EXPORT_BRIDGE_MEDIASTORE_FILE_MISSING/);
+  assert.match(gate, /ANDROID_EXPORT_BRIDGE_MEDIASTORE_FILE_EMPTY/);
+});
