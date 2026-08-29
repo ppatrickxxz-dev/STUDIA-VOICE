@@ -5,6 +5,7 @@ import test from 'node:test';
 const wrangler = JSON.parse(await readFile(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
 const worker = await readFile(new URL('../../cloudflare/worker.mjs', import.meta.url), 'utf8');
 const headers = await readFile(new URL('../../packages/app/_headers', import.meta.url), 'utf8');
+const previewWorkflow = await readFile(new URL('../../.github/workflows/cloudflare-preview-upload.yml', import.meta.url), 'utf8');
 
 test('Cloudflare runtime serves canonical static build with API-first routing', () => {
   assert.equal(wrangler.name, 'pablovoice-web');
@@ -31,4 +32,13 @@ test('Cloudflare static assets preserve production security headers and service-
   assert.match(headers, /\/service-worker\.js/);
   assert.match(headers, /Cache-Control: no-cache/);
   assert.match(headers, /Service-Worker-Allowed: \//);
+});
+
+test('physical preview workflow can only upload a non-production Worker version', () => {
+  assert.match(previewWorkflow, /CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(previewWorkflow, /CLOUDFLARE_API_TOKEN/);
+  assert.match(previewWorkflow, /wrangler@4\.127\.1 versions upload/);
+  assert.doesNotMatch(previewWorkflow, /wrangler@4\.127\.1 deploy(?! --dry-run)/);
+  assert.doesNotMatch(previewWorkflow, /versions deploy/);
+  assert.doesNotMatch(previewWorkflow, /AI_GATEWAY_API_KEY:\s*\$\{\{/);
 });
