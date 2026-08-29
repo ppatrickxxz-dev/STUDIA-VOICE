@@ -51,6 +51,7 @@ test('parses whole-voice diagnostic intent without hijacking section scans or ed
   assert.ok(parseFullVocalScanCommand('escaneia minha voz inteira por seções'));
   assert.equal(parseFullVocalScanCommand('analisa minha voz no refrão'), null);
   assert.equal(parseFullVocalScanCommand('limpa minha voz inteira'), null);
+  assert.equal(parseFullVocalScanCommand('analisa minha voz inteira por seções e corrige os problemas da minha voz no refrão'), null);
 });
 
 test('scans every confirmed section from one supplied analysis and ranks the sections with findings', () => {
@@ -75,6 +76,29 @@ test('scans every confirmed section from one supplied analysis and ranks the sec
   assert.equal(result.totalFindings, 4);
   assert.equal(result.actionableCount, 3);
   assert.equal(result.reviewCount, 1);
+});
+
+test('preserves occurrence ordinals when an earlier confirmed section is missing its end', () => {
+  const project = createProject('Varredura com seção incompleta', 1000);
+  const vocal = createTrack({ name: 'Voz principal', assetId: 'voice', duration: 40, kind: 'recording' });
+  const support = createTrack({ name: 'Instrumental', assetId: 'base', duration: 40, kind: 'audio' });
+  project.tracks = [vocal, support];
+  project.activeTrackId = support.id;
+  project.arrangementMap = upsertConfirmedSection(project.arrangementMap, {
+    kind: 'chorus', startSeconds: 8, source: 'user_manual', confidence: 1,
+  });
+  project.arrangementMap = upsertConfirmedSection(project.arrangementMap, {
+    kind: 'chorus', startSeconds: 20, endSeconds: 28, source: 'user_manual', confidence: 1,
+  });
+
+  const result = planFullVocalScan(project, { analysis: analysisWithSectionDifferences() });
+  assert.equal(result.ok, true);
+  assert.equal(result.scannedSectionCount, 1);
+  assert.equal(result.skippedSectionCount, 0);
+  assert.equal(result.sections[0].sectionId, 'section_chorus_20000');
+  assert.equal(result.sections[0].occurrence, 2);
+  assert.equal(result.sections[0].findings[0].type, 'peak');
+  assert.equal(result.rankedSections[0].occurrence, 2);
 });
 
 test('full scan is byte-for-byte read-only and does not create automation or revisions', () => {
