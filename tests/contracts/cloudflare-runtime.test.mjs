@@ -34,9 +34,11 @@ test('Cloudflare static assets preserve production security headers and service-
   assert.match(headers, /Service-Worker-Allowed: \//);
 });
 
-test('physical preview workflow can only upload a non-production Worker version', () => {
+test('physical preview workflow can only upload a non-production Worker version and fails closed without auth', () => {
   assert.match(previewWorkflow, /CLOUDFLARE_ACCOUNT_ID/);
   assert.match(previewWorkflow, /CLOUDFLARE_API_TOKEN/);
+  assert.match(previewWorkflow, /Physical Cloudflare preview is BLOCKED/);
+  assert.match(previewWorkflow, /exit 1/);
   assert.match(previewWorkflow, /wrangler@4\.127\.1 versions upload/);
   assert.doesNotMatch(previewWorkflow, /wrangler@4\.127\.1 deploy(?! --dry-run)/);
   assert.doesNotMatch(previewWorkflow, /versions deploy/);
