@@ -34,6 +34,17 @@ test('release tag is created only after signed artifacts are uploaded', async ()
   assert.ok(tagIndex > uploadIndex);
 });
 
+test('annotated RC tag configures a non-personal GitHub Actions identity before creation', async () => {
+  const { workflow } = await load();
+  const tagStep = workflow.slice(workflow.indexOf('- name: Create or verify release tag'));
+  const nameIndex = tagStep.indexOf("git config user.name 'github-actions[bot]'");
+  const emailIndex = tagStep.indexOf("git config user.email '41898282+github-actions[bot]@users.noreply.github.com'");
+  const createIndex = tagStep.indexOf('git tag -a "$RELEASE_TAG"');
+  assert.ok(nameIndex >= 0);
+  assert.ok(emailIndex > nameIndex);
+  assert.ok(createIndex > emailIndex);
+});
+
 test('tag and GitHub release mutation remain manual-dispatch only', async () => {
   const { workflow } = await load();
   const tagStep = workflow.slice(workflow.indexOf('- name: Create or verify release tag'));
