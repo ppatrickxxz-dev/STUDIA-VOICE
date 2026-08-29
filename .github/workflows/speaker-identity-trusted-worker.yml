@@ -126,15 +126,20 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, os, torch, torchaudio
+          import json, os, torch
+          import soundfile as sf
           from huggingface_hub import snapshot_download
           from speechbrain.inference.speaker import EncoderClassifier
 
           revision=os.environ['MODEL_REVISION']
           local=snapshot_download(repo_id=os.environ['MODEL'], revision=revision)
           model=EncoderClassifier.from_hparams(source=local, savedir='/tmp/pv-ecapa', run_opts={'device':'cpu'})
-          c,_=torchaudio.load('/tmp/pv-candidate.wav')
-          r,_=torchaudio.load('/tmp/pv-reference.wav')
+          c,csr=sf.read('/tmp/pv-candidate.wav', dtype='float32', always_2d=True)
+          r,rsr=sf.read('/tmp/pv-reference.wav', dtype='float32', always_2d=True)
+          if csr != 16000 or rsr != 16000 or c.shape[1] != 1 or r.shape[1] != 1:
+              raise RuntimeError('normalized_audio_contract_mismatch')
+          c=torch.from_numpy(c[:,0]).unsqueeze(0)
+          r=torch.from_numpy(r[:,0]).unsqueeze(0)
           with torch.no_grad():
               ce=model.encode_batch(c).reshape(-1)
               re=model.encode_batch(r).reshape(-1)
