@@ -8,7 +8,12 @@ const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.
 test('Android open-with project gate proves import is consumed into persisted project state', () => {
   assert.match(gate, /android\.intent\.action\.VIEW|ACTION_VIEW|am start -W/);
   assert.match(gate, /content:\/\/media/);
-  assert.match(gate, /indexedDB\.open\('pablovoice_mobile_v2', 3\)/);
+  assert.match(gate, /indexedDB\.databases\(\)/);
+  assert.match(gate, /indexedDB\.open\(databaseName\)/);
+  assert.doesNotMatch(gate, /indexedDB\.open\('pablovoice_mobile_v2',\s*3\)/);
+  assert.match(gate, /INDEXEDDB_NOT_CREATED_YET/);
+  assert.match(gate, /INDEXEDDB_SCHEMA_NOT_READY/);
+  assert.match(gate, /objectStoreNames\.contains\(store\)/);
   assert.match(gate, /projects/);
   assert.match(gate, /audio/);
   assert.match(gate, /pv-android-import-smoke/);
