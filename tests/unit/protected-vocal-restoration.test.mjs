@@ -53,7 +53,7 @@ function denoiseEvent() {
   };
 }
 
-function passingEvidence() {
+function callerClaimedPassingEvidence() {
   return {
     reference: {
       durationSeconds: 1,
@@ -66,39 +66,39 @@ function passingEvidence() {
       peak: 0.01,
       formantsHz: [514, 1500, 2502],
       speakerEmbedding: [0.69, 0.21, -0.09, 0.51],
+      speakerEmbeddingCosine: 0.99,
+      identityPassed: true,
     },
     alignment: { sameContent: true },
   };
 }
 
-test('protected restoration promotes the processed buffer when retained identity evidence passes', () => {
+test('protected restoration rejects caller-provided identity evidence and keeps processed audio audition-only', () => {
   const original = makeBuffer();
   const result = cloneWithIdentitySafeVocalRestoration(
     context,
     original,
     [denoiseEvent()],
-    passingEvidence(),
+    callerClaimedPassingEvidence(),
   );
 
-  assert.equal(result.promoted, true);
-  assert.equal(result.applied, true);
-  assert.equal(result.buffer, result.auditionBuffer);
-  assert.notEqual(result.buffer, original);
-  assert.equal(result.identityGate.promotable, true);
-  assert.ok(result.buffer.getChannelData(0)[SAMPLE_RATE / 2] < original.getChannelData(0)[SAMPLE_RATE / 2]);
+  assert.equal(result.promoted, false);
+  assert.equal(result.applied, false);
+  assert.equal(result.buffer, original);
+  assert.notEqual(result.auditionBuffer, original);
+  assert.equal(result.identityGate.promotable, false);
+  assert.equal(result.identityGate.evidence.identity.status, 'missing');
+  assert.ok(result.identityGate.blockers.includes('cleanup_identity_evidence_missing'));
+  assert.ok(result.auditionBuffer.getChannelData(0)[SAMPLE_RATE / 2] < original.getChannelData(0)[SAMPLE_RATE / 2]);
 });
 
-test('protected restoration keeps original final buffer when identity evidence is missing but preserves audition candidate', () => {
+test('protected restoration keeps original final buffer when identity evidence is absent and preserves audition candidate', () => {
   const original = makeBuffer();
-  const evidence = passingEvidence();
-  delete evidence.reference.speakerEmbedding;
-  delete evidence.candidate.speakerEmbedding;
-
   const result = cloneWithIdentitySafeVocalRestoration(
     context,
     original,
     [denoiseEvent()],
-    evidence,
+    {},
   );
 
   assert.equal(result.promoted, false);
@@ -111,7 +111,7 @@ test('protected restoration keeps original final buffer when identity evidence i
 
 test('protected restoration returns original unchanged when there is no actionable restoration event', () => {
   const original = makeBuffer();
-  const result = cloneWithIdentitySafeVocalRestoration(context, original, [], passingEvidence());
+  const result = cloneWithIdentitySafeVocalRestoration(context, original, [], callerClaimedPassingEvidence());
 
   assert.equal(result.applied, false);
   assert.equal(result.promoted, false);
