@@ -25,10 +25,18 @@ test('Android open-with project gate proves persistence across app relaunch', ()
 test('Android open-with project gate fails closed and captures evidence', () => {
   assert.match(gate, /ANDROID_OPEN_WITH_PROJECT_DEVTOOLS_SOCKET_MISSING/);
   assert.match(gate, /ANDROID_OPEN_WITH_PROJECT_IMPORT_MISSING/);
+  assert.match(gate, /ANDROID_OPEN_WITH_PROJECT_RELAUNCH_IMPORT_MISSING/);
   assert.match(gate, /ANDROID_OPEN_WITH_PROJECT_RENDER_GATE_FAILED/);
   assert.match(gate, /ANDROID_OPEN_WITH_PROJECT_FATAL_CRASH_DETECTED/);
-  assert.match(gate, /open-with-project-project-devtools\.txt/);
-  assert.match(gate, /open-with-project-relaunch-project-devtools\.txt/);
+  assert.match(gate, /\$\{label\}-project-devtools\.txt/);
+  assert.match(gate, /\$\{label\}-devtools-pages\.txt/);
+});
+
+test('Android open-with project gate retries DevTools while the WebView is still booting', () => {
+  assert.match(gate, /retryableError/);
+  assert.match(gate, /NO_PAGE_TARGET/);
+  assert.match(gate, /websocket closed/);
+  assert.match(gate, /while time\.monotonic\(\) < deadline/);
 });
 
 test('Canonical CI runs Android open-with project gate after validation APK build', () => {
