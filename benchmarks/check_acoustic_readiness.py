@@ -25,7 +25,7 @@ def main() -> None:
         asset = assets.get(key, {})
         if not asset.get("sha256"):
             missing_hashes.append(key)
-        if not asset.get("asset_id"):
+        if not asset.get("asset_id") or asset.get("runtime_addressable") is not True:
             missing_runtime_assets.append(key)
 
     ready = (
@@ -42,7 +42,7 @@ def main() -> None:
     if missing_hashes:
         print("Missing or unfrozen SHA-256: " + ", ".join(missing_hashes))
     if missing_runtime_assets:
-        print("Missing runtime-addressable asset_id: " + ", ".join(missing_runtime_assets))
+        print("Missing runtime-addressable asset: " + ", ".join(missing_runtime_assets))
     if data.get("gate", {}).get("acoustic_benchmark_runnable") is not True:
         print("Manifest acoustic_benchmark_runnable flag is not true")
 
