@@ -41,11 +41,22 @@ assert_no_fatal_crash() {
   fi
 }
 
+process_start_ticks() {
+  local pid="$1"
+  adb shell cat "/proc/$pid/stat" 2>/dev/null | tr -d '\r' | awk '{print $22}'
+}
+
 launch_and_wait() {
   local label="$1"
   adb shell am force-stop "$package_name" || true
   adb logcat -c || true
   timeout 35s adb shell am start -W -n "$package_name/$activity_name" > "$evidence_dir/${label}-launch.txt" 2>&1 || true
+
+  wait_for_render "$label"
+}
+
+wait_for_render() {
+  local label="$1"
 
   for attempt in $(seq 1 45); do
     local pid variation
@@ -69,15 +80,84 @@ launch_and_wait() {
   return 1
 }
 
+wait_for_background() {
+  for attempt in $(seq 1 15); do
+    if ! is_foreground; then return 0; fi
+    sleep 1
+  done
+  capture_diagnostics background-failure
+  echo 'ANDROID_BACKGROUND_GATE_FAILED' >&2
+  return 1
+}
+
+resume_and_wait() {
+  adb logcat -c || true
+  timeout 35s adb shell am start -W -n "$package_name/$activity_name" > "$evidence_dir/foreground-resume-launch.txt" 2>&1 || true
+  wait_for_render foreground-resume
+}
+
 launch_and_wait launch-offline
+launch_pid="$(cat "$evidence_dir/launch-offline-pid.txt")"
+launch_start_ticks="$(process_start_ticks "$launch_pid")"
+if [ -z "$launch_start_ticks" ]; then
+  echo 'ANDROID_LAUNCH_PROCESS_IDENTITY_MISSING' >&2
+  exit 1
+fi
 adb shell input keyevent KEYCODE_HOME || true
-sleep 2
-launch_and_wait foreground
+wait_for_background
+background_pid="$(adb shell pidof "$package_name" 2>/dev/null | tr -d '\r' || true)"
+if [ -z "$background_pid" ]; then
+  capture_diagnostics background-process-lost
+  echo 'ANDROID_BACKGROUND_PROCESS_LOST' >&2
+  exit 1
+fi
+if [ "$background_pid" != "$launch_pid" ]; then
+  capture_diagnostics background-pid-changed
+  echo "ANDROID_BACKGROUND_PID_CHANGED launch=$launch_pid background=$background_pid" >&2
+  exit 1
+fi
+background_start_ticks="$(process_start_ticks "$background_pid")"
+if [ "$background_start_ticks" != "$launch_start_ticks" ]; then
+  capture_diagnostics background-process-changed
+  echo "ANDROID_BACKGROUND_PROCESS_CHANGED launch_ticks=$launch_start_ticks background_ticks=$background_start_ticks" >&2
+  exit 1
+fi
+printf '%s\n' "$background_pid" > "$evidence_dir/background-pid.txt"
+printf '%s\n' "$background_start_ticks" > "$evidence_dir/background-start-ticks.txt"
+capture_diagnostics background
+
+resume_and_wait
+resume_pid="$(cat "$evidence_dir/foreground-resume-pid.txt")"
+if [ "$resume_pid" != "$launch_pid" ]; then
+  capture_diagnostics foreground-resume-pid-changed
+  echo "ANDROID_RESUME_PID_CHANGED launch=$launch_pid resume=$resume_pid" >&2
+  exit 1
+fi
+resume_start_ticks="$(process_start_ticks "$resume_pid")"
+if [ "$resume_start_ticks" != "$launch_start_ticks" ]; then
+  capture_diagnostics foreground-resume-process-changed
+  echo "ANDROID_RESUME_PROCESS_CHANGED launch_ticks=$launch_start_ticks resume_ticks=$resume_start_ticks" >&2
+  exit 1
+fi
+
+launch_and_wait relaunch
+relaunch_pid="$(cat "$evidence_dir/relaunch-pid.txt")"
+relaunch_start_ticks="$(process_start_ticks "$relaunch_pid")"
+if [ -z "$relaunch_start_ticks" ]; then
+  echo 'ANDROID_RELAUNCH_PROCESS_IDENTITY_MISSING' >&2
+  exit 1
+fi
+if [ "$relaunch_pid" = "$launch_pid" ] && [ "$relaunch_start_ticks" = "$launch_start_ticks" ]; then
+  capture_diagnostics relaunch-process-not-restarted
+  echo "ANDROID_RELAUNCH_PROCESS_NOT_RESTARTED pid=$launch_pid start_ticks=$launch_start_ticks" >&2
+  exit 1
+fi
 
 adb shell uiautomator dump /sdcard/pv-window.xml >/dev/null 2>&1 || true
 adb pull /sdcard/pv-window.xml "$evidence_dir/window.xml" >/dev/null 2>&1 || true
 
 launch_variation="$(cat "$evidence_dir/launch-offline-variation.txt")"
-foreground_variation="$(cat "$evidence_dir/foreground-variation.txt")"
-echo "ANDROID_EMULATOR_NON_MIC_GATE_PASSED launch_variation=$launch_variation foreground_variation=$foreground_variation"
+foreground_variation="$(cat "$evidence_dir/foreground-resume-variation.txt")"
+relaunch_variation="$(cat "$evidence_dir/relaunch-variation.txt")"
+echo "ANDROID_EMULATOR_LIFECYCLE_GATE_PASSED launch_pid=$launch_pid launch_ticks=$launch_start_ticks resume_pid=$resume_pid resume_ticks=$resume_start_ticks relaunch_pid=$relaunch_pid relaunch_ticks=$relaunch_start_ticks launch_variation=$launch_variation foreground_variation=$foreground_variation relaunch_variation=$relaunch_variation"
 echo 'MIC_CAPTURE_REQUIRES_PHYSICAL_DEVICE'
