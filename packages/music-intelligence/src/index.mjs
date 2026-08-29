@@ -14,6 +14,8 @@ export {
   respondToAuthorialFeedback,
 } from './authorial-feedback.mjs';
 export {
+  PmiGeneratorAdapter,
+  REVIEWED_SONG_COMMANDS,
   planComposerGeneration,
   isExplicitGenerationRequest,
 } from './generator-adapter.mjs';
