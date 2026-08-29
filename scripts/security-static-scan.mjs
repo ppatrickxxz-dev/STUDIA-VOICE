@@ -1,4 +1,4 @@
-import { readdir, readFile, lstat } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,7 +8,6 @@ export const WEBVIEW_PATTERN = /usesCleartextTraffic="true"|setAllowFileAccess\(
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CREDENTIAL_ROOTS = ['packages', 'apps', 'services', 'api', 'scripts', 'tests', 'docs', '.github'];
 const WEBVIEW_ROOTS = ['apps/android', 'packages'];
-const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 
 export function findPatternLines(text, pattern) {
   const findings = [];
@@ -36,8 +35,6 @@ async function scanRoots(roots, pattern, { skip = () => false } = {}) {
     for await (const file of walkFiles(absoluteRoot)) {
       const repoPath = relative(REPO_ROOT, file).split(sep).join('/');
       if (skip(repoPath)) continue;
-      const stats = await lstat(file);
-      if (!stats.isFile() || stats.size > MAX_TEXT_FILE_BYTES) continue;
       const content = await readFile(file);
       if (content.includes(0)) continue;
       const text = content.toString('utf8');
