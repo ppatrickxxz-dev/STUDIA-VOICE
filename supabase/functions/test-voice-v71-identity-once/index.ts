@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.112.2'
 const THRESHOLD = 0.8
 const MODEL = 'speechbrain/spkrec-ecapa-voxceleb'
 const MODEL_REVISION = 'b8937e0343bf9fc9741ab12b445b86a93a6e3e25'
-const ENGINE_VERSION = 'speechbrain-1.0.3'
+const ENGINE_VERSION = 'speechbrain-1.1.0'
 const OIDC_ISSUER = 'https://token.actions.githubusercontent.com'
 const OIDC_AUDIENCE = 'pablovoice-signing'
 const OIDC_REPOSITORY = 'ppatrickxxz-dev/STUDIA-VOICE'
@@ -219,15 +219,16 @@ Deno.serve(async (req: Request) => {
     if (!model) return out({ ok: false, error: 'active_voice_model_required' }, 409)
     const { data: ref } = await admin.from('voice_identity_references').select('*').eq('user_id', user.id).eq('voice_model_id', model.id).eq('is_active', true).maybeSingle()
     if (!ref || !shaOk(ref.source_sha256)) return out({ ok: false, error: 'active_identity_reference_required' }, 409)
-    const { data: reference } = await admin.from('audio_assets').select('*').eq('id', ref.asset_id).eq('user_id', user.id).maybeSingle()
-    if (!reference || !['take', 'source'].includes(String(reference.kind || '')) || String(reference.sha256 || '').toLowerCase() !== String(ref.source_sha256).toLowerCase()) return out({ ok: false, error: 'identity_reference_asset_invalid' }, 409)
-    if (candidate.id === reference.id || String(candidate.sha256).toLowerCase() === String(reference.sha256).toLowerCase()) return out({ ok: false, error: 'identity_self_reference_rejected' }, 409)
+    if (String(ref.asset_id) === candidate.id || String(ref.source_sha256).toLowerCase() === String(candidate.sha256).toLowerCase()) return out({ ok: false, error: 'identity_self_reference_rejected' }, 409)
+    const { data: project } = await admin.from('projects').select('id').eq('id', candidate.project_id).eq('user_id', user.id).maybeSingle()
+    if (!project) return out({ ok: false, error: 'project_access_denied' }, 403)
+    const now = new Date().toISOString()
     const parameters = {
       candidate_asset_id: candidate.id,
       candidate_sha256: String(candidate.sha256).toLowerCase(),
       reference_id: ref.id,
-      reference_asset_id: reference.id,
-      reference_sha256: String(reference.sha256).toLowerCase(),
+      reference_asset_id: ref.asset_id,
+      reference_sha256: String(ref.source_sha256).toLowerCase(),
       voice_model_id: model.id,
       threshold: THRESHOLD,
       engine: MODEL,
@@ -235,30 +236,12 @@ Deno.serve(async (req: Request) => {
       model_revision: MODEL_REVISION,
       trusted_authority: 'github_repository_oidc',
     }
-    const jobId = crypto.randomUUID()
-    const { error: insertError } = await admin.from('render_jobs').insert({
-      id: jobId,
-      project_id: candidate.project_id,
-      version_id: candidate.version_id || null,
-      user_id: user.id,
-      job_type: 'speaker_identity_attestation',
-      engine: 'github_oidc_speaker_identity_v2',
-      status: 'waiting_trusted_worker',
-      progress: 5,
-      input_asset_ids: [candidate.id, reference.id],
-      output_asset_ids: [],
-      parameters,
-      proof: { required: true, threshold: THRESHOLD, engine: MODEL, engine_version: ENGINE_VERSION, model_revision: MODEL_REVISION, trusted_authority: 'github_repository_oidc', raw_embedding_exposed: false },
-      current_stage: 'waiting_trusted_worker',
-      human_message: 'Aguardando validação confiável de identidade vocal',
-      started_at: new Date().toISOString(),
-      attempt_number: 1,
-      max_attempts: 1,
-    })
-    if (insertError) throw insertError
-    return out({ ok: true, job_id: jobId, status: 'waiting_trusted_worker', threshold: THRESHOLD, engine: MODEL, engine_version: ENGINE_VERSION, model_revision: MODEL_REVISION, trusted_authority: 'github_repository_oidc' })
-  } catch (e) {
-    console.error('speaker_identity_v2', e)
-    return out({ ok: false, error: String(e instanceof Error ? e.message : e).slice(0, 1200) }, 500)
+    const { data: job, error: je } = await admin.from('render_jobs').insert({
+      id: crypto.randomUUID(), user_id: user.id, project_id: candidate.project_id, job_type: 'speaker_identity_attestation', provider: 'pablovoice_github_oidc', status: 'waiting_trusted_worker', progress: 5, current_stage: 'waiting_trusted_worker', human_message: 'Aguardando validação confiável de identidade vocal', parameters, input_asset_ids: [candidate.id, ref.asset_id], output_asset_ids: [], retry_count: 0, max_retries: 0, created_at: now, updated_at: now,
+    }).select('*').single()
+    if (je) throw je
+    return out({ ok: true, status: 'waiting_trusted_worker', job_id: job.id, trusted_authority: 'github_repository_oidc', candidate_sha256: parameters.candidate_sha256, reference_sha256: parameters.reference_sha256, threshold: THRESHOLD, model_revision: MODEL_REVISION })
+  } catch (error) {
+    return out({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500)
   }
 })
