@@ -7,7 +7,7 @@ const source = await readFile(resolve(import.meta.dirname, '../../packages/app/a
 const actions = [...source.matchAll(/data-action=\\?"([a-z-]+)\\?"/g)].map((match) => match[1]);
 const unique = [...new Set(actions)].sort();
 const expected = [
-  'ab', 'cancel-record', 'close-modal', 'copy-rhyme', 'delete-project', 'effect', 'export',
+  'ab', 'cancel-record', 'close-modal', 'copy-rhyme', 'delete-project', 'effect', 'export', 'export-track',
   'find-rhymes', 'home', 'import', 'insert-structure', 'mute', 'new-project', 'open-project',
   'play', 'preset', 'record', 'save', 'seek', 'select-track', 'settings', 'solo', 'stop',
   'stop-record', 'studio-tab',

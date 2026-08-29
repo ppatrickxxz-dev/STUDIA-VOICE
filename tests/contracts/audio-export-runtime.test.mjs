@@ -24,3 +24,16 @@ test('export validates a cloned project, creates no treatment, and never persist
   assert.match(exportBody, /structuredClone\(state\.project\)/);
   assert.doesNotMatch(exportBody, /saveCurrent|persistProject|snapshotProject/);
 });
+
+test('individual processed-track export uses renderTrack and remains storage-immutable', async () => {
+  const app = await read('packages/app/app.js');
+  const exportBody = app.match(/async function exportTrack\(trackId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(exportBody, /structuredClone\(state\.project\)/);
+  assert.match(exportBody, /projectBeforeExport\.tracks\.find/);
+  assert.match(exportBody, /engine\.renderTrack\(projectBeforeExport, track\.id, projectBeforeExport\.preset\)/);
+  assert.match(exportBody, /encodeWav\(buffer\)/);
+  assert.match(exportBody, /projectBeforeExport\.name/);
+  assert.match(exportBody, /projectBeforeExport\.preset/);
+  assert.doesNotMatch(exportBody, /state\.project\.(?:name|preset)/);
+  assert.doesNotMatch(exportBody, /saveCurrent|persistProject|snapshotProject|regionAutomation\.push/);
+});
