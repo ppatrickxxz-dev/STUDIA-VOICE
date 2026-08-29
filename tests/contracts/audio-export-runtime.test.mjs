@@ -22,6 +22,10 @@ test('export validates a cloned project, creates no treatment, and never persist
   assert.doesNotMatch(contract, /regionAutomation\s*=|\.push\(|applySection|planSection/);
   const exportBody = app.match(/async function exportMix\(\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(exportBody, /structuredClone\(state\.project\)/);
+  assert.match(exportBody, /engine\.render\(projectBeforeExport, projectBeforeExport\.preset\)/);
+  assert.match(exportBody, /projectBeforeExport\.name/);
+  assert.match(exportBody, /projectBeforeExport\.preset/);
+  assert.doesNotMatch(exportBody, /state\.project\.(?:name|preset)/);
   assert.doesNotMatch(exportBody, /saveCurrent|persistProject|snapshotProject/);
 });
 

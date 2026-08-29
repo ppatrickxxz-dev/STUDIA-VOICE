@@ -358,7 +358,8 @@ async function exportMix() {
   const buffer = await engine.render(projectBeforeExport, projectBeforeExport.preset);
   state.lastRenderMs = performance.now() - started;
   const blob = new Blob([encodeWav(buffer)], { type: 'audio/wav' });
-  const filename = `${state.project.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice'}-${state.project.preset}.wav`;
+  const projectName = projectBeforeExport.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice';
+  const filename = `${projectName}-${projectBeforeExport.preset}.wav`;
   await saveBlob(blob, filename);
   toast(`WAV exportado · ${formatTime(buffer.duration)} · ${Math.round(buffer.sampleRate / 1000)} kHz`, 'ok');
 }
