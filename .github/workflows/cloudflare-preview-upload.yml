@@ -1,0 +1,52 @@
+name: Cloudflare Physical Preview Upload
+
+on:
+  pull_request:
+    paths:
+      - 'cloudflare/**'
+      - 'wrangler.jsonc'
+      - 'packages/app/**'
+      - 'services/api/**'
+      - 'tests/contracts/cloudflare-runtime.test.mjs'
+      - '.github/workflows/cloudflare-preview-upload.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  preview-upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Require Cloudflare preview credentials
+        id: auth
+        shell: bash
+        run: |
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare preview upload is intentionally skipped until repository secrets are configured."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build canonical Web
+        if: steps.auth.outputs.configured == 'true'
+        run: npm run build:web
+      - name: Re-run Cloudflare runtime contract
+        if: steps.auth.outputs.configured == 'true'
+        run: node --test tests/contracts/cloudflare-runtime.test.mjs
+      - name: Upload version without production deployment
+        if: steps.auth.outputs.configured == 'true'
+        env:
+          PV_COMMIT: ${{ github.event.pull_request.head.sha }}
+        run: |
+          npx --yes wrangler@4.127.1 versions upload \
+            --var "PV_COMMIT:${PV_COMMIT}" \
+            --message "PabloVoice PR #${{ github.event.pull_request.number }} ${PV_COMMIT}" \
+            --tag "pr-${{ github.event.pull_request.number }}"
