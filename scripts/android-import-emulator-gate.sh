@@ -79,6 +79,37 @@ with open(path, 'wb') as handle:
 PY
 }
 
+resolve_media_import_uri() {
+  local name="$1"
+  local remote_path="$2"
+  local query_file line id uri base
+  adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://${remote_path}" > "$evidence_dir/import-smoke-media-scan.txt" 2>&1 || true
+  for attempt in $(seq 1 30); do
+    for base in \
+      content://media/external_primary/audio/media \
+      content://media/external/audio/media \
+      content://media/external_primary/file \
+      content://media/external/file; do
+      query_file="$evidence_dir/import-smoke-media-query-${attempt}-$(basename "$base").txt"
+      adb shell content query --uri "$base" --projection _id:_display_name:mime_type > "$query_file" 2>&1 || true
+      line="$(grep "$name" "$query_file" | tail -n 1 || true)"
+      if [ -n "$line" ]; then
+        id="$(printf '%s\n' "$line" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p')"
+        if [ -n "$id" ]; then
+          uri="${base}/${id}"
+          printf '%s\n' "$uri" > "$evidence_dir/import-smoke-content-uri.txt"
+          echo "$uri"
+          return 0
+        fi
+      fi
+    done
+    sleep 1
+  done
+  capture_diagnostics import-smoke-media-uri-missing
+  echo 'ANDROID_IMPORT_OPEN_WITH_CONTENT_URI_MISSING' >&2
+  return 1
+}
+
 forward_webview_devtools() {
   local pid socket_name
   pid="$(adb shell pidof "$package_name" 2>/dev/null | tr -d '\r' || true)"
@@ -231,9 +262,10 @@ remote_wav="/sdcard/Download/pv-android-import-smoke.wav"
 make_wav "$local_wav"
 adb push "$local_wav" "$remote_wav" > "$evidence_dir/import-smoke-push.txt" 2>&1
 adb shell ls -l "$remote_wav" > "$evidence_dir/import-smoke-source-file.txt" 2>&1
+import_uri="$(resolve_media_import_uri pv-android-import-smoke.wav "$remote_wav")"
 adb shell am force-stop "$package_name" || true
 adb logcat -c || true
-timeout 35s adb shell am start -W -n "$package_name/$activity_name" -a android.intent.action.VIEW -d "file://${remote_wav}" -t audio/wav > "$evidence_dir/import-smoke-launch.txt" 2>&1 || true
+timeout 35s adb shell am start -W -n "$package_name/$activity_name" -a android.intent.action.VIEW -d "$import_uri" -t audio/wav --grant-read-uri-permission > "$evidence_dir/import-smoke-launch.txt" 2>&1 || true
 wait_for_render import-open-with
 assert_pending_import_bridge
 capture_diagnostics import-open-with-success
