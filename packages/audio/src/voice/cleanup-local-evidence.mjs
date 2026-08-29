@@ -25,7 +25,8 @@ export function deriveVocalCleanupLocalEvidence({
 
   const regions = normalizeRegions(events, originalBuffer.duration ?? originalBuffer.length / originalBuffer.sampleRate);
   const structuralSameContent = originalBuffer.length === processedBuffer.length
-    && originalBuffer.sampleRate === processedBuffer.sampleRate;
+    && originalBuffer.sampleRate === processedBuffer.sampleRate
+    && originalBuffer.numberOfChannels === processedBuffer.numberOfChannels;
   const referenceTechnical = measureBufferRegion(originalBuffer, regions);
   const candidateTechnical = measureBufferRegion(processedBuffer, regions);
   const referenceFormants = analyzeFormants(
