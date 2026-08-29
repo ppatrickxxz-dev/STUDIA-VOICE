@@ -1,6 +1,7 @@
 import { RemoteAuthAdapter } from './remote-auth.mjs';
 import { getAudioAsset, listProjects } from './storage.mjs';
 import { encodeWav } from './audio/src/presets.mjs';
+import { importStandaloneStems, waitForStandaloneStems } from './stems-result-runtime.mjs';
 
 const PROJECT_URL='https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY='sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
@@ -70,8 +71,14 @@ async function runCanary(){
     const remote=await auth.ensureRemoteProject(project);if(!remote?.ok||!remote.project?.id)throw Error('Não foi possível ligar este projeto ao backend.');
     const source=await uploadSource({token:session.accessToken,projectId:remote.project.id,track,asset});
     const job=await dispatchStems({token:session.accessToken,projectId:remote.project.id,sourceAssetId:source.assetId});
-    localStorage.setItem('pablovoice.stems.canary.last',JSON.stringify({jobId:job.job_id,localProjectId:project.id,remoteProjectId:remote.project.id,sourceAssetId:source.assetId,sourceSha256:source.sha256,startedAt:new Date().toISOString(),dispatcher:DISPATCHER}));
-    status(`Canário enviado · job ${String(job.job_id).slice(0,8)}… O resultado só será promovido após prova dos dois stems.`,'ok');
+    const evidence={jobId:job.job_id,localProjectId:project.id,remoteProjectId:remote.project.id,sourceAssetId:source.assetId,sourceSha256:source.sha256,startedAt:new Date().toISOString(),dispatcher:DISPATCHER};
+    localStorage.setItem('pablovoice.stems.canary.last',JSON.stringify(evidence));
+    const completed=await waitForStandaloneStems({token:session.accessToken,jobId:job.job_id,onProgress:(current)=>status(`Separação ${Math.max(0,Number(current.progress||0))}% · ${current.status}`,'warn')});
+    const consumed=await importStandaloneStems({token:session.accessToken,job:completed,project});
+    const retained={...evidence,finishedAt:completed.finished_at||new Date().toISOString(),status:completed.status,provider:completed.provider||'kaggle',engine:completed.proof?.engine||completed.engine||'Demucs',model:completed.proof?.model||'htdemucs',externalJobId:completed.external_job_id||null,outputAssetIds:completed.output_asset_ids,proof:completed.proof,stems:consumed.imported};
+    localStorage.setItem('pablovoice.stems.canary.last',JSON.stringify(retained));
+    if(consumed.imported.length!==2 && !completed.output_asset_ids.every((id)=>project.tracks.some((item)=>item.renderJobId===completed.id&&item.remoteAssetId===id)))throw Error('Os stems concluíram, mas não foram associados ao projeto local.');
+    status(`Stems verificados e adicionados ao projeto · job ${String(job.job_id).slice(0,8)}…`,'ok');
   }catch(e){console.error('PabloVoice stems canary',e);status(e?.message||'Canário de stems falhou.','error')}
   finally{running=false;buttonDisabled(false)}
 }
