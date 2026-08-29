@@ -237,7 +237,7 @@ Deno.serve(async (req: Request) => {
       trusted_authority: 'github_repository_oidc',
     }
     const { data: job, error: je } = await admin.from('render_jobs').insert({
-      id: crypto.randomUUID(), user_id: user.id, project_id: candidate.project_id, job_type: 'speaker_identity_attestation', provider: 'pablovoice_github_oidc', status: 'waiting_trusted_worker', progress: 5, current_stage: 'waiting_trusted_worker', human_message: 'Aguardando validação confiável de identidade vocal', parameters, input_asset_ids: [candidate.id, ref.asset_id], output_asset_ids: [], retry_count: 0, max_retries: 0, created_at: now, updated_at: now,
+      id: crypto.randomUUID(), user_id: user.id, project_id: candidate.project_id, job_type: 'speaker_identity_attestation', provider: 'pablovoice_github_oidc', status: 'waiting_trusted_worker', progress: 5, current_stage: 'waiting_trusted_worker', human_message: 'Aguardando validação confiável de identidade vocal', parameters, input_asset_ids: [candidate.id, ref.asset_id], output_asset_ids: [], created_at: now, updated_at: now,
     }).select('*').single()
     if (je) throw je
     return out({ ok: true, status: 'waiting_trusted_worker', job_id: job.id, trusted_authority: 'github_repository_oidc', candidate_sha256: parameters.candidate_sha256, reference_sha256: parameters.reference_sha256, threshold: THRESHOLD, model_revision: MODEL_REVISION })
