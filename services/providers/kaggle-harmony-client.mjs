@@ -8,6 +8,7 @@ export const HARMONY_V752_ROUTE_EVIDENCE = Object.freeze({
   modes: Object.freeze(['texture', 'adaptive', 'adaptive_partial']),
   voices: Object.freeze(['high', 'low']),
   formantPreservationRequired: true,
+  explicitSourceSupported: true,
   observedHighExecution: Object.freeze({
     jobId: '022aee73-a3a2-4602-923d-5e054ede08ea',
     sourceSha256: '78b4c5e5728a8beb3b0e288699eb6aa5882e9ed580823a168c833bf9455701ac',
@@ -19,11 +20,12 @@ export const HARMONY_V752_ROUTE_EVIDENCE = Object.freeze({
   observedLowExecution: null,
 });
 
-export function buildHarmonyPairPlan({ mode = 'adaptive_partial' } = {}) {
+export function buildHarmonyPairPlan({ mode = 'adaptive_partial', sourceAssetId = null } = {}) {
   if (!HARMONY_V752_ROUTE_EVIDENCE.modes.includes(mode)) throw new Error(`Unsupported harmony mode: ${mode}`);
+  if (sourceAssetId !== null && !UUID_RE.test(String(sourceAssetId))) throw new Error('Valid sourceAssetId is required when an explicit harmony source is requested.');
   return Object.freeze([
-    Object.freeze({ voice: 'high', mode }),
-    Object.freeze({ voice: 'low', mode }),
+    Object.freeze({ voice: 'high', mode, ...(sourceAssetId ? { sourceAssetId } : {}) }),
+    Object.freeze({ voice: 'low', mode, ...(sourceAssetId ? { sourceAssetId } : {}) }),
   ]);
 }
 
@@ -35,16 +37,19 @@ export class KaggleHarmonyClient {
     this.fetch = fetchImpl;
   }
 
-  async dispatch({ accessToken, projectId, voice, mode = 'adaptive_partial', semitones = null } = {}) {
+  async dispatch({ accessToken, projectId, voice, mode = 'adaptive_partial', semitones = null, sourceAssetId = null } = {}) {
     this.#validateRuntime(accessToken, projectId);
     if (!HARMONY_V752_ROUTE_EVIDENCE.voices.includes(voice)) throw new Error('Harmony voice must be high or low.');
     if (!HARMONY_V752_ROUTE_EVIDENCE.modes.includes(mode)) throw new Error('Unsupported harmony mode.');
+    if (sourceAssetId !== null && !UUID_RE.test(String(sourceAssetId))) throw new Error('Valid sourceAssetId is required when an explicit harmony source is requested.');
 
     const body = { action: 'dispatch', project_id: projectId, voice, mode };
+    if (sourceAssetId) body.source_asset_id = String(sourceAssetId);
     if (mode === 'texture' && Number.isFinite(Number(semitones))) body.semitones = Number(semitones);
     const payload = await this.#request(accessToken, body);
     if (!payload?.ok || !UUID_RE.test(String(payload.job_id || ''))) throw new Error(payload?.error || 'Harmony dispatcher returned an invalid job.');
     if (payload.mode !== mode || payload.voice !== voice) throw new Error('Harmony dispatcher changed the requested mode/voice.');
+    if (sourceAssetId && payload.source_asset_id && String(payload.source_asset_id) !== String(sourceAssetId)) throw new Error('Harmony dispatcher changed the requested source asset.');
     return payload;
   }
 
