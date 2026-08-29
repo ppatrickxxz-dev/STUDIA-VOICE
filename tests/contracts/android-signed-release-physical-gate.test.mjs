@@ -4,13 +4,24 @@ import { readFile } from 'node:fs/promises';
 
 const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
 const gate = await readFile(new URL('../../scripts/android-signed-release-emulator-gate.sh', import.meta.url), 'utf8');
+const aabGate = await readFile(new URL('../../scripts/android-validate-signed-aab.sh', import.meta.url), 'utf8');
 
-test('signed release explicitly verifies both production APK and AAB signatures', () => {
-  assert.match(workflow, /validate-apk\.sh apps\/android\/app\/build\/outputs\/apk\/release\/app-release\.apk com\.pablovoice\.studio/);
-  assert.match(workflow, /jarsigner -verify -strict -verbose -certs/);
-  assert.match(workflow, /app-release\.aab\.jarsigner\.txt/);
+test('signed release explicitly verifies production APK and AAB with the same signer', () => {
+  assert.match(workflow, /validate-apk\.sh "\$APK" com\.pablovoice\.studio/);
+  assert.match(workflow, /android-validate-signed-aab\.sh "\$APK" "\$AAB"/);
   assert.match(workflow, /app-release\.apk\.sha256/);
   assert.match(workflow, /app-release\.aab\.sha256/);
+  assert.match(workflow, /app-release\.aab\.jarsigner\.txt/);
+  assert.match(workflow, /app-release\.aab\.signer-sha256\.txt/);
+
+  assert.match(aabGate, /jarsigner -verify -verbose -certs/);
+  assert.doesNotMatch(aabGate, /jarsigner -verify -strict/);
+  assert.match(aabGate, /jar verified\./);
+  assert.match(aabGate, /apksigner verify --print-certs/);
+  assert.match(aabGate, /keytool -printcert -jarfile/);
+  assert.match(aabGate, /ANDROID_RELEASE_SIGNER_MISMATCH/);
+  assert.match(aabGate, /\[ "\$apk_cert_sha256" != "\$aab_cert_sha256" \]/);
+  assert.match(aabGate, /ANDROID_SIGNED_AAB_VALIDATION_PASSED/);
 });
 
 test('signed production APK is physically tested after the signing job on the same SHA', () => {

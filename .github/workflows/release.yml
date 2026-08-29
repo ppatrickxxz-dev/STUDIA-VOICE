@@ -110,11 +110,10 @@ jobs:
       - name: Validate signed release APK and AAB
         run: |
           set -euo pipefail
-          bash scripts/validate-apk.sh apps/android/app/build/outputs/apk/release/app-release.apk com.pablovoice.studio
-          jarsigner -verify -strict -verbose -certs \
-            apps/android/app/build/outputs/bundle/release/app-release.aab \
-            > apps/android/app/build/outputs/bundle/release/app-release.aab.jarsigner.txt
-          sha256sum apps/android/app/build/outputs/bundle/release/app-release.aab > apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
+          APK=apps/android/app/build/outputs/apk/release/app-release.apk
+          AAB=apps/android/app/build/outputs/bundle/release/app-release.aab
+          bash scripts/validate-apk.sh "$APK" com.pablovoice.studio
+          bash scripts/android-validate-signed-aab.sh "$APK" "$AAB"
       - name: Upload stable signed artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -125,6 +124,7 @@ jobs:
             apps/android/app/build/outputs/bundle/release/app-release.aab
             apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
             apps/android/app/build/outputs/bundle/release/app-release.aab.jarsigner.txt
+            apps/android/app/build/outputs/bundle/release/app-release.aab.signer-sha256.txt
           if-no-files-found: error
           retention-days: 14
       - name: Create or verify release tag
