@@ -1,6 +1,6 @@
 {
   "benchmark": "PabloVoice Benchmark v1",
-  "state": "acoustic-ready",
+  "state": "runtime-asset-blocked",
   "storage_policy": {
     "public_repository_contains_audio": false,
     "binary_audio_is_private": true,
@@ -33,6 +33,8 @@
     },
     "vocal_provider_input": {
       "role": "deterministic-provider-input",
+      "asset_id": null,
+      "runtime_addressable": false,
       "derived_from_sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
       "sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
       "size_bytes": 15335120,
@@ -66,6 +68,7 @@
     "reference_mix": {
       "role": "reference-mix",
       "asset_id": "b8212b7b-8a93-4dd0-b6c9-9f008c403f3c",
+      "runtime_addressable": true,
       "original_name": "master-c2dc5446.flac",
       "sha256": "4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9",
       "size_bytes": 36552984,
@@ -83,6 +86,7 @@
     "reference_instrumental": {
       "role": "reference-instrumental",
       "asset_id": "b43b4919-6860-49a3-95fc-bb94f2c7561b",
+      "runtime_addressable": true,
       "original_name": "instrumental-c2dc5446.flac",
       "sha256": "4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a",
       "pcm_sha256": "102b6a272dbfacaa48c76186fc137d17ac69bfc70e1d1e854e8da6bbeeba3b33",
@@ -95,7 +99,7 @@
     "vocal_reference_frozen": true,
     "mix_reference_frozen": true,
     "instrumental_reference_frozen": true,
-    "acoustic_benchmark_runnable": true,
-    "reason": null
+    "acoustic_benchmark_runnable": false,
+    "reason": "Frozen vocal_provider_input SHA-256 85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95 is not currently registered as a runtime-addressable private audio asset. Ingest the exact frozen bytes, verify the SHA-256, then record its asset_id before executing acoustic benchmarks."
   }
 }
