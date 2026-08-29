@@ -10,7 +10,7 @@ const vercelQuarantine = JSON.parse(fs.readFileSync('vercel.json', 'utf8'));
 test('Cloudflare is the only active repository hosting runtime for PabloVoice Web', () => {
   assert.deepEqual(vercelQuarantine, { git: { deploymentEnabled: false } });
   assert.equal(fs.existsSync('.github/workflows/cloudflare-preview-upload.yml'), false);
-  assert.equal(wrangler.name, 'pablovoice-web');
+  assert.equal(wrangler.name, 'studia-voice');
   assert.equal(wrangler.main, './cloudflare/worker.mjs');
   assert.equal(wrangler.build.command, 'npm run build:web');
   assert.equal(wrangler.assets.directory, './apps/web/dist');
