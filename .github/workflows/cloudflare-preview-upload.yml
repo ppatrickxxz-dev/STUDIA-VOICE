@@ -26,23 +26,17 @@ jobs:
         with:
           node-version: 24
       - name: Require Cloudflare preview credentials
-        id: auth
         shell: bash
         run: |
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Cloudflare preview upload is intentionally skipped until repository secrets are configured."
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Physical Cloudflare preview is BLOCKED: configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN as repository secrets."
+            exit 1
           fi
       - name: Build canonical Web
-        if: steps.auth.outputs.configured == 'true'
         run: npm run build:web
       - name: Re-run Cloudflare runtime contract
-        if: steps.auth.outputs.configured == 'true'
         run: node --test tests/contracts/cloudflare-runtime.test.mjs
       - name: Upload version without production deployment
-        if: steps.auth.outputs.configured == 'true'
         env:
           PV_COMMIT: ${{ github.event.pull_request.head.sha }}
         run: |
