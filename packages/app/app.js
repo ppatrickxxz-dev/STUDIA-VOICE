@@ -365,18 +365,18 @@ async function exportMix() {
 
 async function exportTrack(trackId) {
   if (!state.project?.tracks.length) throw new Error('Adicione uma faixa antes de exportar.');
-  const track = state.project.tracks.find((candidate) => candidate.id === trackId);
-  if (!track) throw new Error('Faixa inválida para exportação.');
   const projectBeforeExport = structuredClone(state.project);
+  const track = projectBeforeExport.tracks.find((candidate) => candidate.id === trackId);
+  if (!track) throw new Error('Faixa inválida para exportação.');
   engine.stop(false);
   render();
   const started = performance.now();
   const buffer = await engine.renderTrack(projectBeforeExport, track.id, projectBeforeExport.preset);
   state.lastRenderMs = performance.now() - started;
   const blob = new Blob([encodeWav(buffer)], { type: 'audio/wav' });
-  const projectName = state.project.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice';
+  const projectName = projectBeforeExport.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice';
   const trackName = track.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'Faixa';
-  await saveBlob(blob, `${projectName}-${trackName}-${state.project.preset}.wav`);
+  await saveBlob(blob, `${projectName}-${trackName}-${projectBeforeExport.preset}.wav`);
   toast(`Faixa processada exportada · ${track.name} · ${formatTime(buffer.duration)}`, 'ok');
 }
 
