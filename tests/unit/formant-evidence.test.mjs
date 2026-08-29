@@ -88,3 +88,21 @@ test('audio pipeline can derive local formant evidence when none is supplied', (
     assert.deepEqual(result.voice.formants, []);
   }
 });
+
+test('audio pipeline never promotes silent local formant evidence into the voice profile', () => {
+  const result = analyzeMusicalAudio({
+    samples: new Float32Array(SAMPLE_RATE),
+    sampleRate: SAMPLE_RATE,
+    breathEvents: [],
+    sibilanceEvents: [],
+    plosiveEvents: [],
+    peakEvents: [],
+    clickEvents: [],
+    noiseEvents: [],
+  });
+  assert.equal(result.voice.formantEvidence.source, 'local-spectral-formant-profile-v1');
+  assert.equal(result.voice.formantEvidence.stable, false);
+  assert.equal(result.voice.formantEvidence.confidence, 0);
+  assert.deepEqual(result.voice.formantEvidence.formantsHz, []);
+  assert.deepEqual(result.voice.formants, []);
+});
