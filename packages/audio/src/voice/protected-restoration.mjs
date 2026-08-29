@@ -1,11 +1,12 @@
 import { cloneWithVocalRestoration } from '../automation/region-restoration.mjs';
+import { deriveVocalCleanupLocalEvidence } from './cleanup-local-evidence.mjs';
 import { selectIdentitySafeVocalCleanup } from './cleanup-identity-gate.mjs';
 
 /**
- * Produces a denoise/de-reverb audition candidate, then promotes it only when
- * retained-identity acoustic evidence passes. A failed or incomplete identity
- * gate keeps the original AudioBuffer as the final output while still exposing
- * the processed candidate for explicit A/B audition.
+ * Produces a denoise/de-reverb audition candidate, derives technical/timbre
+ * evidence from the exact before/after buffers, then promotes the candidate only
+ * when retained speaker-identity evidence also passes. A failed or incomplete
+ * identity gate keeps the original AudioBuffer while preserving A/B audition.
  */
 export function cloneWithIdentitySafeVocalRestoration(
   context,
@@ -16,6 +17,7 @@ export function cloneWithIdentitySafeVocalRestoration(
     candidate = {},
     alignment = {},
     policy,
+    formantOptions,
   } = {},
 ) {
   const restoration = cloneWithVocalRestoration(context, buffer, events);
@@ -25,15 +27,25 @@ export function cloneWithIdentitySafeVocalRestoration(
       promoted: false,
       auditionBuffer: buffer,
       identityGate: null,
+      localEvidence: null,
     });
   }
 
-  const selection = selectIdentitySafeVocalCleanup({
-    original: buffer,
-    processed: restoration.buffer,
+  const localEvidence = deriveVocalCleanupLocalEvidence({
+    originalBuffer: buffer,
+    processedBuffer: restoration.buffer,
+    events,
     reference,
     candidate,
     alignment,
+    ...(formantOptions ? { formantOptions } : {}),
+  });
+  const selection = selectIdentitySafeVocalCleanup({
+    original: buffer,
+    processed: restoration.buffer,
+    reference: localEvidence.reference,
+    candidate: localEvidence.candidate,
+    alignment: localEvidence.alignment,
     ...(policy ? { policy } : {}),
   });
 
@@ -44,5 +56,6 @@ export function cloneWithIdentitySafeVocalRestoration(
     promoted: selection.usedProcessed,
     auditionBuffer: restoration.buffer,
     identityGate: selection.gate,
+    localEvidence,
   });
 }
