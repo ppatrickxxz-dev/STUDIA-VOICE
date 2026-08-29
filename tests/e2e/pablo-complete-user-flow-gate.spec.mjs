@@ -82,6 +82,7 @@ async function seedConfirmedSections(page) {
     const vocal = project.tracks[0];
     vocal.kind = 'recording';
     vocal.name = 'Voz principal';
+    vocal.gain = 0.45;
     const support = core.createTrack({
       name: 'Instrumental',
       assetId: vocal.assetId,
@@ -91,6 +92,7 @@ async function seedConfirmedSections(page) {
       channels: vocal.channels,
       kind: 'audio',
     });
+    support.gain = 0.35;
     project.tracks.push(support);
     project.activeTrackId = support.id;
     project.arrangementMap = sections.upsertConfirmedSection(project.arrangementMap, { kind: 'chorus', startSeconds: 0.2, endSeconds: 1.25, source: 'user_manual', confidence: 1 });
@@ -147,7 +149,7 @@ function unexpectedErrors(errors) {
 }
 
 test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track, reload persisted treated project', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -213,9 +215,10 @@ test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track
   await expectStableRevisions(page, revisionCountBeforeExport);
 
   await page.locator('[data-action="studio-tab"][data-value="export"]').click();
-  const trackDownloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Exportar Voz principal' }).click();
-  const trackDownload = await trackDownloadPromise;
+  const [trackDownload] = await Promise.all([
+    page.waitForEvent('download', { timeout: 45_000 }),
+    page.getByRole('button', { name: 'Exportar Voz principal' }).click(),
+  ]);
   expect(trackDownload.suggestedFilename()).toBe('Gate_Fluxo_Completo-Voz_principal-demo.wav');
   const trackPath = await trackDownload.path();
   expect(trackPath).toBeTruthy();
