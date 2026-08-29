@@ -28,21 +28,23 @@ test('cleanup caller cannot inject measurable acoustic facts or speaker identity
     referenceProfileId: 'voice-profile-v7',
   });
   assert.deepEqual(sanitized.candidate, {
-    identityPassed: true,
     requestId: 'req-123',
   });
   assert.deepEqual(sanitized.alignment, { sameContent: true, source: 'caller' });
 });
 
-test('cleanup sanitation does not convert a caller identity boolean into acoustic identity evidence', () => {
+test('cleanup sanitation drops caller identity booleans, cosine scores and raw embeddings', () => {
   const sanitized = sanitizeCleanupCallerEvidence({
     candidate: {
       identityPassed: true,
       speakerEmbeddingCosine: 0.99,
+      speakerEmbedding: [1, 0, 0],
+      requestId: 'req-456',
     },
   });
 
-  assert.equal(sanitized.candidate.identityPassed, true);
+  assert.deepEqual(sanitized.candidate, { requestId: 'req-456' });
+  assert.equal('identityPassed' in sanitized.candidate, false);
   assert.equal('speakerEmbeddingCosine' in sanitized.candidate, false);
   assert.equal('speakerEmbedding' in sanitized.candidate, false);
 });
