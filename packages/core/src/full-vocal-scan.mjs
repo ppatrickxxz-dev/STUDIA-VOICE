@@ -7,7 +7,7 @@ export const PABLO_FULL_VOCAL_SCAN_SOURCE = 'pablo_full_vocal_section_scan';
 
 export function parseFullVocalScanCommand(message = '') {
   const text = normalizeText(message);
-  if (!text || /\b(limpa|limpar|trata|tratar|desfaz|desfazer|remove|remover|aplica|aplicar)\b/.test(text)) return null;
+  if (!text || /\b(limpa|limpar|trata|tratar|corrige|corrigir|desfaz|desfazer|remove|remover|aplica|aplicar)\b/.test(text)) return null;
   if (/\b(pre refrao|refrao|verso|ponte|intro|rap|outro)\b/.test(text) && !/\b(secao por secao|por secoes|todas as secoes)\b/.test(text)) return null;
   const vocalIntent = /\b(analisa (?:a|minha) voz|analisar (?:a|minha) voz|escaneia (?:a|minha) voz|escanear (?:a|minha) voz|diagnostico (?:completo )?(?:da|na) (?:minha )?voz|varredura (?:completa )?(?:da|na|de) (?:minha )?voz|varre (?:a|minha) voz|ouve minha voz)\b/.test(text);
   const wholeIntent = /\b(inteira|inteiro|completa|completo|toda|todo|do inicio ao fim|secao por secao|por secoes|todas as secoes|projeto inteiro|faixa inteira|musica inteira)\b/.test(text);
@@ -34,13 +34,12 @@ export function planFullVocalScan(project, { analysis = null } = {}) {
   if (!target.ok) return target;
   if (!analysis?.voice) return { ...target, ok: false, reason: 'scan_analysis_required' };
 
-  const occurrences = new Map();
+  const canonicalSections = scannableOccurrenceSections(target.project.arrangementMap);
   const sections = [];
   const skipped = [];
 
   for (const section of target.sections) {
-    const occurrence = (occurrences.get(section.kind) || 0) + 1;
-    occurrences.set(section.kind, occurrence);
+    const occurrence = occurrenceForSection(section, canonicalSections);
     const command = {
       section: section.kind,
       label: section.label || sectionLabel(section.kind),
@@ -110,6 +109,21 @@ export function planFullVocalScan(project, { analysis = null } = {}) {
     noiseAnalysisSource: String(analysis.voice.noiseDetection?.source || 'unknown'),
     restorationSource: String(analysis.voice.restoration?.source || 'unavailable'),
   };
+}
+
+function scannableOccurrenceSections(map) {
+  return normalizeArrangementMap(map).sections.filter((section) =>
+    section.timingStatus === 'confirmed'
+    && Number(section.confidence) >= 0.8
+    && Number.isFinite(Number(section.startSeconds)));
+}
+
+function occurrenceForSection(section, canonicalSections) {
+  const matches = canonicalSections.filter((candidate) => candidate.kind === section.kind);
+  const index = matches.findIndex((candidate) => candidate.id === section.id);
+  const fallbackIndex = matches.findIndex((candidate) =>
+    Number(candidate.startSeconds) === Number(section.startSeconds));
+  return Math.max(1, (index >= 0 ? index : fallbackIndex) + 1);
 }
 
 function scoreFindings(findings = []) {
