@@ -24,6 +24,12 @@ test('security scanner detects private-key headers as credential evidence', () =
   assert.equal(findings[0].line, 1);
 });
 
+test('security scanner detects AWS-shaped access key identifiers', () => {
+  const findings = findPatternLines('AWS_ACCESS_KEY_ID=AKIA1234567890ABCDEF', CREDENTIAL_PATTERN);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].line, 1);
+});
+
 test('security scanner detects unsafe Android WebView configuration', () => {
   assert.equal(findPatternLines('android:usesCleartextTraffic="true"', WEBVIEW_PATTERN).length, 1);
   assert.equal(findPatternLines('webSettings.setAllowFileAccess(true);', WEBVIEW_PATTERN).length, 1);
