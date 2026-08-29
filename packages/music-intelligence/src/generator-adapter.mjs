@@ -1,6 +1,12 @@
 import { startCompositionSession } from './session-engine.mjs';
 import { createAuthorialMemory } from './authorial-memory.mjs';
 
+export const REVIEWED_SONG_COMMANDS = Object.freeze(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
+const SONG_COMMANDS = new Set(REVIEWED_SONG_COMMANDS);
+const TRANSIENT_PROVIDER_ERRORS = new Set(['provider_timeout', 'provider_rate_limited', 'provider_unavailable', 'provider_connection_failed', 'remote_unavailable']);
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_RETRIES = 1;
+
 const SECTION_HINTS = Object.freeze([
   ['refrão', /\b(refr[aã]o|hook)\b/i],
   ['pre_refrão', /\b(pr[eé][ -]?refr[aã]o|pre[ -]?chorus)\b/i],
@@ -16,6 +22,66 @@ const CONTINUE = /\b(continua|continue|continuar|completa|complete|completar|ter
 const ADAPT = /\b(adapta|adapte|adaptar|leva (?:isso|essa|esse)|transforma (?:isso|essa|esse)).{0,40}\b(funk|r&b|rnb|rap|hip.?hop|pop|mpb|pagode|edm|k-?pop|trap)\b/i;
 const DIRECT_GENERATE = /\b(escreve|escreva|gera|gere|cria|crie|faz|faça)\b.{0,40}\b(refr[aã]o|hook|verso|estrofe|ponte|letra|rap|parte)\b/i;
 const POLITE_GENERATE = /\b(pode|consegue|vamos)\s+(?:me\s+)?(gerar|escrever|fazer|criar)\b.{0,40}\b(refr[aã]o|hook|verso|estrofe|ponte|letra|rap|parte)\b/i;
+
+export class PmiGeneratorAdapter {
+  constructor({ invoke, timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = DEFAULT_MAX_RETRIES, sleep = defaultSleep } = {}) {
+    if (typeof invoke !== 'function') throw new TypeError('Generator Adapter requer um transport invoke.');
+    this.invoke = invoke;
+    this.timeoutMs = clampInteger(timeoutMs, 1_000, 60_000, DEFAULT_TIMEOUT_MS);
+    this.maxRetries = clampInteger(maxRetries, 0, 1, DEFAULT_MAX_RETRIES);
+    this.sleep = typeof sleep === 'function' ? sleep : defaultSleep;
+  }
+
+  async execute(request = {}, { signal } = {}) {
+    const normalized = normalizeTransportRequest(request);
+    const requestId = createRequestId();
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const stopExternal = forwardAbort(signal, controller);
+    const timeout = setTimeout(() => controller.abort(new Error('generator_timeout')), this.timeoutMs);
+    const abortError = () => signal?.aborted ? 'request_cancelled' : 'provider_timeout';
+    let attempt = 0;
+    try {
+      while (attempt <= this.maxRetries) {
+        attempt += 1;
+        let result;
+        try {
+          result = await this.invoke(normalized, { signal: controller.signal, requestId, attempt });
+        } catch {
+          if (controller.signal.aborted) return failedResult(abortError(), requestId, startedAt, attempt);
+          if (attempt <= this.maxRetries) continue;
+          return failedResult('provider_connection_failed', requestId, startedAt, attempt);
+        }
+
+        if (controller.signal.aborted) return failedResult(abortError(), requestId, startedAt, attempt);
+        const validated = validateTransportResponse(result);
+        if (validated.ok) {
+          return Object.freeze({
+            ok: true,
+            text: validated.text,
+            reply: validated.text,
+            provider: validated.provider,
+            model: validated.model,
+            request_id: validated.requestId || requestId,
+            latency_ms: finiteLatency(result?.latency_ms, Date.now() - startedAt),
+            attempts: attempt,
+          });
+        }
+
+        if (attempt > this.maxRetries || !TRANSIENT_PROVIDER_ERRORS.has(validated.error)) {
+          return sanitizedFailure(result, validated.error, validated.requestId || requestId, startedAt, attempt);
+        }
+        const retryAfterMs = clampInteger(result?.retry_after_ms, 0, 1_500, 250);
+        if (retryAfterMs > 0) await abortableSleep(this.sleep, retryAfterMs, controller.signal);
+        if (controller.signal.aborted) return failedResult(abortError(), requestId, startedAt, attempt);
+      }
+      return failedResult('provider_unavailable', requestId, startedAt, attempt);
+    } finally {
+      clearTimeout(timeout);
+      stopExternal();
+    }
+  }
+}
 
 export function planComposerGeneration(message = '', context = {}) {
   const source = String(message || '').trim();
@@ -94,6 +160,102 @@ export function planComposerGeneration(message = '', context = {}) {
 
 export function isExplicitGenerationRequest(message = '') {
   return Boolean(inferCommand(String(message || '')));
+}
+
+function normalizeTransportRequest(request = {}) {
+  const command = String(request?.command || '');
+  if (!SONG_COMMANDS.has(command)) throw new TypeError('Comando de geração não suportado.');
+  const projectId = String(request?.project_id || '').trim().slice(0, 160);
+  const task = String(request?.task || request?.message || '').trim().slice(0, 12000);
+  if (!projectId) throw new TypeError('project_id é obrigatório para o Composer.');
+  if (!task) throw new TypeError('task é obrigatória para o Composer.');
+  return Object.freeze({
+    ...request,
+    command,
+    project_id: projectId,
+    task,
+    context_pack: plainObject(request?.context_pack),
+    constraints: plainObject(request?.constraints),
+    author_samples: Array.isArray(request?.author_samples) ? request.author_samples.slice(0, 3).map((value) => String(value || '').slice(0, 10000)) : [],
+    best_of_n: 1,
+  });
+}
+
+function validateTransportResponse(result) {
+  if (!result || typeof result !== 'object') return { ok: false, error: 'provider_invalid_response', requestId: null };
+  const requestId = normalizeMeta(result.request_id, 160);
+  if (result.ok !== true) return { ok: false, error: normalizeProviderError(result.error), requestId };
+  const text = String(result.text || result.reply || '').trim().slice(0, 24000);
+  const provider = normalizeMeta(result.provider, 160);
+  const model = normalizeMeta(result.model, 160);
+  if (!text || !provider || !model) return { ok: false, error: 'provider_invalid_response', requestId };
+  return { ok: true, text, provider, model, requestId };
+}
+
+function normalizeProviderError(value) {
+  const error = String(value || '').trim().slice(0, 120);
+  return error || 'provider_invalid_response';
+}
+
+function plainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? structuredClone(value) : {};
+}
+
+function sanitizedFailure(result, error, requestId, startedAt, attempts) {
+  const retryAfterMs = clampInteger(result?.retry_after_ms, 0, 1_500, 0);
+  return Object.freeze({
+    ok: false,
+    error,
+    request_id: requestId,
+    latency_ms: finiteLatency(result?.latency_ms, Date.now() - startedAt),
+    attempts,
+    ...(retryAfterMs > 0 ? { retry_after_ms: retryAfterMs } : {}),
+    ...(result?.fallback_allowed === true ? { fallback_allowed: true } : {}),
+  });
+}
+
+function failedResult(error, requestId, startedAt, attempts) {
+  return Object.freeze({ ok: false, error, request_id: requestId, latency_ms: Math.max(0, Date.now() - startedAt), attempts });
+}
+
+function createRequestId() {
+  return globalThis.crypto?.randomUUID?.() || `pmi_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function forwardAbort(signal, controller) {
+  if (!signal || typeof signal.addEventListener !== 'function') return () => {};
+  const abort = () => controller.abort(signal.reason || new Error('generator_cancelled'));
+  if (signal.aborted) abort();
+  else signal.addEventListener('abort', abort, { once: true });
+  return () => signal.removeEventListener?.('abort', abort);
+}
+
+async function abortableSleep(sleep, milliseconds, signal) {
+  if (signal.aborted) return;
+  await Promise.race([
+    sleep(milliseconds),
+    new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true })),
+  ]);
+}
+
+function defaultSleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function finiteLatency(value, fallback) {
+  const latency = Number(value);
+  return Number.isFinite(latency) && latency >= 0 ? Math.round(latency) : Math.max(0, Math.round(fallback));
+}
+
+function clampInteger(value, min, max, fallback) {
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function normalizeMeta(value, limit) {
+  const text = String(value || '').trim().slice(0, limit);
+  return text || null;
 }
 
 function inferCommand(text) {

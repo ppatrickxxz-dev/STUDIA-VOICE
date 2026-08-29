@@ -5,12 +5,30 @@ const AGENT_URL = `${PROJECT_URL}/functions/v1/validate-app-js-v71`;
 const SESSION_KEY = 'pablovoice.remote.session.v1';
 const DEVICE_KEY = 'pablovoice.remote.device.v1';
 const EXPIRY_SKEW_MS = 60_000;
+const SONG_COMMANDS = new Set(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
+let generatorAdapterPromise = null;
 
 function safeJson(value, fallback = null) { try { return JSON.parse(value); } catch { return fallback; } }
 function decodeJwtPayload(token = '') { try { const payload=String(token).split('.')[1]||''; const normalized=payload.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(payload.length/4)*4,'='); return JSON.parse(atob(normalized)); } catch { return {}; } }
 function authHeaders(accessToken='') { const headers={apikey:PUBLISHABLE_KEY,'content-type':'application/json'}; if(accessToken) headers.authorization=`Bearer ${accessToken}`; return headers; }
 function sessionFromPayload(payload={}) { const accessToken=String(payload.access_token||''); const refreshToken=String(payload.refresh_token||''); if(!accessToken||!refreshToken)return null; const expiresIn=Math.max(30,Number(payload.expires_in||3600)); return {accessToken,refreshToken,tokenType:String(payload.token_type||'bearer'),expiresAt:Date.now()+expiresIn*1000}; }
 function defaultFetch(){ const fn=globalThis.fetch; return typeof fn==='function'?fn.bind(globalThis):null; }
+
+async function loadGeneratorAdapter() {
+  if (generatorAdapterPromise) return generatorAdapterPromise;
+  generatorAdapterPromise = (async () => {
+    for (const specifier of ['./music-intelligence/src/index.mjs', '../music-intelligence/src/index.mjs']) {
+      try {
+        const module = await import(specifier);
+        if (typeof module?.PmiGeneratorAdapter === 'function') return module.PmiGeneratorAdapter;
+      } catch {
+        // Packaged runtime and source tests resolve canonical packages from different roots.
+      }
+    }
+    return null;
+  })();
+  return generatorAdapterPromise;
+}
 
 export class RemoteAuthAdapter {
  constructor({storage=globalThis.localStorage,location=globalThis.location,fetchImpl=defaultFetch()}={}) { this.storage=storage; this.location=location; this.fetch=fetchImpl; this.session=safeJson(this.storage?.getItem?.(SESSION_KEY),null); this.deviceToken=String(this.storage?.getItem?.(DEVICE_KEY)||''); this.status=this.session?'session-cached':'local-only'; }
@@ -25,6 +43,20 @@ export class RemoteAuthAdapter {
  async ensureSession(){if(this.isSessionUsable())return this.session;const refreshed=await this.refreshSession();if(refreshed)return refreshed;return this.loginWithDevice();}
  async ensureRemoteProject(localProject={}){const session=await this.ensureSession();const accessToken=session?.accessToken||'';const localId=String(localProject?.id||'').trim().slice(0,160);const title=String(localProject?.name||localProject?.title||'Projeto PabloVoice').trim().slice(0,160)||'Projeto PabloVoice';if(!accessToken)return {ok:false,error:'auth_required',fallback_allowed:true};if(!localId)return {ok:false,error:'local_project_id_required',fallback_allowed:true};const subject=String(decodeJwtPayload(accessToken)?.sub||'');if(!subject)return {ok:false,error:'invalid_session',fallback_allowed:true};const filter=encodeURIComponent(JSON.stringify({local_project_id:localId}));try{const lookup=await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at&metadata=cs.${filter}&limit=1`,{headers:authHeaders(accessToken)});const matches=await lookup.json().catch(()=>[]);if(!lookup.ok)throw new Error(`project_lookup_${lookup.status}`);if(Array.isArray(matches)&&matches[0]?.id)return {ok:true,created:false,project:matches[0]};const response=await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at`,{method:'POST',headers:{...authHeaders(accessToken),prefer:'return=representation'},body:JSON.stringify({user_id:subject,title,metadata:{local_project_id:localId,source:'pablovoice-local-first',linked_at:new Date().toISOString()}})});const created=await response.json().catch(()=>[]);if(!response.ok||!Array.isArray(created)||!created[0]?.id)throw new Error(`project_create_${response.status}`);return {ok:true,created:true,project:created[0]};}catch{return {ok:false,error:'project_link_failed',fallback_allowed:true};}}
  async agentHealth(){try{const response=await this.fetch(AGENT_URL,{headers:{apikey:PUBLISHABLE_KEY}});const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(`agent_health_${response.status}`);return {available:Boolean(data.configured),authenticated:Boolean(await this.ensureSession()),...data};}catch{return {available:false,authenticated:false,fallback_allowed:true,error:'remote_unavailable'};}}
- async agentTurn(payload){const session=await this.ensureSession();if(!session?.accessToken)return {ok:false,error:'auth_required',fallback_allowed:true};const request=async()=>{const response=await this.fetch(AGENT_URL,{method:'POST',headers:authHeaders(this.session?.accessToken||''),body:JSON.stringify(payload)});return {response,data:await response.json().catch(()=>({}))};};let result=await request();if(result.response.status===401){this.clearSession({keepDevice:true});if(await this.loginWithDevice())result=await request();}if(!result.response.ok||!result.data?.ok)return {fallback_allowed:true,...result.data,ok:false};return result.data;}
+ async agentTurn(payload, options={}){
+   const command=String(payload?.command||'');
+   if(SONG_COMMANDS.has(command)&&options?.bypassGeneratorAdapter!==true){
+     const Adapter=await loadGeneratorAdapter();
+     if(!Adapter)return {ok:false,error:'generator_adapter_unavailable',fallback_allowed:false};
+     const adapter=new Adapter({invoke:(next,invokeOptions)=>this.agentTurn(next,{...invokeOptions,bypassGeneratorAdapter:true})});
+     return adapter.execute(payload,{signal:options?.signal});
+   }
+   const session=await this.ensureSession();if(!session?.accessToken)return {ok:false,error:'auth_required',fallback_allowed:true};
+   const request=async()=>{const response=await this.fetch(AGENT_URL,{method:'POST',headers:authHeaders(this.session?.accessToken||''),body:JSON.stringify(payload),signal:options?.signal});return {response,data:await response.json().catch(()=>({}))};};
+   let result=await request();
+   if(result.response.status===401&&!options?.signal?.aborted){this.clearSession({keepDevice:true});if(await this.loginWithDevice())result=await request();}
+   if(!result.response.ok||!result.data?.ok)return {fallback_allowed:true,...result.data,ok:false};
+   return result.data;
+ }
 }
 export const REMOTE_ENDPOINTS=Object.freeze({project:PROJECT_URL,deviceAuth:DEVICE_AUTH_URL,agent:AGENT_URL});
