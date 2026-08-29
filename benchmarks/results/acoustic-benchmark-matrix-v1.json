@@ -5,20 +5,8 @@
   "frozen_runtime_sha": "8e3aadea4fd443e09962f563a450ade0776cbd56",
   "observed_repository_sha": "bf3af6322f5c961da86e6d5a338370646a1c202e",
   "provider": "pablovoice",
-  "policy": {
-    "implementation_is_not_execution": true,
-    "execution_is_not_pass": true,
-    "no_threshold_changes_after_results": true,
-    "raw_outputs_required_for_scoring": true,
-    "frozen_runtime_required_for_score_eligibility": true
-  },
-  "shared_frozen_inputs": {
-    "source_song_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d",
-    "canonical_vocal_sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
-    "vocal_provider_input_sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
-    "reference_mix_sha256": "4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9",
-    "reference_instrumental_sha256": "4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a"
-  },
+  "policy": {"implementation_is_not_execution":true,"execution_is_not_pass":true,"no_threshold_changes_after_results":true,"raw_outputs_required_for_scoring":true,"frozen_runtime_required_for_score_eligibility":true},
+  "shared_frozen_inputs": {"source_song_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","canonical_vocal_sha256":"852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83","vocal_provider_input_sha256":"85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95","reference_mix_sha256":"4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9","reference_instrumental_sha256":"4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a"},
   "rows": [
     {"id":"B01","goal":"Full song generation","input":"frozen generation brief + lyrics","input_sha256":null,"provider_version":null,"runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"benchmarks/assets/frozen-brief.json + frozen-lyrics.txt","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"BLOCKED","justification":"No score-eligible full-song generation provider execution exists for the frozen round."},
     {"id":"B02","goal":"Section replacement","input":"frozen edit reference","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":null,"runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"frozen selected verse; unselected context preserved","output":null,"output_sha256":null,"metrics":null,"threshold":{"section_replacement_min":8.5},"status":"BLOCKED","justification":"No audio-aware generative section replacement execution exists for the frozen round."},
@@ -33,14 +21,5 @@
     {"id":"B11","goal":"Continuity under three sequential edits","input":"frozen edit reference + three-command sequence","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"guarded sequential conversational edit engine","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"clean -> presence+center -> short fade-in; preserve global identity","output":null,"output_sha256":null,"metrics":null,"threshold":{"continuity_min":8.5},"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Structural preservation is contract-tested, but the benchmark explicitly requires acoustic continuity evidence and no frozen retained output exists."},
     {"id":"B12","goal":"Export integrity","input":"frozen edit reference","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"canonical offline renderer/export path","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"master + aligned stems; correct duration/format/channels; no added clipping","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Export implementation exists, but the benchmark output has not been executed and retained against the complete frozen edit-reference fixture set."}
   ],
-  "summary": {
-    "PASS": 0,
-    "FAIL": 0,
-    "BLOCKED": 6,
-    "IMPLEMENTATION_READY_UNEXECUTED": 6,
-    "release_blocking_failures": [],
-    "matrix_defensible": true,
-    "all_rows_have_verifiable_justification": true,
-    "acoustic_benchmark_matrix_frozen": true
-  }
+  "summary": {"PASS":0,"FAIL":0,"BLOCKED":5,"IMPLEMENTATION_READY_UNEXECUTED":7,"release_blocking_failures":[],"matrix_defensible":true,"all_rows_have_verifiable_justification":true,"acoustic_benchmark_matrix_frozen":true}
 }
