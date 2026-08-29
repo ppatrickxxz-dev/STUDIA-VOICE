@@ -4,6 +4,7 @@ import { createAuthorialMemory } from './authorial-memory.mjs';
 export const REVIEWED_SONG_COMMANDS = Object.freeze(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
 const SONG_COMMANDS = new Set(REVIEWED_SONG_COMMANDS);
 const TRANSIENT_PROVIDER_ERRORS = new Set(['provider_timeout', 'provider_rate_limited', 'provider_unavailable', 'provider_connection_failed', 'remote_unavailable']);
+const NON_RETRYABLE_PROVIDER_CODES = new Set(['insufficient_quota']);
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 1;
 
@@ -68,7 +69,8 @@ export class PmiGeneratorAdapter {
           });
         }
 
-        if (attempt > this.maxRetries || !TRANSIENT_PROVIDER_ERRORS.has(validated.error)) {
+        const providerErrorCode = safeProviderMeta(result?.provider_error_code);
+        if (attempt > this.maxRetries || !TRANSIENT_PROVIDER_ERRORS.has(validated.error) || NON_RETRYABLE_PROVIDER_CODES.has(providerErrorCode)) {
           return sanitizedFailure(result, validated.error, validated.requestId || requestId, startedAt, attempt);
         }
         const retryAfterMs = clampInteger(result?.retry_after_ms, 0, 1_500, 250);
@@ -197,12 +199,19 @@ function normalizeProviderError(value) {
   return error || 'provider_invalid_response';
 }
 
+function safeProviderMeta(value) {
+  const text = String(value || '').trim();
+  return /^[A-Za-z0-9._-]{1,80}$/.test(text) ? text : null;
+}
+
 function plainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? structuredClone(value) : {};
 }
 
 function sanitizedFailure(result, error, requestId, startedAt, attempts) {
   const retryAfterMs = clampInteger(result?.retry_after_ms, 0, 1_500, 0);
+  const providerErrorType = safeProviderMeta(result?.provider_error_type);
+  const providerErrorCode = safeProviderMeta(result?.provider_error_code);
   return Object.freeze({
     ok: false,
     error,
@@ -210,6 +219,8 @@ function sanitizedFailure(result, error, requestId, startedAt, attempts) {
     latency_ms: finiteLatency(result?.latency_ms, Date.now() - startedAt),
     attempts,
     ...(retryAfterMs > 0 ? { retry_after_ms: retryAfterMs } : {}),
+    ...(providerErrorType ? { provider_error_type: providerErrorType } : {}),
+    ...(providerErrorCode ? { provider_error_code: providerErrorCode } : {}),
     ...(result?.fallback_allowed === true ? { fallback_allowed: true } : {}),
   });
 }
