@@ -30,6 +30,11 @@ async function recordingState(page, projectName = 'Gate Gravação Web') {
       read.onsuccess = () => resolve(read.result || []);
       read.onerror = () => reject(read.error);
     });
+    const audioAssets = await new Promise((resolve, reject) => {
+      const read = db.transaction('audio', 'readonly').objectStore('audio').getAll();
+      read.onsuccess = () => resolve(read.result || []);
+      read.onerror = () => reject(read.error);
+    });
     const project = projects.find((candidate) => candidate.name === name);
     const recording = project?.tracks?.find((track) => track.kind === 'recording');
     const asset = recording?.assetId ? await new Promise((resolve, reject) => {
@@ -42,6 +47,7 @@ async function recordingState(page, projectName = 'Gate Gravação Web') {
       projectId: project?.id || null,
       revisionCount: project?.revisions?.length || 0,
       trackCount: project?.tracks?.length || 0,
+      audioCount: audioAssets.length,
       recordingName: recording?.name || null,
       recordingKind: recording?.kind || null,
       recordingDuration: Number(recording?.duration || 0),
@@ -54,11 +60,8 @@ async function recordingState(page, projectName = 'Gate Gravação Web') {
   }, projectName);
 }
 
-test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted recording track after reload', async ({ page }) => {
-  test.setTimeout(90_000);
-  const errors = captureErrors(page);
-
-  await page.addInitScript(() => {
+function installFakeRecorder(page, { deny = false } = {}) {
+  return page.addInitScript(({ denyMicrophone }) => {
     function wavBlob({ seconds = 0.7, sampleRate = 44100, frequency = 196 } = {}) {
       const samples = Math.floor(seconds * sampleRate);
       const buffer = new ArrayBuffer(44 + samples * 2);
@@ -84,6 +87,7 @@ test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted recordin
       value: {
         async getUserMedia(constraints) {
           window.__pabloVoiceRecordingConstraints = constraints;
+          if (denyMicrophone) throw new Error('Permissão de microfone negada pelo gate.');
           return { getTracks: () => [{ stop: () => stoppedTracks.push(Date.now()) }] };
         },
       },
@@ -113,15 +117,24 @@ test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted recordin
     }
     Object.defineProperty(window, 'MediaRecorder', { configurable: true, value: FakeMediaRecorder });
     window.__pabloVoiceStoppedTracks = stoppedTracks;
-  });
+  }, { denyMicrophone: deny });
+}
+
+async function createProject(page, name) {
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill(name);
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+}
+
+test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted and exportable recording track after reload', async ({ page }) => {
+  test.setTimeout(100_000);
+  const errors = captureErrors(page);
+  await installFakeRecorder(page);
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
-
-  await page.locator('[data-action="new-project"]').first().click();
-  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Gravação Web');
-  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
-  await expect(page.getByRole('heading', { name: 'Gate Gravação Web' })).toBeVisible();
+  await createProject(page, 'Gate Gravação Web');
 
   await page.locator('[data-action="record"]').first().click();
   await expect(page.locator('[data-action="stop-record"]')).toBeVisible({ timeout: 10_000 });
@@ -136,6 +149,7 @@ test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted recordin
 
   const afterRecord = await recordingState(page);
   expect(afterRecord.trackCount).toBe(1);
+  expect(afterRecord.audioCount).toBe(1);
   expect(afterRecord.recordingKind).toBe('recording');
   expect(afterRecord.recordingName).toMatch(/^voz-\d{4}-\d{2}-\d{2}/);
   expect(afterRecord.recordingDuration).toBeGreaterThan(0.5);
@@ -159,6 +173,7 @@ test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted recordin
   const afterReload = await recordingState(page);
   expect(afterReload.projectId).toBe(afterRecord.projectId);
   expect(afterReload.trackCount).toBe(1);
+  expect(afterReload.audioCount).toBe(1);
   expect(afterReload.recordingKind).toBe('recording');
   expect(afterReload.recordingName).toBe(afterRecord.recordingName);
   expect(afterReload.assetType).toBe('audio/wav');
@@ -170,5 +185,65 @@ test('WEB RECORDING FLOW GATE: microphone recording becomes a persisted recordin
   await expect(page.locator('#current-time')).not.toHaveText('0:00.0');
   await page.locator('[data-action="stop"]').click();
 
+  const revisionsBeforeExport = afterReload.revisionCount;
+  await page.locator('[data-action="studio-tab"][data-value="export"]').click();
+  const mixDownloadPromise = page.waitForEvent('download');
+  await page.locator('[data-action="export"]').first().click();
+  const mixDownload = await mixDownloadPromise;
+  expect(mixDownload.suggestedFilename()).toMatch(/^Gate_Gravação_Web-.*\.wav$/u);
+  expect(await mixDownload.path()).toBeTruthy();
+
+  const trackDownloadPromise = page.waitForEvent('download');
+  await page.locator('[data-action="export-track"]').first().click();
+  const trackDownload = await trackDownloadPromise;
+  expect(trackDownload.suggestedFilename()).toMatch(/^Gate_Gravação_Web-voz-.*-demo\.wav$/u);
+  expect(await trackDownload.path()).toBeTruthy();
+  await expect(page.getByText(/Faixa processada exportada/)).toBeVisible();
+  expect((await recordingState(page)).revisionCount).toBe(revisionsBeforeExport);
+
+  expect(unexpectedErrors(errors)).toEqual([]);
+});
+
+test('WEB RECORDING CANCEL GATE: cancelling an active recording leaves no empty track or asset', async ({ page }) => {
+  test.setTimeout(45_000);
+  const errors = captureErrors(page);
+  await installFakeRecorder(page);
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+  await createProject(page, 'Gate Gravação Cancelada');
+
+  await page.locator('[data-action="record"]').first().click();
+  await expect(page.locator('[data-action="cancel-record"]')).toBeVisible({ timeout: 10_000 });
+  await page.locator('[data-action="cancel-record"]').click();
+  await expect(page.getByText('Gravação cancelada.')).toBeVisible({ timeout: 10_000 });
+
+  const state = await recordingState(page, 'Gate Gravação Cancelada');
+  expect(state.projectId).toBeTruthy();
+  expect(state.trackCount).toBe(0);
+  expect(state.audioCount).toBe(0);
+  expect(state.recordingName).toBe(null);
+  expect(await page.evaluate(() => window.__pabloVoiceStoppedTracks.length)).toBe(1);
+  expect(unexpectedErrors(errors)).toEqual([]);
+});
+
+test('WEB RECORDING PERMISSION GATE: denied microphone permission does not create a recording shell', async ({ page }) => {
+  test.setTimeout(45_000);
+  const errors = captureErrors(page);
+  await installFakeRecorder(page, { deny: true });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+  await createProject(page, 'Gate Gravação Negada');
+
+  await page.locator('[data-action="record"]').first().click();
+  await expect(page.getByText('Permissão de microfone negada pelo gate.')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('[data-action="stop-record"]')).toHaveCount(0);
+
+  const state = await recordingState(page, 'Gate Gravação Negada');
+  expect(state.projectId).toBeTruthy();
+  expect(state.trackCount).toBe(0);
+  expect(state.audioCount).toBe(0);
+  expect(state.recordingName).toBe(null);
   expect(unexpectedErrors(errors)).toEqual([]);
 });
