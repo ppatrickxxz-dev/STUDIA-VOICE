@@ -13,6 +13,11 @@ async function load() {
   return { workflow, pkg: JSON.parse(packageText) };
 }
 
+test('signed release job is restricted to main', async () => {
+  const { workflow } = await load();
+  assert.match(workflow, /signed-release:\n\s+if: github\.ref == 'refs\/heads\/main'/);
+});
+
 test('manual release tag must exactly match the package version', async () => {
   const { workflow, pkg } = await load();
   assert.match(workflow, /Validate release tag intent/);
