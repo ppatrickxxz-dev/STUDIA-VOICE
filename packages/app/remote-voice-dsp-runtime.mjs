@@ -13,6 +13,7 @@ export const REMOTE_VOICE_DSP_CONTRACT = Object.freeze({
     mode: 'adaptive_partial',
     voices: Object.freeze(['high', 'low']),
     pairMustBeExecutedSequentially: true,
+    explicitSourceSupported: true,
   }),
   pitch: Object.freeze({
     endpoint: 'diagnose-voice-v70-once',
@@ -63,17 +64,20 @@ export class RemoteVoiceDspRuntime {
     return { accessToken: session.accessToken, projectId };
   }
 
-  async dispatchHarmony({ localProject, voice } = {}) {
+  async dispatchHarmony({ localProject, voice, sourceAssetId = null } = {}) {
     if (!REMOTE_VOICE_DSP_CONTRACT.harmony.voices.includes(voice)) throw new Error('Harmony voice must be high or low.');
+    if (sourceAssetId !== null && !UUID_RE.test(String(sourceAssetId))) throw new Error('Verified remote sourceAssetId is required when an explicit harmony source is requested.');
     const { accessToken, projectId } = await this.resolveContext(localProject);
-    const data = await this.#request(HARMONY_ENDPOINT, accessToken, {
+    const request = {
       action: 'dispatch',
       project_id: projectId,
       voice,
       mode: REMOTE_VOICE_DSP_CONTRACT.harmony.mode,
-    });
+    };
+    if (sourceAssetId) request.source_asset_id = sourceAssetId;
+    const data = await this.#request(HARMONY_ENDPOINT, accessToken, request);
     if (!data?.ok || !UUID_RE.test(String(data.job_id || ''))) throw new Error(data?.error || 'Harmony dispatch failed.');
-    return this.#executionOnly('B07', data, { projectId, voice, mode: REMOTE_VOICE_DSP_CONTRACT.harmony.mode });
+    return this.#executionOnly('B07', data, { projectId, voice, sourceAssetId, mode: REMOTE_VOICE_DSP_CONTRACT.harmony.mode });
   }
 
   async harmonyStatus({ localProject, sync = false } = {}) {
