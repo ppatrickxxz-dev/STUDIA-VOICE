@@ -12,6 +12,7 @@ const UNTRUSTED_CANDIDATE_ACOUSTIC_KEYS = new Set([
   'medianFormantDriftCents',
   'speakerEmbedding',
   'speakerEmbeddingCosine',
+  'identityPassed',
 ]);
 
 /**
