@@ -107,9 +107,13 @@ jobs:
           export PV_RELEASE_KEY_ALIAS="$(cat "$RUNNER_TEMP/pablovoice-key.alias")"
           export PV_RELEASE_KEY_PASSWORD="$(cat "$RUNNER_TEMP/pablovoice-key.pass")"
           gradle -p apps/android --no-daemon verifyReleaseSigning lintRelease assembleRelease bundleRelease
-      - name: Validate signed release APK
+      - name: Validate signed release APK and AAB
         run: |
+          set -euo pipefail
           bash scripts/validate-apk.sh apps/android/app/build/outputs/apk/release/app-release.apk com.pablovoice.studio
+          jarsigner -verify -strict -verbose -certs \
+            apps/android/app/build/outputs/bundle/release/app-release.aab \
+            > apps/android/app/build/outputs/bundle/release/app-release.aab.jarsigner.txt
           sha256sum apps/android/app/build/outputs/bundle/release/app-release.aab > apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
       - name: Upload stable signed artifacts
         uses: actions/upload-artifact@v4
@@ -120,6 +124,7 @@ jobs:
             apps/android/app/build/outputs/apk/release/app-release.apk.sha256
             apps/android/app/build/outputs/bundle/release/app-release.aab
             apps/android/app/build/outputs/bundle/release/app-release.aab.sha256
+            apps/android/app/build/outputs/bundle/release/app-release.aab.jarsigner.txt
           if-no-files-found: error
           retention-days: 14
       - name: Create or verify release tag
@@ -166,3 +171,44 @@ jobs:
               "${RELEASE_FILES[@]}" \
               --draft --verify-tag --generate-notes --title "PabloVoice $RELEASE_TAG"
           fi
+
+  signed-release-emulator:
+    needs: signed-release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: pablovoice-signed-${{ github.sha }}
+          path: artifacts/android-signed
+      - name: Resolve signed production APK
+        run: find artifacts/android-signed -name app-release.apk -type f -print -quit | tee /tmp/pv-release-apk-path
+      - name: Enable KVM acceleration when available
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            test -r /dev/kvm
+            test -w /dev/kvm
+            ls -l /dev/kvm
+            echo 'KVM acceleration enabled for signed Android release gate.'
+          else
+            echo 'KVM device unavailable; emulator runner will use its supported fallback.'
+          fi
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/android-signed-release-emulator-gate.sh "$(cat /tmp/pv-release-apk-path)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pablovoice-android-signed-release-evidence-${{ github.sha }}
+          path: test-results/android-signed-release-emulator
+          if-no-files-found: error
+          retention-days: 14
