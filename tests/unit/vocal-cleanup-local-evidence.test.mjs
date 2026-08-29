@@ -110,7 +110,6 @@ test('direct PCM measurement overrides forged safe peak and clipping claims', ()
   const evidence = deriveVocalCleanupLocalEvidence({
     originalBuffer: bufferFrom(originalSamples),
     processedBuffer: bufferFrom(processedSamples),
-    candidate: { peak: 0.1, clippingRatio: 0 },
     reference: { formantsHz: [500, 1500, 2500] },
     candidate: { peak: 0.1, clippingRatio: 0, formantsHz: [500, 1500, 2500] },
   });
@@ -188,4 +187,23 @@ test('explicit alignment refusal and channel mismatch cannot be auto-promoted', 
   });
   assert.equal(explicit.local.structuralSameContent, true);
   assert.equal(explicit.alignment.sameContent, false);
+});
+
+test('overlapping restoration windows collapse into one bounded evidence region', () => {
+  const original = bufferFrom(syntheticVowel(2));
+  const processed = bufferFrom(syntheticVowel(2));
+  const evidence = deriveVocalCleanupLocalEvidence({
+    originalBuffer: original,
+    processedBuffer: processed,
+    events: [
+      { startSeconds: 0.2, endSeconds: 1.1 },
+      { startSeconds: 0.8, endSeconds: 1.6 },
+    ],
+    reference: { formantsHz: [500, 1500, 2500] },
+    candidate: { formantsHz: [505, 1495, 2510] },
+  });
+
+  assert.deepEqual(evidence.local.regions, [{ startSeconds: 0.2, endSeconds: 1.6 }]);
+  assert.ok(evidence.local.candidateTechnical.sampleCount > 0);
+  assert.ok(evidence.local.candidateTechnical.sampleCount < original.length * original.numberOfChannels);
 });
