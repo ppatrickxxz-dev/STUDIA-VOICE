@@ -20,28 +20,38 @@ function runtimeWith(requests, { session = true, linked = true } = {}) {
     return {
       ok: true,
       status: 200,
-      async json() { return { ok: true, job_id: jobId, status: 'waiting_gpu', mode: body.mode, voice: body.voice }; },
+      async json() { return { ok: true, job_id: jobId, status: 'waiting_gpu', mode: body.mode, voice: body.voice, source_asset_id: body.source_asset_id }; },
     };
   };
   return new RemoteVoiceDspRuntime({ authAdapter, fetchImpl });
 }
 
-test('B07 runtime dispatches HIGH and LOW through the same frozen authenticated route', async () => {
+test('B07 runtime dispatches HIGH and LOW through the same frozen authenticated route and source asset', async () => {
   const requests = [];
   const runtime = runtimeWith(requests);
   const localProject = { id: 'local-1', name: 'Teste' };
-  const high = await runtime.dispatchHarmony({ localProject, voice: 'high' });
-  const low = await runtime.dispatchHarmony({ localProject, voice: 'low' });
+  const high = await runtime.dispatchHarmony({ localProject, voice: 'high', sourceAssetId });
+  const low = await runtime.dispatchHarmony({ localProject, voice: 'low', sourceAssetId });
 
   assert.deepEqual(requests.map((request) => request.body), [
-    { action: 'dispatch', project_id: projectId, voice: 'high', mode: 'adaptive_partial' },
-    { action: 'dispatch', project_id: projectId, voice: 'low', mode: 'adaptive_partial' },
+    { action: 'dispatch', project_id: projectId, voice: 'high', mode: 'adaptive_partial', source_asset_id: sourceAssetId },
+    { action: 'dispatch', project_id: projectId, voice: 'low', mode: 'adaptive_partial', source_asset_id: sourceAssetId },
   ]);
   assert.ok(requests.every((request) => request.url.endsWith('/functions/v1/progress-kaggle-harmony-v73')));
   assert.ok(requests.every((request) => request.init.headers.authorization === 'Bearer user-jwt'));
   assert.equal(high.benchmarkPass, false);
   assert.equal(low.benchmarkPass, false);
   assert.equal(high.benchmarkState, 'execution_evidence_pending_review');
+});
+
+test('B07 explicit source fails closed before network when source id is not remote UUID', async () => {
+  const requests = [];
+  const runtime = runtimeWith(requests);
+  await assert.rejects(
+    () => runtime.dispatchHarmony({ localProject: { id: 'local-1' }, voice: 'high', sourceAssetId: 'local-only' }),
+    /Verified remote sourceAssetId/,
+  );
+  assert.equal(requests.length, 0);
 });
 
 test('B06 runtime fails closed without a verified remote source asset id', async () => {
@@ -89,6 +99,7 @@ test('runtime contract forbids pair promotion from implementation alone', () => 
   assert.deepEqual(REMOTE_VOICE_DSP_CONTRACT.harmony.voices, ['high', 'low']);
   assert.equal(REMOTE_VOICE_DSP_CONTRACT.harmony.mode, 'adaptive_partial');
   assert.equal(REMOTE_VOICE_DSP_CONTRACT.harmony.pairMustBeExecutedSequentially, true);
+  assert.equal(REMOTE_VOICE_DSP_CONTRACT.harmony.explicitSourceSupported, true);
   assert.equal(REMOTE_VOICE_DSP_CONTRACT.pitch.sourceAssetRequired, true);
   assert.equal(REMOTE_VOICE_DSP_CONTRACT.benchmarkPromotion, 'external_acoustic_evidence_only');
 });
