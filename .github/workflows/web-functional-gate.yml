@@ -62,7 +62,7 @@ jobs:
       - name: Run browser functional gate
         env:
           CI: 'true'
-        run: npx playwright test tests/e2e/web-functional-gate.spec.mjs --reporter=line --workers=1
+        run: npx playwright test tests/e2e/web-functional-gate.spec.mjs tests/e2e/pablo-recording-flow-gate.spec.mjs tests/e2e/pablo-section-here-gate.spec.mjs tests/e2e/pablo-section-audition-gate.spec.mjs tests/e2e/pablo-section-vocal-gain-gate.spec.mjs tests/e2e/pablo-section-mix-undo-gate.spec.mjs tests/e2e/pablo-section-mix-ab-gate.spec.mjs tests/e2e/pablo-section-vocal-brightness-gate.spec.mjs tests/e2e/pablo-section-vocal-body-gate.spec.mjs tests/e2e/pablo-section-vocal-softness-gate.spec.mjs tests/e2e/pablo-section-vocal-presence-gate.spec.mjs tests/e2e/pablo-section-vocal-dynamics-gate.spec.mjs tests/e2e/pablo-section-vocal-deesser-gate.spec.mjs tests/e2e/pablo-section-vocal-plosive-gate.spec.mjs tests/e2e/pablo-section-vocal-cleanup-gate.spec.mjs tests/e2e/pablo-section-vocal-click-gate.spec.mjs tests/e2e/pablo-section-vocal-scan-gate.spec.mjs tests/e2e/pablo-full-vocal-scan-gate.spec.mjs tests/e2e/pablo-full-vocal-treatment-gate.spec.mjs tests/e2e/pablo-complete-user-flow-gate.spec.mjs tests/e2e/pablo-vocal-restoration-gate.spec.mjs tests/e2e/pablo-section-vocal-hum-gate.spec.mjs tests/e2e/pablo-vocal-restoration-recommendation-gate.spec.mjs tests/e2e/pablo-vocal-restoration-selective-gate.spec.mjs --reporter=line --workers=1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -104,11 +104,61 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
   await expect(page.getByRole('heading', { name: 'Gate Web 2026' })).toBeVisible();
   await expect(page.getByText('gate-tone.wav').first()).toBeVisible();
 
+  const revisionsBeforeExport = await page.evaluate(async () => {
+    const request = indexedDB.open('pablovoice_mobile_v2', 3);
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const project = await new Promise((resolve, reject) => {
+      const read = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+      read.onsuccess = () => resolve(read.result.find((item) => item.name === 'Gate Web 2026'));
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    return project?.revisions?.length ?? -1;
+  });
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-action="export"]').first().click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^Gate_Web_2026-.*\.wav$/);
   expect(await download.path()).toBeTruthy();
+  await expect.poll(async () => page.evaluate(async () => {
+    const request = indexedDB.open('pablovoice_mobile_v2', 3);
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const project = await new Promise((resolve, reject) => {
+      const read = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+      read.onsuccess = () => resolve(read.result.find((item) => item.name === 'Gate Web 2026'));
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    return project?.revisions?.length ?? -1;
+  })).toBe(revisionsBeforeExport);
+
+  await page.locator('[data-action="studio-tab"][data-value="export"]').click();
+  const trackDownloadPromise = page.waitForEvent('download');
+  await page.locator('[data-action="export-track"]').first().click();
+  const trackDownload = await trackDownloadPromise;
+  expect(trackDownload.suggestedFilename()).toBe('Gate_Web_2026-gate-tone_wav-demo.wav');
+  expect(await trackDownload.path()).toBeTruthy();
+  await expect(page.getByText(/Faixa processada exportada/)).toBeVisible();
+  await expect.poll(async () => page.evaluate(async () => {
+    const request = indexedDB.open('pablovoice_mobile_v2', 3);
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const project = await new Promise((resolve, reject) => {
+      const read = db.transaction('projects', 'readonly').objectStore('projects').getAll();
+      read.onsuccess = () => resolve(read.result.find((item) => item.name === 'Gate Web 2026'));
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    return project?.revisions?.length ?? -1;
+  })).toBe(revisionsBeforeExport);
 
   await page.locator('[data-route="compose"]').first().click();
   await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
@@ -126,6 +176,188 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
   await expect(page.getByText(/Entendi e apliquei a edição reversível no projeto/i).last()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/A edição determinística foi aplicada e salva/i).last()).toBeVisible();
 
+  expect(unexpectedErrors(errors)).toEqual([]);
+});
+
+test('WEB BEAT TIMELINE GATE: confirmed chorus renders and replaces a real beat-fill track at canonical offset', async ({ page }) => {
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Beat Timeline');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('#audio-picker').setInputFiles({ name: 'beat-source.wav', mimeType: 'audio/wav', buffer: wavFixture({ seconds: 1.5, frequency: 180 }) });
+  await expect(page.getByText('beat-source.wav').first()).toBeVisible();
+
+  const evidence = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const sections = await import('./core/src/section-map.mjs');
+    const runtime = await import('./pablo-beat-runtime.mjs');
+    const projectId = storage.activeProjectSessionId();
+    const project = await storage.getProject(projectId);
+    const sourceTrack = project.tracks.find((track) => track.name === 'beat-source.wav') || project.tracks[0];
+    if (!sourceTrack?.assetId) throw new Error('Gate source track missing.');
+
+    project.sampler = {
+      schema: 'pablovoice_sampler_v2',
+      sourceAssetId: sourceTrack.assetId,
+      grooveTemplate: { ready: false, bpm: 120, stepsPerBar: 16, offsetsBeats: [], accents: [] },
+      pads: [{
+        id: 'gate-snare',
+        sliceId: 'gate-slice',
+        sourceAssetId: sourceTrack.assetId,
+        label: 'Caixa gate',
+        start: 0.1,
+        end: 0.32,
+        gain: 1,
+        fadeIn: 0.005,
+        fadeOut: 0.01,
+        playbackRate: 1,
+        source: 'audio_onset',
+        category: 'snare',
+        categoryConfidence: 0.95,
+      }],
+    };
+    project.arrangementMap = sections.upsertConfirmedSection(project.arrangementMap, {
+      kind: 'chorus',
+      startSeconds: 1,
+      source: 'user_manual',
+      confidence: 1,
+    });
+    await storage.saveProject(project);
+
+    const operation = { action: 'fill_before_section', args: { section: 'chorus', occurrence: 1, intensity: 0.65 } };
+    const first = await runtime.executePersistedPabloBeatOperation(operation, { projectId });
+    const afterFirst = await storage.getProject(projectId);
+    const firstFill = afterFirst.tracks.find((track) => track.kind === 'beat-fill');
+    const firstAsset = firstFill ? await storage.getAudioAsset(firstFill.assetId) : null;
+    const firstAssetId = firstFill?.assetId || null;
+
+    const second = await runtime.executePersistedPabloBeatOperation(operation, { projectId });
+    const afterSecond = await storage.getProject(projectId);
+    const fills = afterSecond.tracks.filter((track) => track.kind === 'beat-fill');
+    const secondFill = fills[0] || null;
+    const secondAsset = secondFill ? await storage.getAudioAsset(secondFill.assetId) : null;
+    const staleAsset = firstAssetId ? await storage.getAudioAsset(firstAssetId) : null;
+
+    return {
+      firstOk: first?.ok === true,
+      firstMutated: first?.mutated === true,
+      firstKind: firstFill?.kind || null,
+      firstOffset: firstFill?.offset ?? null,
+      firstTarget: firstFill?.beatTimeline?.targetStartSeconds ?? null,
+      firstAssetType: firstAsset?.type || null,
+      firstAssetSize: firstAsset?.blob?.size || 0,
+      secondOk: second?.ok === true,
+      secondMutated: second?.mutated === true,
+      replacedPriorFill: second?.data?.replacedPriorFill === true,
+      fillCount: fills.length,
+      secondOffset: secondFill?.offset ?? null,
+      secondTarget: secondFill?.beatTimeline?.targetStartSeconds ?? null,
+      secondAssetSize: secondAsset?.blob?.size || 0,
+      assetRotated: Boolean(firstAssetId && secondFill?.assetId && firstAssetId !== secondFill.assetId),
+      staleAssetDeleted: staleAsset == null,
+      sourceTrackPreserved: afterSecond.tracks.some((track) => track.id === sourceTrack.id),
+    };
+  });
+
+  expect(evidence.firstOk).toBe(true);
+  expect(evidence.firstMutated).toBe(true);
+  expect(evidence.firstKind).toBe('beat-fill');
+  expect(evidence.firstOffset).toBeCloseTo(0.5, 3);
+  expect(evidence.firstTarget).toBe(1);
+  expect(evidence.firstAssetType).toBe('audio/wav');
+  expect(evidence.firstAssetSize).toBeGreaterThan(44);
+  expect(evidence.secondOk).toBe(true);
+  expect(evidence.secondMutated).toBe(true);
+  expect(evidence.replacedPriorFill).toBe(true);
+  expect(evidence.fillCount).toBe(1);
+  expect(evidence.secondOffset).toBeCloseTo(0.5, 3);
+  expect(evidence.secondTarget).toBe(1);
+  expect(evidence.secondAssetSize).toBeGreaterThan(44);
+  expect(evidence.assetRotated).toBe(true);
+  expect(evidence.staleAssetDeleted).toBe(true);
+  expect(evidence.sourceTrackPreserved).toBe(true);
+  expect(unexpectedErrors(errors)).toEqual([]);
+});
+
+test('WEB SECTION MAP UI GATE: current cursor can mark, persist, edit and remove a confirmed chorus', async ({ page }) => {
+  const errors = captureErrors(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Sections');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('#audio-picker').setInputFiles({ name: 'sections-source.wav', mimeType: 'audio/wav', buffer: wavFixture({ seconds: 1.5, frequency: 240 }) });
+  await expect(page.getByText('sections-source.wav').first()).toBeVisible();
+  await expect(page.locator('[data-section-map-open]')).toBeVisible();
+
+  await page.locator('[data-action="play"]').click();
+  await page.waitForTimeout(360);
+  await expect(page.locator('#current-time')).not.toHaveText('0:00.0');
+  await page.locator('[data-action="stop"]').click();
+  await expect(page.locator('#current-time')).toHaveText('0:00.0');
+
+  await page.locator('[data-section-map-open]').click();
+  await expect(page.getByRole('heading', { name: 'Seções' })).toBeVisible();
+  await page.locator('[data-section-kind]').selectOption('chorus');
+  await page.locator('[data-section-use-cursor]').click();
+  const cursorValue = await page.locator('[data-section-start]').inputValue();
+  expect(cursorValue).not.toBe('0:00');
+  await page.getByRole('button', { name: 'Salvar seção' }).click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(1);
+  await expect(page.locator('[data-section-row]').first()).toContainText('Refrão');
+  await expect(page.locator('[data-section-row]').first()).toContainText('timing confirmado');
+
+  await page.locator('[data-section-map-close]').click();
+  await page.reload({ waitUntil: 'networkidle' });
+  await waitForHydratedShell(page);
+  await page.locator('[data-route="projects"]').first().click();
+  await expect(page.getByText('Gate Sections').first()).toBeVisible();
+  await page.locator('[data-action="open-project"]').first().click();
+  await expect(page.locator('[data-section-map-open]')).toBeVisible();
+  await page.locator('[data-section-map-open]').click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(1);
+
+  await page.locator('[data-section-edit]').first().click();
+  await page.locator('[data-section-start]').fill('1.0');
+  await page.locator('[data-section-end]').fill('1.2');
+  await page.getByRole('button', { name: 'Atualizar' }).click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(1);
+  await expect(page.locator('[data-section-row]').first()).toContainText('0:01');
+  await expect(page.locator('[data-section-row]').first()).toContainText('0:01.2');
+
+  const persisted = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    return {
+      sectionCount: project.arrangementMap.sections.length,
+      section: project.arrangementMap.sections[0],
+      revisionLabels: project.revisions.map((revision) => revision.label),
+    };
+  });
+  expect(persisted.sectionCount).toBe(1);
+  expect(persisted.section.kind).toBe('chorus');
+  expect(persisted.section.startSeconds).toBe(1);
+  expect(persisted.section.endSeconds).toBe(1.2);
+  expect(persisted.section.timingStatus).toBe('confirmed');
+  expect(persisted.revisionLabels.some((label) => /Refrão atualizado na timeline/.test(label))).toBe(true);
+
+  await page.locator('[data-section-remove]').first().click();
+  await expect(page.locator('[data-section-row]')).toHaveCount(0);
+  await expect(page.getByText(/Nenhuma seção marcada ainda/)).toBeVisible();
+  const remaining = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    return {
+      sections: project.arrangementMap.sections.length,
+      removedRevision: project.revisions.some((revision) => /Refrão removido da timeline/.test(revision.label)),
+    };
+  });
+  expect(remaining.sections).toBe(0);
+  expect(remaining.removedRevision).toBe(true);
   expect(unexpectedErrors(errors)).toEqual([]);
 });
 

@@ -41,11 +41,51 @@ assert_no_fatal_crash() {
   fi
 }
 
+assert_native_package_contract() {
+  local package_dump="$evidence_dir/package-contract.txt"
+  local appops_dump="$evidence_dir/package-appops.txt"
+  adb shell dumpsys package "$package_name" > "$package_dump" 2>/dev/null || true
+  adb shell appops get "$package_name" RECORD_AUDIO > "$appops_dump" 2>/dev/null || true
+
+  if ! grep -q "android.permission.RECORD_AUDIO" "$package_dump"; then
+    capture_diagnostics package-contract-missing-record-audio
+    echo 'ANDROID_NATIVE_RECORD_AUDIO_PERMISSION_MISSING' >&2
+    return 1
+  fi
+  if ! grep -Eq "android.permission.RECORD_AUDIO: granted=true|RECORD_AUDIO: allow" "$package_dump" "$appops_dump" 2>/dev/null; then
+    capture_diagnostics package-contract-record-audio-not-granted
+    echo 'ANDROID_NATIVE_RECORD_AUDIO_PERMISSION_NOT_GRANTED' >&2
+    return 1
+  fi
+  if ! grep -q "$activity_name" "$package_dump"; then
+    capture_diagnostics package-contract-missing-activity
+    echo 'ANDROID_NATIVE_MAIN_ACTIVITY_MISSING' >&2
+    return 1
+  fi
+  if ! grep -Eq "android.intent.action.VIEW|android.intent.action.SEND|audio/\*" "$package_dump"; then
+    capture_diagnostics package-contract-missing-audio-entrypoint
+    echo 'ANDROID_NATIVE_AUDIO_IMPORT_ENTRYPOINT_MISSING' >&2
+    return 1
+  fi
+  echo 'ANDROID_NATIVE_PACKAGE_CONTRACT_PASSED'
+}
+
+process_start_ticks() {
+  local pid="$1"
+  adb shell cat "/proc/$pid/stat" 2>/dev/null | tr -d '\r' | awk '{print $22}'
+}
+
 launch_and_wait() {
   local label="$1"
   adb shell am force-stop "$package_name" || true
   adb logcat -c || true
   timeout 35s adb shell am start -W -n "$package_name/$activity_name" > "$evidence_dir/${label}-launch.txt" 2>&1 || true
+
+  wait_for_render "$label"
+}
+
+wait_for_render() {
+  local label="$1"
 
   for attempt in $(seq 1 45); do
     local pid variation
@@ -69,15 +109,233 @@ launch_and_wait() {
   return 1
 }
 
+wait_for_background() {
+  for attempt in $(seq 1 15); do
+    if ! is_foreground; then return 0; fi
+    sleep 1
+  done
+  capture_diagnostics background-failure
+  echo 'ANDROID_BACKGROUND_GATE_FAILED' >&2
+  return 1
+}
+
+resume_and_wait() {
+  adb logcat -c || true
+  timeout 35s adb shell am start -W -n "$package_name/$activity_name" > "$evidence_dir/foreground-resume-launch.txt" 2>&1 || true
+  wait_for_render foreground-resume
+}
+
+assert_export_bridge_smoke() {
+  local smoke_name="pv-android-export-smoke.wav"
+  local smoke_path="/sdcard/Download/PabloVoice/${smoke_name}"
+  local pid socket_name
+
+  pid="$(adb shell pidof "$package_name" 2>/dev/null | tr -d '\r' || true)"
+  if [ -z "$pid" ]; then
+    capture_diagnostics export-smoke-missing-pid
+    echo 'ANDROID_EXPORT_BRIDGE_SMOKE_PID_MISSING' >&2
+    return 1
+  fi
+
+  adb shell rm -f "$smoke_path" >/dev/null 2>&1 || true
+  socket_name="$(adb shell cat /proc/net/unix 2>/dev/null | tr -d '\r' | grep -o "webview_devtools_remote_${pid}" | head -n 1 || true)"
+  if [ -z "$socket_name" ]; then
+    socket_name="$(adb shell cat /proc/net/unix 2>/dev/null | tr -d '\r' | grep -o 'webview_devtools_remote_[^ ]*' | head -n 1 || true)"
+  fi
+  if [ -z "$socket_name" ]; then
+    capture_diagnostics export-smoke-devtools-missing
+    echo 'ANDROID_EXPORT_BRIDGE_DEVTOOLS_SOCKET_MISSING' >&2
+    return 1
+  fi
+
+  adb forward --remove tcp:9222 >/dev/null 2>&1 || true
+  adb forward tcp:9222 "localabstract:${socket_name}" > "$evidence_dir/export-smoke-forward.txt" 2>&1
+  python3 > "$evidence_dir/export-smoke-devtools.txt" <<'PY'
+import base64
+import json
+import os
+import socket
+import struct
+import urllib.request
+
+pages = json.loads(urllib.request.urlopen('http://127.0.0.1:9222/json', timeout=10).read().decode('utf-8'))
+page = next((item for item in pages if item.get('type') == 'page'), pages[0])
+ws_url = page['webSocketDebuggerUrl']
+assert ws_url.startswith('ws://127.0.0.1:9222') or ws_url.startswith('ws://localhost:9222')
+path = '/' + ws_url.split('://', 1)[1].split('/', 1)[1]
+
+key = base64.b64encode(os.urandom(16)).decode('ascii')
+sock = socket.create_connection(('127.0.0.1', 9222), timeout=10)
+sock.sendall((
+    f'GET {path} HTTP/1.1\r\n'
+    'Host: 127.0.0.1:9222\r\n'
+    'Upgrade: websocket\r\n'
+    'Connection: Upgrade\r\n'
+    f'Sec-WebSocket-Key: {key}\r\n'
+    'Sec-WebSocket-Version: 13\r\n\r\n'
+).encode('ascii'))
+response = b''
+while b'\r\n\r\n' not in response:
+    response += sock.recv(4096)
+if b' 101 ' not in response.split(b'\r\n', 1)[0]:
+    raise RuntimeError(response.decode('utf-8', 'replace'))
+
+def send_text(message):
+    payload = message.encode('utf-8')
+    header = bytearray([0x81])
+    if len(payload) < 126:
+        header.append(0x80 | len(payload))
+    elif len(payload) < 65536:
+        header.append(0x80 | 126)
+        header.extend(struct.pack('!H', len(payload)))
+    else:
+        header.append(0x80 | 127)
+        header.extend(struct.pack('!Q', len(payload)))
+    mask = os.urandom(4)
+    header.extend(mask)
+    sock.sendall(bytes(header) + bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload)))
+
+def recv_text():
+    first = sock.recv(2)
+    if len(first) < 2:
+        raise RuntimeError('websocket closed')
+    opcode = first[0] & 0x0F
+    length = first[1] & 0x7F
+    if length == 126:
+        length = struct.unpack('!H', sock.recv(2))[0]
+    elif length == 127:
+        length = struct.unpack('!Q', sock.recv(8))[0]
+    payload = b''
+    while len(payload) < length:
+        payload += sock.recv(length - len(payload))
+    if opcode == 8:
+        raise RuntimeError('websocket close frame')
+    return payload.decode('utf-8')
+
+expression = r"""
+(() => {
+  const bridge = globalThis.PabloVoiceAndroid;
+  if (!bridge || typeof bridge.beginSave !== 'function') throw new Error('BRIDGE_MISSING');
+  const payload = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  if (!bridge.beginSave('pv-android-export-smoke.wav', 'audio/wav')) throw new Error('BEGIN_FAILED');
+  try {
+    if (!bridge.appendBase64(payload)) throw new Error('APPEND_FAILED');
+    if (!bridge.finishSave()) throw new Error('FINISH_FAILED');
+    return 'ANDROID_EXPORT_BRIDGE_SMOKE_PASSED';
+  } catch (error) {
+    try { bridge.abortSave(); } catch (_) {}
+    throw error;
+  }
+})()
+"""
+command = {
+    'id': 1,
+    'method': 'Runtime.evaluate',
+    'params': {
+        'expression': expression,
+        'awaitPromise': True,
+        'returnByValue': True,
+        'timeout': 10000,
+    },
+}
+send_text(json.dumps(command))
+while True:
+    data = json.loads(recv_text())
+    if data.get('id') != 1:
+        continue
+    print(json.dumps(data, sort_keys=True))
+    result = data.get('result', {}).get('result', {})
+    if result.get('subtype') == 'error' or 'exceptionDetails' in data.get('result', {}):
+        raise RuntimeError(json.dumps(data, sort_keys=True))
+    if result.get('value') != 'ANDROID_EXPORT_BRIDGE_SMOKE_PASSED':
+        raise RuntimeError(json.dumps(data, sort_keys=True))
+    break
+PY
+  adb forward --remove tcp:9222 >/dev/null 2>&1 || true
+
+  for attempt in $(seq 1 20); do
+    adb shell ls -l "$smoke_path" > "$evidence_dir/export-smoke-file.txt" 2>&1 && break
+    sleep 1
+  done
+  adb shell content query --uri content://media/external_primary/downloads > "$evidence_dir/export-smoke-mediastore.txt" 2>/dev/null || true
+  if ! grep -q "$smoke_name" "$evidence_dir/export-smoke-file.txt"; then
+    capture_diagnostics export-smoke-file-missing
+    echo 'ANDROID_EXPORT_BRIDGE_MEDIASTORE_FILE_MISSING' >&2
+    return 1
+  fi
+  if ! grep -Eq '[1-9][0-9]*' "$evidence_dir/export-smoke-file.txt"; then
+    capture_diagnostics export-smoke-file-empty
+    echo 'ANDROID_EXPORT_BRIDGE_MEDIASTORE_FILE_EMPTY' >&2
+    return 1
+  fi
+  echo 'ANDROID_EXPORT_BRIDGE_MEDIASTORE_SMOKE_PASSED'
+}
+
+assert_native_package_contract
 launch_and_wait launch-offline
+assert_export_bridge_smoke
+launch_pid="$(cat "$evidence_dir/launch-offline-pid.txt")"
+launch_start_ticks="$(process_start_ticks "$launch_pid")"
+if [ -z "$launch_start_ticks" ]; then
+  echo 'ANDROID_LAUNCH_PROCESS_IDENTITY_MISSING' >&2
+  exit 1
+fi
 adb shell input keyevent KEYCODE_HOME || true
-sleep 2
-launch_and_wait foreground
+wait_for_background
+background_pid="$(adb shell pidof "$package_name" 2>/dev/null | tr -d '\r' || true)"
+if [ -z "$background_pid" ]; then
+  capture_diagnostics background-process-lost
+  echo 'ANDROID_BACKGROUND_PROCESS_LOST' >&2
+  exit 1
+fi
+if [ "$background_pid" != "$launch_pid" ]; then
+  capture_diagnostics background-pid-changed
+  echo "ANDROID_BACKGROUND_PID_CHANGED launch=$launch_pid background=$background_pid" >&2
+  exit 1
+fi
+background_start_ticks="$(process_start_ticks "$background_pid")"
+if [ "$background_start_ticks" != "$launch_start_ticks" ]; then
+  capture_diagnostics background-process-changed
+  echo "ANDROID_BACKGROUND_PROCESS_CHANGED launch_ticks=$launch_start_ticks background_ticks=$background_start_ticks" >&2
+  exit 1
+fi
+printf '%s\n' "$background_pid" > "$evidence_dir/background-pid.txt"
+printf '%s\n' "$background_start_ticks" > "$evidence_dir/background-start-ticks.txt"
+capture_diagnostics background
+
+resume_and_wait
+resume_pid="$(cat "$evidence_dir/foreground-resume-pid.txt")"
+if [ "$resume_pid" != "$launch_pid" ]; then
+  capture_diagnostics foreground-resume-pid-changed
+  echo "ANDROID_RESUME_PID_CHANGED launch=$launch_pid resume=$resume_pid" >&2
+  exit 1
+fi
+resume_start_ticks="$(process_start_ticks "$resume_pid")"
+if [ "$resume_start_ticks" != "$launch_start_ticks" ]; then
+  capture_diagnostics foreground-resume-process-changed
+  echo "ANDROID_RESUME_PROCESS_CHANGED launch_ticks=$launch_start_ticks resume_ticks=$resume_start_ticks" >&2
+  exit 1
+fi
+
+launch_and_wait relaunch
+relaunch_pid="$(cat "$evidence_dir/relaunch-pid.txt")"
+relaunch_start_ticks="$(process_start_ticks "$relaunch_pid")"
+if [ -z "$relaunch_start_ticks" ]; then
+  echo 'ANDROID_RELAUNCH_PROCESS_IDENTITY_MISSING' >&2
+  exit 1
+fi
+if [ "$relaunch_pid" = "$launch_pid" ] && [ "$relaunch_start_ticks" = "$launch_start_ticks" ]; then
+  capture_diagnostics relaunch-process-not-restarted
+  echo "ANDROID_RELAUNCH_PROCESS_NOT_RESTARTED pid=$launch_pid start_ticks=$launch_start_ticks" >&2
+  exit 1
+fi
 
 adb shell uiautomator dump /sdcard/pv-window.xml >/dev/null 2>&1 || true
 adb pull /sdcard/pv-window.xml "$evidence_dir/window.xml" >/dev/null 2>&1 || true
 
 launch_variation="$(cat "$evidence_dir/launch-offline-variation.txt")"
-foreground_variation="$(cat "$evidence_dir/foreground-variation.txt")"
-echo "ANDROID_EMULATOR_NON_MIC_GATE_PASSED launch_variation=$launch_variation foreground_variation=$foreground_variation"
+foreground_variation="$(cat "$evidence_dir/foreground-resume-variation.txt")"
+relaunch_variation="$(cat "$evidence_dir/relaunch-variation.txt")"
+echo "ANDROID_EMULATOR_LIFECYCLE_GATE_PASSED launch_pid=$launch_pid launch_ticks=$launch_start_ticks resume_pid=$resume_pid resume_ticks=$resume_start_ticks relaunch_pid=$relaunch_pid relaunch_ticks=$relaunch_start_ticks launch_variation=$launch_variation foreground_variation=$foreground_variation relaunch_variation=$relaunch_variation"
+echo 'ANDROID_NATIVE_PACKAGE_CONTRACT_EVIDENCE_CAPTURED'
 echo 'MIC_CAPTURE_REQUIRES_PHYSICAL_DEVICE'

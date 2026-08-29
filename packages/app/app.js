@@ -156,12 +156,12 @@ function mixerPanel() {
 }
 
 function trackRow(track) {
-  return `<div class="pv-track ${track.id === state.project.activeTrackId ? 'selected' : ''}"><button class="pv-track-main" data-action="select-track" data-id="${track.id}"><span class="pv-track-icon">${track.kind === 'recording' ? '●' : '♫'}</span><span><b>${esc(track.name)}</b><small>${formatTime(track.duration)} · ${Math.round(track.sampleRate / 1000)} kHz</small></span></button><div class="pv-track-buttons"><button class="${track.muted ? 'on' : ''}" data-action="mute" data-id="${track.id}" aria-label="Mute">M</button><button class="${track.solo ? 'on' : ''}" data-action="solo" data-id="${track.id}" aria-label="Solo">S</button></div><div class="pv-mixer-ranges">${range('trackGain', 'Volume', track.gain, 0, 2, 0.01, `${Math.round(track.gain * 100)}%`, track.id)}${range('pan', 'Pan', track.pan, -1, 1, 0.01, Number(track.pan).toFixed(2), track.id)}</div></div>`;
+  return `<div class="pv-track ${track.id === state.project.activeTrackId ? 'selected' : ''}"><button class="pv-track-main" data-action="select-track" data-id="${track.id}"><span class="pv-track-icon">${track.kind === 'recording' ? '●' : '♫'}</span><span><b>${esc(track.name)}</b><small>${formatTime(track.duration)} · ${Math.round(track.sampleRate / 1000)} kHz</small></span></button><div class="pv-track-buttons"><button class="${track.muted ? 'on' : ''}" data-action="mute" data-id="${track.id}" aria-label="Mute">M</button><button class="${track.solo ? 'on' : ''}" data-action="solo" data-id="${track.id}" aria-label="Solo">S</button><button data-action="export-track" data-id="${track.id}" aria-label="Exportar ${esc(track.name)} processada">⇩</button></div><div class="pv-mixer-ranges">${range('trackGain', 'Volume', track.gain, 0, 2, 0.01, `${Math.round(track.gain * 100)}%`, track.id)}${range('pan', 'Pan', track.pan, -1, 1, 0.01, Number(track.pan).toFixed(2), track.id)}</div></div>`;
 }
 
 function exportPanel() {
   const preset = state.project.preset;
-  return `<article class="pv-card"><div class="pv-card-head"><div><h3>Exportar mix</h3><p>Render real das faixas, cortes, ganho, panorama e efeitos.</p></div><span class="pv-tag">WAV PCM 16-bit</span></div><div class="pv-preset-grid">${Object.entries(EXPORT_PRESETS).map(([key, value]) => `<button class="pv-preset ${preset === key ? 'active' : ''}" data-action="preset" data-value="${key}"><b>${value.label}</b><span>${value.sampleRate / 1000} kHz · pico ${value.peak}</span></button>`).join('')}</div><div class="pv-actions"><button class="pv-btn primary" data-action="export">Renderizar e baixar WAV</button></div><div class="pv-note">MP3, AAC e M4A só serão liberados quando um encoder real estiver incluído. Esta versão não troca a extensão de um WAV para fingir outro formato.</div></article>`;
+  return `<article class="pv-card"><div class="pv-card-head"><div><h3>Exportar áudio processado</h3><p>Render real das faixas, cortes, ganho, panorama, efeitos e tratamentos regionais salvos.</p></div><span class="pv-tag">WAV PCM 16-bit</span></div><div class="pv-preset-grid">${Object.entries(EXPORT_PRESETS).map(([key, value]) => `<button class="pv-preset ${preset === key ? 'active' : ''}" data-action="preset" data-value="${key}"><b>${value.label}</b><span>${value.sampleRate / 1000} kHz · pico ${value.peak}</span></button>`).join('')}</div><div class="pv-actions"><button class="pv-btn primary" data-action="export">Renderizar mix WAV</button>${state.project.tracks.map((track) => `<button class="pv-btn" data-action="export-track" data-id="${track.id}">Exportar ${esc(track.name)}</button>`).join('')}</div><div class="pv-note">Cada faixa é exportada alinhada à timeline e usa o mesmo caminho processado da prévia B. MP3, AAC e M4A continuam bloqueados até existir encoder real.</div></article>`;
 }
 
 function range(key, label, value, min, max, step, display, trackId = '') {
@@ -351,16 +351,34 @@ async function saveCurrent(label = 'Salvamento manual') {
 
 async function exportMix() {
   if (!state.project?.tracks.length) throw new Error('Adicione uma faixa antes de exportar.');
+  const projectBeforeExport = structuredClone(state.project);
   engine.stop(false);
   render();
   const started = performance.now();
-  const buffer = await engine.render(state.project, state.project.preset);
+  const buffer = await engine.render(projectBeforeExport, projectBeforeExport.preset);
   state.lastRenderMs = performance.now() - started;
   const blob = new Blob([encodeWav(buffer)], { type: 'audio/wav' });
-  const filename = `${state.project.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice'}-${state.project.preset}.wav`;
+  const projectName = projectBeforeExport.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice';
+  const filename = `${projectName}-${projectBeforeExport.preset}.wav`;
   await saveBlob(blob, filename);
-  await saveCurrent('Exportação WAV');
   toast(`WAV exportado · ${formatTime(buffer.duration)} · ${Math.round(buffer.sampleRate / 1000)} kHz`, 'ok');
+}
+
+async function exportTrack(trackId) {
+  if (!state.project?.tracks.length) throw new Error('Adicione uma faixa antes de exportar.');
+  const projectBeforeExport = structuredClone(state.project);
+  const track = projectBeforeExport.tracks.find((candidate) => candidate.id === trackId);
+  if (!track) throw new Error('Faixa inválida para exportação.');
+  engine.stop(false);
+  render();
+  const started = performance.now();
+  const buffer = await engine.renderTrack(projectBeforeExport, track.id, projectBeforeExport.preset);
+  state.lastRenderMs = performance.now() - started;
+  const blob = new Blob([encodeWav(buffer)], { type: 'audio/wav' });
+  const projectName = projectBeforeExport.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'PabloVoice';
+  const trackName = track.name.replace(/[^\p{L}\p{N}_-]+/gu, '_') || 'Faixa';
+  await saveBlob(blob, `${projectName}-${trackName}-${projectBeforeExport.preset}.wav`);
+  toast(`Faixa processada exportada · ${track.name} · ${formatTime(buffer.duration)}`, 'ok');
 }
 
 async function saveBlob(blob, filename) {
@@ -597,6 +615,7 @@ document.addEventListener('click', (event) => {
   else if (action === 'stop') { state.cursor = 0; engine.stop(false); render(); }
   else if (action === 'save') withBusy('save', () => saveCurrent());
   else if (action === 'export') withBusy('export', exportMix);
+  else if (action === 'export-track') withBusy('export-track', () => exportTrack(id));
   else if (action === 'studio-tab') { state.studioTab = value; render(); }
   else if (action === 'ab') { state.playbackMode = value; render(); restartPreview(); }
   else if (action === 'effect') { const track = activeTrack(); updateTrack(track.id, (item) => { item.effects[value] = !item.effects[value]; }); render(); }

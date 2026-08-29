@@ -8,7 +8,7 @@ import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
 import { replaceBreathAutomation } from './audio/src/voice/breath-intelligence.mjs';
 import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
 import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
-import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
+import { clearPmiPendingDraft, executePabloAudioMessage } from './pablo-conversation-audio.mjs';
 
 const analysisCache = new Map();
 const remoteAuth = new RemoteAuthAdapter();
@@ -172,6 +172,7 @@ async function applyPmiGeneratedDraft(text, mode = 'replace') {
   const label = mode === 'append' ? 'Rascunho PMI adicionado à letra' : 'Rascunho PMI usado como letra';
   const saved = snapshotProject(project, label);
   await persistProject(saved);
+  clearPmiPendingDraft(saved.id);
   const lyrics = document.querySelector('#lyrics');
   if (lyrics) lyrics.value = saved.lyrics;
   return true;
@@ -263,7 +264,9 @@ async function submitMessage(form) {
     if (result?.supported) {
       appendMessage(formatResult(result), 'assistant', result);
       if (result.kind === 'deterministic_edit' && result.canApply) {
-        appendMessage('A edição determinística foi aplicada e salva. Reabra o Studio para ouvir a prévia atualizada.', 'assistant');
+        appendMessage(result.domain === 'beat_lab'
+          ? 'A alteração do Beat Lab foi salva como revisão reversível.'
+          : 'A edição determinística foi aplicada e salva. Reabra o Studio para ouvir a prévia atualizada.', 'assistant');
       }
       if (result.tool === 'soften_breaths' && result.canApply) {
         const applied = await applyBreathAutomation(result, context.trackId);
@@ -312,6 +315,7 @@ function appendMessage(text, role, result = null) {
   message.textContent = text;
   let metaText = '';
   if (result?.data?.decision) metaText = `confiança: ${Math.round((result.data.confidence || 0) * 100)}% · ${result.data.decision}`;
+  else if (result?.domain === 'beat_lab') metaText = `Beat Lab · ${result.canApply ? 'salvo' : 'prévia segura'}`;
   else if (result?.kind === 'pmi_music_session') metaText = 'PMI Music 1.0 · direção criativa local';
   else if (result?.kind === 'pmi_authorial_feedback') metaText = `PMI · memória autoral${result.canApply ? ' salva' : ' em prévia'}`;
   else if (result?.kind === 'pmi_generated_draft') metaText = `PMI → Composer · ${result.provider || 'IA remota'}${result.model ? ` · ${result.model}` : ''} · revisar antes de usar`;
@@ -354,7 +358,10 @@ function formatResult(result) {
   if (['pmi_music_session', 'pmi_authorial_feedback', 'pmi_generation_request', 'pmi_generation_blocked', 'pmi_generated_draft'].includes(result.kind)) {
     return result.reply || result.text || 'Entendi sua direção criativa.';
   }
-  if (result.kind === 'deterministic_edit') return result.canApply ? 'Entendi e apliquei a edição reversível no projeto.' : 'Entendi a edição, mas mantive somente como prévia.';
+  if (result.kind === 'deterministic_edit') {
+    if (result.domain === 'beat_lab' && String(result.reply || '').trim()) return String(result.reply).trim();
+    return result.canApply ? 'Entendi e apliquei a edição reversível no projeto.' : 'Entendi a edição, mas mantive somente como prévia.';
+  }
   if (!result.result?.ok) return `Não consegui usar essa análise: ${result.result?.reason || 'dados insuficientes'}.`;
   const data = result.result.data || {};
   if (result.tool === 'inspect_audio') {

@@ -1,4 +1,6 @@
-export const PROJECT_SCHEMA_VERSION = 5;
+import { createArrangementMap, normalizeArrangementMap } from './section-map.mjs';
+
+export const PROJECT_SCHEMA_VERSION = 9;
 
 export const DEFAULT_EFFECTS = Object.freeze({
   clean: true,
@@ -35,6 +37,7 @@ export function createProject(name = 'Minha ideia', now = Date.now()) {
     notes: '',
     preset: 'demo',
     authorialMemory: null,
+    arrangementMap: createArrangementMap(now),
     revisions: [],
     appVersion: '2.4.0-rc.1',
   };
@@ -82,6 +85,7 @@ export function migrateProject(input) {
   project.notes = String(project.notes || '');
   project.preset = ['music', 'demo', 'podcast', 'video', 'streaming'].includes(project.preset) ? project.preset : 'demo';
   project.authorialMemory = normalizeAuthorialMemory(project.authorialMemory);
+  project.arrangementMap = normalizeArrangementMap(project.arrangementMap || createArrangementMap(project.createdAt));
   return project;
 }
 
@@ -123,6 +127,8 @@ export function snapshotProject(project, label = 'Salvamento') {
     lyrics: clean.lyrics,
     preset: clean.preset,
     authorialMemory: clean.authorialMemory ? structuredClone(clean.authorialMemory) : null,
+    arrangementMap: structuredClone(clean.arrangementMap),
+    beatLab: clean.beatLab ? structuredClone(clean.beatLab) : null,
   };
   clean.revisions = [...clean.revisions, revision].slice(-40);
   clean.updatedAt = revision.at;
@@ -136,6 +142,7 @@ export function validateProject(input) {
   if (!input.name) errors.push('Nome do projeto ausente.');
   if (!Array.isArray(input.tracks)) errors.push('Tracks inválidas.');
   if (input.authorialMemory != null && typeof input.authorialMemory !== 'object') errors.push('Memória autoral inválida.');
+  if (input.arrangementMap != null && typeof input.arrangementMap !== 'object') errors.push('Mapa de seções inválido.');
   for (const track of input.tracks || []) {
     if (!track.id || !track.assetId) errors.push('Track sem ID ou arquivo.');
     if (finite(track.trimStart, 0) > finite(track.trimEnd, 0)) errors.push(`Trim invertido em ${track.name || track.id}.`);
@@ -170,16 +177,80 @@ function normalizeRegionAutomation(input, duration) {
   return input.map((event, index) => {
     const start = clamp(finite(event?.startSeconds ?? event?.start, 0), 0, duration);
     const end = clamp(finite(event?.endSeconds ?? event?.end, start), start, duration);
-    return {
+    const kind = String(event?.kind || 'gain');
+    const isEq = kind === 'high_shelf' || kind === 'peaking_eq';
+    const normalized = {
       id: String(event?.id || `region_${index}`),
-      kind: String(event?.kind || 'gain'),
+      kind,
       startSeconds: start,
       endSeconds: end,
-      gainDb: clamp(finite(event?.gainDb ?? event?.reductionDb, 0), -60, 12),
+      gainDb: clamp(finite(event?.gainDb ?? event?.reductionDb, 0), isEq ? -12 : -60, 12),
       confidence: clamp(finite(event?.confidence, 0), 0, 1),
       source: String(event?.source || 'manual'),
       enabled: event?.enabled !== false,
     };
+    if (kind === 'high_shelf') {
+      normalized.frequencyHz = clamp(finite(event?.frequencyHz, 6500), 2500, 14000);
+      normalized.q = clamp(finite(event?.q, 1), 0.2, 4);
+    }
+    if (kind === 'peaking_eq') {
+      normalized.frequencyHz = clamp(finite(event?.frequencyHz, 220), 80, 12000);
+      normalized.q = clamp(finite(event?.q, 0.82), 0.35, 6);
+    }
+    if (kind === 'compressor') {
+      normalized.thresholdDb = clamp(finite(event?.thresholdDb, -18), -36, -6);
+      normalized.ratio = clamp(finite(event?.ratio, 2.2), 1, 6);
+      normalized.kneeDb = clamp(finite(event?.kneeDb, 6), 0, 20);
+      normalized.attackSeconds = clamp(finite(event?.attackSeconds, 0.006), 0.001, 0.08);
+      normalized.releaseSeconds = clamp(finite(event?.releaseSeconds, 0.12), 0.03, 0.8);
+    }
+    if (kind === 'vocal_denoise') {
+      const rawReductionDb = Number(event?.reductionDb);
+      const rawThresholdDb = Number(event?.thresholdDb);
+      const rawVoicedLevelDb = Number(event?.voicedLevelDb);
+      const rawSnrDb = Number(event?.snrDb);
+      normalized.thresholdDb = clamp(finite(event?.thresholdDb, -42), -72, -18);
+      normalized.reductionDb = clamp(finite(event?.reductionDb, 3), 0, 5.5);
+      normalized.attackSeconds = clamp(finite(event?.attackSeconds, 0.008), 0.003, 0.03);
+      normalized.releaseSeconds = clamp(finite(event?.releaseSeconds, 0.12), 0.06, 0.28);
+      normalized.noiseFloorDb = clamp(finite(event?.noiseFloorDb, -48), -90, -18);
+      normalized.voicedLevelDb = clamp(finite(event?.voicedLevelDb, -18), -60, 0);
+      normalized.snrDb = clamp(finite(event?.snrDb, 12), 0, 60);
+      normalized.voicedMarginDb = clamp(finite(event?.voicedMarginDb, 10), 0, 60);
+      normalized.timbreProtected = event?.timbreProtected === true
+        && rawReductionDb > 0
+        && rawReductionDb <= 5.5
+        && rawThresholdDb >= -72
+        && rawThresholdDb <= -18
+        && rawVoicedLevelDb >= -60
+        && rawVoicedLevelDb <= 0
+        && rawVoicedLevelDb - rawThresholdDb >= 10
+        && rawSnrDb >= 5.5
+        && rawSnrDb <= 29
+        && event?.guardSource === 'bounded-vocal-timbre-guard-v1';
+      normalized.guardSource = String(event?.guardSource || 'bounded-vocal-timbre-guard-v1');
+    }
+    if (kind === 'vocal_dereverb') {
+      const rawDelayMs = Number(event?.reflectionDelayMs);
+      const rawAmount = Number(event?.amount);
+      const rawCorrelation = Number(event?.correlation);
+      const rawProminence = Number(event?.prominence);
+      normalized.reflectionDelayMs = clamp(finite(event?.reflectionDelayMs, 36), 18, 90);
+      normalized.amount = clamp(finite(event?.amount, 0.1), 0, 0.2);
+      normalized.dampingHz = clamp(finite(event?.dampingHz, 5200), 2800, 6500);
+      normalized.correlation = clamp(finite(event?.correlation, 0), 0, 1);
+      normalized.prominence = clamp(finite(event?.prominence, 0), 0, 1);
+      normalized.timbreProtected = event?.timbreProtected === true
+        && rawDelayMs >= 18
+        && rawDelayMs <= 90
+        && rawAmount > 0
+        && rawAmount <= 0.2
+        && rawCorrelation >= 0.1
+        && rawProminence >= 0.04
+        && event?.guardSource === 'bounded-vocal-timbre-guard-v1';
+      normalized.guardSource = String(event?.guardSource || 'bounded-vocal-timbre-guard-v1');
+    }
+    return normalized;
   }).filter((event) => event.endSeconds > event.startSeconds);
 }
 

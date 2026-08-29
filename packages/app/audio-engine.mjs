@@ -1,11 +1,24 @@
 import { EXPORT_PRESETS, normalizationFactor, peakOf } from './audio/src/presets.mjs';
 import { regionGainEnvelope } from './audio/src/automation/region-gain.mjs';
+import {
+  regionalHighShelfEvents,
+  highShelfAutomationPoints,
+  regionalPeakingEqEvents,
+  peakingEqAutomationPoints,
+} from './audio/src/automation/region-eq.mjs';
+import { regionalCompressorEvents, compressorAutomationPoints } from './audio/src/automation/region-dynamics.mjs';
 import { sourceRegionsToTrackTime } from './audio/src/automation/region-time.mjs';
+import {
+  cloneWithVocalRestoration,
+  restorationEventFingerprint,
+} from './audio/src/automation/region-restoration.mjs';
+import { prepareAudioExport } from './core/src/audio-export.mjs';
 
 export class PabloAudioEngine {
   constructor() {
     this.context = null;
     this.buffers = new Map();
+    this.restorationBuffers = new Map();
     this.sources = [];
     this.playing = false;
     this.startedAt = 0;
@@ -26,12 +39,13 @@ export class PabloAudioEngine {
     const started = performance.now();
     const buffer = await context.decodeAudioData(await blob.arrayBuffer());
     this.buffers.set(trackId, buffer);
+    this.restorationBuffers.delete(trackId);
     return { buffer, decodeMs: performance.now() - started };
   }
 
-  setBuffer(trackId, buffer) { this.buffers.set(trackId, buffer); }
+  setBuffer(trackId, buffer) { this.buffers.set(trackId, buffer); this.restorationBuffers.delete(trackId); }
   getBuffer(trackId) { return this.buffers.get(trackId) || null; }
-  removeBuffer(trackId) { this.buffers.delete(trackId); }
+  removeBuffer(trackId) { this.buffers.delete(trackId); this.restorationBuffers.delete(trackId); }
 
   duration(project) {
     return Math.max(0, ...(project?.tracks || []).map((track) => {
@@ -55,7 +69,9 @@ export class PabloAudioEngine {
     const master = createMaster(context, context.destination);
     const when = context.currentTime + 0.025;
     for (const track of tracks) {
-      const sources = createTrackSources(context, this.buffers.get(track.id), track, mode, start, when, master);
+      const original = this.buffers.get(track.id);
+      const buffer = mode === 'processed' ? this.restoredBuffer(context, track, original) : original;
+      const sources = createTrackSources(context, buffer, track, mode, start, when, master);
       this.sources.push(...sources);
     }
     if (!this.sources.length) throw new Error('O cursor está depois do fim das faixas.');
@@ -96,33 +112,60 @@ export class PabloAudioEngine {
   }
 
   async render(project, presetName = 'demo') {
-    const tracks = audibleTracks(project).filter((track) => this.buffers.has(track.id));
-    if (!tracks.length) throw new Error('Nenhuma faixa disponível para exportação.');
+    const exportProject = prepareAudioExport(project, { hasBuffer: (trackId) => this.buffers.has(trackId) });
+    const tracks = audibleTracks(exportProject);
     const preset = EXPORT_PRESETS[presetName] || EXPORT_PRESETS.demo;
-    const duration = Math.max(0.02, this.duration(project));
+    const duration = Math.max(0.02, this.duration(exportProject));
     const channels = Math.max(1, Math.min(2, Math.max(...tracks.map((track) => this.buffers.get(track.id).numberOfChannels))));
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(channels, frames, preset.sampleRate);
     const master = createMaster(offline, offline.destination);
-    for (const track of tracks) createTrackSources(offline, this.buffers.get(track.id), track, 'processed', 0, 0, master);
+    for (const track of tracks) {
+      const buffer = this.restoredBuffer(offline, track, this.buffers.get(track.id));
+      createTrackSources(offline, buffer, track, 'processed', 0, 0, master);
+    }
     const rendered = await offline.startRendering();
     normalizeInPlace(rendered, preset.peak);
     return rendered;
   }
 
   async renderTrack(project, trackId, presetName = 'demo') {
-    const track = (project?.tracks || []).find((candidate) => candidate.id === trackId);
+    const exportProject = prepareAudioExport(project, {
+      hasBuffer: (candidateId) => this.buffers.has(candidateId),
+      trackId,
+    });
+    const track = (exportProject.tracks || []).find((candidate) => candidate.id === trackId);
     const buffer = track && this.buffers.get(track.id);
     if (!track || !buffer) throw new Error('Faixa não disponível para exportação.');
     const preset = EXPORT_PRESETS[presetName] || EXPORT_PRESETS.demo;
-    const duration = Math.max(0.02, this.duration(project));
+    const duration = Math.max(0.02, this.duration(exportProject));
     const frames = Math.ceil(duration * preset.sampleRate);
     const offline = new OfflineAudioContext(2, frames, preset.sampleRate);
-    createTrackSources(offline, buffer, track, 'processed', 0, 0, offline.destination);
+    createTrackSources(offline, this.restoredBuffer(offline, track, buffer), track, 'processed', 0, 0, offline.destination);
     const rendered = await offline.startRendering();
     const peak = peakOf(rendered);
     if (peak > 1.0001) throw new Error(`A faixa “${track.name || track.id}” ultrapassa 0 dBFS. Abaixe o ganho antes de exportar stems.`);
     return rendered;
+  }
+
+  restoredBuffer(context, track, original) {
+    const fingerprint = restorationEventFingerprint(track?.regionAutomation || []);
+    if (fingerprint === '[]') return original;
+    const cached = this.restorationBuffers.get(track.id);
+    if (cached?.original === original && cached.fingerprint === fingerprint) return cached.buffer;
+    const restored = cloneWithVocalRestoration(context, original, track.regionAutomation);
+    this.restorationBuffers.set(track.id, { original, fingerprint, buffer: restored.buffer });
+    if (restored.applied && typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
+      globalThis.dispatchEvent(new CustomEvent('pablovoice:vocal-restoration-rendered', {
+        detail: {
+          trackId: track.id,
+          denoiseCount: restored.denoiseCount,
+          dereverbCount: restored.dereverbCount,
+          source: 'local-vocal-restoration-dsp-v1',
+        },
+      }));
+    }
+    return restored.buffer;
   }
 }
 
@@ -182,6 +225,9 @@ function createTrackSources(context, buffer, track, mode, cursor, baseWhen, dest
 
 function connectTreatment(context, input, buffer, track, mode, when, localCursor, duration) {
   const effects = track.effects || {};
+  const localRegions = mode === 'processed' && Array.isArray(track.regionAutomation) && track.regionAutomation.length
+    ? sourceRegionsToTrackTime(track, track.regionAutomation)
+    : [];
   let node = input;
   if (mode === 'processed') {
     if (effects.clean) {
@@ -209,6 +255,10 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
       node.connect(shaper);
       node = shaper;
     }
+    if (localRegions.length) {
+      node = connectRegionalEq(context, node, localRegions, when, localCursor, duration);
+      node = connectRegionalDynamics(context, node, localRegions, when, localCursor, duration);
+    }
   }
   const gain = context.createGain();
   const normalize = mode === 'processed' && effects.normalize ? normalizationFactor(buffer) : 1;
@@ -216,9 +266,8 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
   automateGain(gain.gain, level, mode === 'processed' ? effects : {}, when, localCursor, duration);
   node.connect(gain);
   node = gain;
-  if (mode === 'processed' && Array.isArray(track.regionAutomation) && track.regionAutomation.length) {
+  if (localRegions.some((event) => String(event?.kind || 'gain') === 'gain')) {
     const regional = context.createGain();
-    const localRegions = sourceRegionsToTrackTime(track, track.regionAutomation);
     automateRegions(regional.gain, localRegions, when, localCursor, duration);
     node.connect(regional);
     node = regional;
@@ -228,6 +277,57 @@ function connectTreatment(context, input, buffer, track, mode, when, localCursor
     pan.pan.value = Math.max(-1, Math.min(1, Number(track.pan || 0)));
     node.connect(pan);
     node = pan;
+  }
+  return node;
+}
+
+function connectRegionalEq(context, input, events, when, cursor, duration) {
+  let node = input;
+  for (const event of regionalHighShelfEvents(events, cursor, duration)) {
+    node = connectRegionalBiquad(context, node, event, 'highshelf', highShelfAutomationPoints(event, cursor, duration), when, cursor);
+  }
+  for (const event of regionalPeakingEqEvents(events, cursor, duration)) {
+    node = connectRegionalBiquad(context, node, event, 'peaking', peakingEqAutomationPoints(event, cursor, duration), when, cursor);
+  }
+  return node;
+}
+
+function connectRegionalBiquad(context, input, event, type, points, when, cursor) {
+  const eq = context.createBiquadFilter();
+  eq.type = type;
+  eq.frequency.value = event.frequencyHz;
+  eq.Q.value = event.q ?? 1;
+  eq.gain.setValueAtTime(0, when);
+  for (const point of points) {
+    const at = when + Math.max(0, point.time - cursor);
+    if (point.time <= cursor + 0.000001) eq.gain.setValueAtTime(point.value, when);
+    else eq.gain.linearRampToValueAtTime(point.value, at);
+  }
+  input.connect(eq);
+  return eq;
+}
+
+function connectRegionalDynamics(context, input, events, when, cursor, duration) {
+  let node = input;
+  for (const event of regionalCompressorEvents(events, cursor, duration)) {
+    const value = context.createDynamicsCompressor();
+    value.knee.value = event.kneeDb;
+    value.attack.value = event.attackSeconds;
+    value.release.value = event.releaseSeconds;
+    value.threshold.setValueAtTime(0, when);
+    value.ratio.setValueAtTime(1, when);
+    for (const point of compressorAutomationPoints(event, cursor, duration)) {
+      const at = when + Math.max(0, point.time - cursor);
+      if (point.time <= cursor + 0.000001) {
+        value.threshold.setValueAtTime(point.thresholdDb, when);
+        value.ratio.setValueAtTime(point.ratio, when);
+      } else {
+        value.threshold.linearRampToValueAtTime(point.thresholdDb, at);
+        value.ratio.linearRampToValueAtTime(point.ratio, at);
+      }
+    }
+    node.connect(value);
+    node = value;
   }
   return node;
 }

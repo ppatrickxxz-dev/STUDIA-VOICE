@@ -1,0 +1,63 @@
+{
+  "schema": "pablovoice_b09_standalone_readiness_v1",
+  "observed_at": "2026-08-28",
+  "scope": "standalone_stems_route_readiness",
+  "source_pr": 29,
+  "safe_promotion_pr": 37,
+  "safe_promotion_commit": "2d5585ccbb2fba364f362659e68f0b36ed7053c9",
+  "pr29_gates": {
+    "web_and_contracts": "success",
+    "browser_gate": "success",
+    "android_build": "success",
+    "android_emulator": "success"
+  },
+  "deployment": {
+    "supabase_project": "yokmhqoncdwvxmzzybqa",
+    "project_health": "ACTIVE_HEALTHY",
+    "dispatcher": {
+      "slug": "compute-kaggle-v54",
+      "status": "ACTIVE",
+      "version": 3,
+      "verify_jwt": true,
+      "ezbr_sha256": "68503d4f102657f26beab6f37d2761f777f0715b771f940d44fb0e2f7ef749d0",
+      "standalone_marker": "compute-kaggle-v54:standalone-stems-v1",
+      "worker_slug": "kaggle-worker-source-v56"
+    },
+    "worker": {
+      "slug": "kaggle-worker-source-v56",
+      "status": "ACTIVE",
+      "version": 3,
+      "ezbr_sha256": "4c9108068e1d3a04381c2c67867da04f0914ab1638701290c8eea5497fa9a11e",
+      "engine": "Demucs",
+      "model": "htdemucs",
+      "demucs_version": "4.0.1",
+      "proof_gates": [
+        "source SHA-256 must match ticket",
+        "vocal and instrumental objects must exist",
+        "vocal SHA-256 must differ from source",
+        "instrumental SHA-256 must differ from source",
+        "vocal and instrumental SHA-256 must differ from each other",
+        "both outputs must exceed 4096 bytes"
+      ]
+    },
+    "completion": {
+      "slug": "complete-kaggle-stems-job",
+      "status": "ACTIVE",
+      "version": 1,
+      "ezbr_sha256": "ca3b17ffb9d5326ac090bee4ba748e701780eebd23b62572f5df166559b1ae54",
+      "persists_independent_assets": ["guide_vocal", "instrumental"],
+      "final_job_engine": "kaggle_ticketed"
+    }
+  },
+  "database_observation": {
+    "standalone_completed_stems_job_found": false,
+    "required_terminal_evidence": "one completed render_jobs row with job_type='stems', proof.verified=true, and two independent persisted output assets with distinct SHA-256 hashes"
+  },
+  "classification": {
+    "engine_evidence": "validated",
+    "standalone_transport_readiness": "validated_to_live_canary_boundary",
+    "standalone_route_validated": false,
+    "b09_pass": false,
+    "physical_android_approval": false
+  }
+}

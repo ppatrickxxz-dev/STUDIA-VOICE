@@ -17,7 +17,10 @@ export {
   planComposerGeneration,
   isExplicitGenerationRequest,
 } from './generator-adapter.mjs';
-export { planPendingDraftRevision } from './draft-revision.mjs';
+export {
+  planPendingDraftRevision,
+  normalizePendingDraft,
+} from './draft-revision.mjs';
 export {
   startCompositionSession,
   critiqueDraft,
