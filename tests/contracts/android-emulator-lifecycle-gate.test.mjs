@@ -25,3 +25,16 @@ test('Android lifecycle evidence fails closed and reports all three rendered sta
   assert.match(gate, /launch_variation=.*foreground_variation=.*relaunch_variation=/);
   assert.match(gate, /MIC_CAPTURE_REQUIRES_PHYSICAL_DEVICE/);
 });
+
+test('Android emulator gate captures installed native package contract before lifecycle', () => {
+  assert.match(gate, /assert_native_package_contract/);
+  assert.match(gate, /package-contract\.txt/);
+  assert.match(gate, /package-appops\.txt/);
+  assert.match(gate, /android\.permission\.RECORD_AUDIO/);
+  assert.match(gate, /ANDROID_NATIVE_RECORD_AUDIO_PERMISSION_MISSING/);
+  assert.match(gate, /ANDROID_NATIVE_RECORD_AUDIO_PERMISSION_NOT_GRANTED/);
+  assert.match(gate, /ANDROID_NATIVE_MAIN_ACTIVITY_MISSING/);
+  assert.match(gate, /ANDROID_NATIVE_AUDIO_IMPORT_ENTRYPOINT_MISSING/);
+  assert.match(gate, /ANDROID_NATIVE_PACKAGE_CONTRACT_PASSED/);
+  assert.match(gate, /ANDROID_NATIVE_PACKAGE_CONTRACT_EVIDENCE_CAPTURED/);
+});
