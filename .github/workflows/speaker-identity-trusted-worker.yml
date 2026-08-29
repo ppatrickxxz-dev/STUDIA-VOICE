@@ -1,0 +1,182 @@
+name: Trusted speaker identity worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/speaker-identity-trusted-worker.yml'
+      - 'supabase/functions/test-voice-v71-identity-once/**'
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: pablovoice-speaker-identity-worker
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  IDENTITY_CANARY_CANDIDATE_ID: 6f4ade75-6106-4a28-ae52-d0d9e89af00a
+  MODEL: speechbrain/spkrec-ecapa-voxceleb
+  MODEL_REVISION: b8937e0343bf9fc9741ab12b445b86a93a6e3e25
+  ENGINE_VERSION: speechbrain-1.0.3
+  THRESHOLD: '0.8'
+
+jobs:
+  speaker-identity:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire repository OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          printf 'PV_OIDC_TOKEN=%s\n' "$OIDC_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Dispatch canonical identity canary
+        if: github.event_name != 'schedule'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SESSION_RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $PV_OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          USER_TOKEN="$(printf '%s' "$SESSION_RESPONSE" | jq -er '.session.access_token')"
+          echo "::add-mask::$USER_TOKEN"
+          mkdir -p test-results/speaker-identity
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
+            -H "Authorization: Bearer $USER_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "{\"action\":\"dispatch\",\"candidate_asset_id\":\"$IDENTITY_CANARY_CANDIDATE_ID\"}")"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/speaker-identity/dispatch.json
+          printf '%s' "$RESPONSE" | jq -e '.ok == true and .status == "waiting_trusted_worker" and .trusted_authority == "github_repository_oidc"' >/dev/null
+
+      - name: Claim one pending attestation
+        id: claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/speaker-identity
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
+            -H "Authorization: Bearer $PV_OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"worker_claim"}')"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/speaker-identity/claim.json
+          if [ "$(printf '%s' "$RESPONSE" | jq -r '.job // empty')" = "" ]; then
+            echo 'has_job=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'has_job=true' >> "$GITHUB_OUTPUT"
+          printf 'JOB_ID=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.id')" >> "$GITHUB_ENV"
+          printf 'CANDIDATE_URL=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.candidate_url')" >> "$GITHUB_ENV"
+          printf 'REFERENCE_URL=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.reference_url')" >> "$GITHUB_ENV"
+          printf 'CANDIDATE_SHA=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.candidate_sha256')" >> "$GITHUB_ENV"
+          printf 'REFERENCE_SHA=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.reference_sha256')" >> "$GITHUB_ENV"
+          printf 'REFERENCE_ID=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.reference_id')" >> "$GITHUB_ENV"
+          printf 'VOICE_MODEL_ID=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.voice_model_id')" >> "$GITHUB_ENV"
+
+      - name: Install deterministic speaker verification runtime
+        if: steps.claim.outputs.has_job == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-input \
+            'speechbrain==1.0.3' 'huggingface_hub>=0.25,<1' 'soundfile>=0.12,<1'
+
+      - name: Download and verify bound artifacts
+        if: steps.claim.outputs.has_job == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error -L "$CANDIDATE_URL" -o /tmp/pv-candidate.bin
+          curl --fail-with-body --silent --show-error -L "$REFERENCE_URL" -o /tmp/pv-reference.bin
+          test "$(sha256sum /tmp/pv-candidate.bin | awk '{print $1}')" = "$CANDIDATE_SHA"
+          test "$(sha256sum /tmp/pv-reference.bin | awk '{print $1}')" = "$REFERENCE_SHA"
+          test "$CANDIDATE_SHA" != "$REFERENCE_SHA"
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/pv-candidate.bin -ar 16000 -ac 1 -c:a pcm_s16le /tmp/pv-candidate.wav
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/pv-reference.bin -ar 16000 -ac 1 -c:a pcm_s16le /tmp/pv-reference.wav
+
+      - name: Score with pinned ECAPA model
+        if: steps.claim.outputs.has_job == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, torch, torchaudio
+          from huggingface_hub import snapshot_download
+          from speechbrain.inference.speaker import EncoderClassifier
+
+          revision=os.environ['MODEL_REVISION']
+          local=snapshot_download(repo_id=os.environ['MODEL'], revision=revision)
+          model=EncoderClassifier.from_hparams(source=local, savedir='/tmp/pv-ecapa', run_opts={'device':'cpu'})
+          c,_=torchaudio.load('/tmp/pv-candidate.wav')
+          r,_=torchaudio.load('/tmp/pv-reference.wav')
+          with torch.no_grad():
+              ce=model.encode_batch(c).reshape(-1)
+              re=model.encode_batch(r).reshape(-1)
+              score=float(torch.nn.functional.cosine_similarity(ce.unsqueeze(0),re.unsqueeze(0)).item())
+          score=max(-1.0,min(1.0,score))
+          threshold=float(os.environ['THRESHOLD'])
+          out={'score':score,'passed':score>=threshold,'device':'cpu','model_revision':revision}
+          with open('test-results/speaker-identity/score.json','w') as f: json.dump(out,f,indent=2)
+          print(json.dumps(out))
+          PY
+
+      - name: Persist trusted completion
+        if: steps.claim.outputs.has_job == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCORE="$(jq -er '.score' test-results/speaker-identity/score.json)"
+          PASSED="$(jq -er '.passed' test-results/speaker-identity/score.json)"
+          BODY="$(jq -nc \
+            --arg action complete \
+            --arg job_id "$JOB_ID" \
+            --arg csha "$CANDIDATE_SHA" \
+            --arg rsha "$REFERENCE_SHA" \
+            --arg reference_id "$REFERENCE_ID" \
+            --arg voice_model_id "$VOICE_MODEL_ID" \
+            --arg engine "$MODEL" \
+            --arg engine_version "$ENGINE_VERSION" \
+            --arg model_revision "$MODEL_REVISION" \
+            --argjson score "$SCORE" \
+            --argjson passed "$PASSED" \
+            '{action:$action,job_id:$job_id,candidate_sha256:$csha,reference_sha256:$rsha,reference_id:$reference_id,voice_model_id:$voice_model_id,engine:$engine,engine_version:$engine_version,model_revision:$model_revision,score:$score,passed:$passed,device:"cpu"}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
+            -H "Authorization: Bearer $PV_OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/speaker-identity/completion.json
+          printf '%s' "$RESPONSE" | jq -e '.ok == true and .proof.verified == true and .proof.authority == "github_repository_oidc"' >/dev/null
+
+      - name: Retain identity evidence
+        if: always() && steps.claim.outputs.has_job == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaker-identity-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/speaker-identity
+          if-no-files-found: error
+          retention-days: 30
