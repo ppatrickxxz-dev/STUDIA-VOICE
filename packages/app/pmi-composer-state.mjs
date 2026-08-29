@@ -26,18 +26,21 @@ export function normalizePmiComposerState(value = {}, currentLyrics = '') {
   });
 }
 
-export async function loadPmiComposerState(projectId = '', currentLyrics = '', { read = defaultReadSetting, write = defaultWriteSetting } = {}) {
+export async function loadPmiComposerState(projectId = '', currentLyrics = '', storage = {}) {
   const key = composerStateKey(projectId);
   if (!key) return null;
+  const read = typeof storage.read === 'function' ? storage.read : defaultReadSetting;
+  const remove = resolveRemove(storage);
   const raw = await read(key, null);
   const normalized = normalizePmiComposerState(raw, currentLyrics);
-  if (!normalized && raw != null) await write(key, null);
+  if (!normalized && raw != null) await remove(key);
   return normalized;
 }
 
-export async function savePmiComposerState(projectId = '', value = {}, { write = defaultWriteSetting } = {}) {
+export async function savePmiComposerState(projectId = '', value = {}, storage = {}) {
   const key = composerStateKey(projectId);
   if (!key) return null;
+  const write = typeof storage.write === 'function' ? storage.write : defaultWriteSetting;
   const baseLyrics = String(value?.baseLyrics ?? '').slice(0, MAX_DRAFT_CHARS);
   const normalized = normalizePmiComposerState({ ...value, savedAt: Date.now() }, baseLyrics);
   if (!normalized) throw new TypeError('Estado pendente do Composer inválido.');
@@ -45,10 +48,10 @@ export async function savePmiComposerState(projectId = '', value = {}, { write =
   return normalized;
 }
 
-export async function clearPmiComposerState(projectId = '', { write = defaultWriteSetting } = {}) {
+export async function clearPmiComposerState(projectId = '', storage = {}) {
   const key = composerStateKey(projectId);
   if (!key) return false;
-  await write(key, null);
+  await resolveRemove(storage)(key);
   return true;
 }
 
@@ -67,6 +70,12 @@ export function applyConfirmedPmiDraft(project, confirmation = {}, snapshot) {
   return snapshot(next, label);
 }
 
+function resolveRemove(storage = {}) {
+  if (typeof storage.remove === 'function') return storage.remove;
+  if (typeof storage.write === 'function') return (key) => storage.write(key, null);
+  return defaultDeleteSetting;
+}
+
 async function defaultReadSetting(key, fallback = null) {
   const { getSetting } = await import('./storage.mjs');
   return getSetting(key, fallback);
@@ -75,6 +84,11 @@ async function defaultReadSetting(key, fallback = null) {
 async function defaultWriteSetting(key, value) {
   const { saveSetting } = await import('./storage.mjs');
   return saveSetting(key, value);
+}
+
+async function defaultDeleteSetting(key) {
+  const { deleteSetting } = await import('./storage.mjs');
+  return deleteSetting(key);
 }
 
 function normalizeProjectId(value) {
