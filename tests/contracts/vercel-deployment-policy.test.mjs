@@ -4,10 +4,6 @@ import test from 'node:test';
 
 const config = JSON.parse(fs.readFileSync('vercel.json', 'utf8'));
 
-test('Vercel deploys production from main without spending quota on preview branches', () => {
-  const policy = config.git?.deploymentEnabled;
-
-  assert.equal(policy?.main, true);
-  assert.equal(policy?.['*'], false);
-  assert.deepEqual(Object.keys(policy).sort(), ['*', 'main']);
+test('Vercel Git deployments stay disabled so release deployment is deliberate', () => {
+  assert.equal(config.git?.deploymentEnabled, false);
 });
