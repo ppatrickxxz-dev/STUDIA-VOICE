@@ -1,0 +1,46 @@
+{
+  "benchmark": "PabloVoice Benchmark v1",
+  "matrix_version": "1.0.0-audit-freeze",
+  "status_vocabulary": ["PASS", "FAIL", "BLOCKED", "IMPLEMENTATION_READY_UNEXECUTED"],
+  "frozen_runtime_sha": "8e3aadea4fd443e09962f563a450ade0776cbd56",
+  "observed_repository_sha": "bf3af6322f5c961da86e6d5a338370646a1c202e",
+  "provider": "pablovoice",
+  "policy": {
+    "implementation_is_not_execution": true,
+    "execution_is_not_pass": true,
+    "no_threshold_changes_after_results": true,
+    "raw_outputs_required_for_scoring": true,
+    "frozen_runtime_required_for_score_eligibility": true
+  },
+  "shared_frozen_inputs": {
+    "source_song_sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d",
+    "canonical_vocal_sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
+    "vocal_provider_input_sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+    "reference_mix_sha256": "4f480dd3f8417b38a78d1c7cb7d3fe02aef1c1aaa2d1bc439f3dd350c6c68fd9",
+    "reference_instrumental_sha256": "4908fa56f7475fd01ca1359701933ce4550de68c04418fba9c1a0fb117d0ff6a"
+  },
+  "rows": [
+    {"id":"B01","goal":"Full song generation","input":"frozen generation brief + lyrics","input_sha256":null,"provider_version":null,"runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"benchmarks/assets/frozen-brief.json + frozen-lyrics.txt","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"BLOCKED","justification":"No score-eligible full-song generation provider execution exists for the frozen round."},
+    {"id":"B02","goal":"Section replacement","input":"frozen edit reference","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":null,"runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"frozen selected verse; unselected context preserved","output":null,"output_sha256":null,"metrics":null,"threshold":{"section_replacement_min":8.5},"status":"BLOCKED","justification":"No audio-aware generative section replacement execution exists for the frozen round."},
+    {"id":"B03","goal":"Lyric correction in place","input":"frozen edit reference","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":null,"runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"one-line vocal lyric replacement with neighboring phrasing preserved","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"BLOCKED","justification":"Text lyric editing exists, but no score-eligible sung-vocal in-place replacement execution exists."},
+    {"id":"B04","goal":"Vocal identity preservation","input":"frozen provider-input vocal","input_sha256":"85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95","provider_version":"Applio/RVC canonical chain","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"64-72 s localized phrase + locked model/reference hashes","output":null,"output_sha256":null,"metrics":null,"threshold":{"vocal_identity_min":8.5},"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Fail-closed localized RVC path exists, but the exact frozen provider-input bytes are not runtime-addressable; historical full-guide smokes are non-scoring."},
+    {"id":"B05","goal":"PT-BR prosody","input":"frozen generation passage","input_sha256":null,"provider_version":null,"runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"Brazilian Portuguese stress/contractions/colloquial flow","output":null,"output_sha256":null,"metrics":null,"threshold":{"pt_br_prosody_min":8.5},"status":"BLOCKED","justification":"PT-BR analysis exists, but no score-eligible sung-vocal generation execution exists for the frozen round."},
+    {"id":"B06","goal":"Pitch and note correction","input":"frozen provider-input vocal","input_sha256":"85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95","provider_version":"dedicated note-aware correction path","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"conservative note-by-note correction; preserve formants/vibrato","output":null,"output_sha256":null,"metrics":{"non_scoring_smoke":{"median_abs_pitch_error_cents_before":17.5,"median_abs_pitch_error_cents_after":12.5,"median_relative_vibrato_ratio":0.998,"corrected_source_percent":0.56}},"threshold":null,"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"A retained engineering smoke exists on a non-benchmark source only; exact frozen vocal execution remains absent."},
+    {"id":"B07","goal":"High and low harmony generation","input":"frozen provider-input vocal","input_sha256":"85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95","provider_version":"Rubber Band + librosa v7.5.2","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"adaptive_partial; discreet high + low pair","output":"historical HIGH only","output_sha256":"d3898083ab24f0bf9d26ea9a3cb094333c140d15bb3ec67bc4be560c9737a0fe","metrics":null,"threshold":null,"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"HIGH historical evidence exists; LOW and frozen-pair execution are absent, so B07 cannot promote."},
+    {"id":"B08","goal":"Arrangement change","input":"frozen edit reference","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"canonical regional automation runtime","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"attenuation-only frozen macro-arrangement plan","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Guarded arrangement planner is implemented; no retained frozen-reference render and review exists."},
+    {"id":"B09","goal":"Stem separation and reconstruction","input":"frozen source song asset","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"Demucs 4.0.1 / HTDemucs / Kaggle ticketed","runtime_sha":"bf3af6322f5c961da86e6d5a338370646a1c202e","config":"authenticated standalone stems job via user session and RLS","output":["1148fc38-e2ed-4925-9dec-f843c02163d2","9bef8c45-40af-4134-b816-4d135cb574e8"],"output_sha256":["1180440960ee1e0288509960763aa1e646ca5689c1d657de914617bbb4c95708","db2c5ee693934133a40ab9b561bd601377c50c72bc6c3c863db30e294c2625d3"],"metrics":{"job_id":"81a17053-5789-4cf1-9ba5-21c665f3b8cb","proof_verified":true,"output_count":2,"distinct_hashes":true,"bytes_each":32627022,"acoustic_metrics_registered":false},"threshold":null,"status":"BLOCKED","justification":"A legitimate standalone execution completed, but it occurred after the frozen runtime SHA and no registered stem-isolation/leakage/phase/reconstruction metrics exist; therefore it is execution evidence, not score evidence."},
+    {"id":"B10","goal":"Conversational edit execution","input":"frozen edit reference + frozen PT-BR command","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"deterministic natural-language edit engine","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"clean + presence + pan 0 + fadeIn 0.25; preserve trimEnd/fadeOut","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Exact command mapping and preservation contracts pass implementation tests, but no retained acoustic execution against the frozen binary input exists."},
+    {"id":"B11","goal":"Continuity under three sequential edits","input":"frozen edit reference + three-command sequence","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"guarded sequential conversational edit engine","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"clean -> presence+center -> short fade-in; preserve global identity","output":null,"output_sha256":null,"metrics":null,"threshold":{"continuity_min":8.5},"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Structural preservation is contract-tested, but the benchmark explicitly requires acoustic continuity evidence and no frozen retained output exists."},
+    {"id":"B12","goal":"Export integrity","input":"frozen edit reference","input_sha256":"ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d","provider_version":"canonical offline renderer/export path","runtime_sha":"8e3aadea4fd443e09962f563a450ade0776cbd56","config":"master + aligned stems; correct duration/format/channels; no added clipping","output":null,"output_sha256":null,"metrics":null,"threshold":null,"status":"IMPLEMENTATION_READY_UNEXECUTED","justification":"Export implementation exists, but the benchmark output has not been executed and retained against the complete frozen edit-reference fixture set."}
+  ],
+  "summary": {
+    "PASS": 0,
+    "FAIL": 0,
+    "BLOCKED": 6,
+    "IMPLEMENTATION_READY_UNEXECUTED": 6,
+    "release_blocking_failures": [],
+    "matrix_defensible": true,
+    "all_rows_have_verifiable_justification": true,
+    "acoustic_benchmark_matrix_frozen": true
+  }
+}
