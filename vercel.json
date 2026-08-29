@@ -4,6 +4,12 @@
   "outputDirectory": "apps/web/dist",
   "framework": null,
   "cleanUrls": true,
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "*": false
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
