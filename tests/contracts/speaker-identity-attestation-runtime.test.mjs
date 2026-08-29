@@ -18,7 +18,7 @@ test('speaker identity runtime is bound to distinct verified artifacts and the f
   assert.match(runtime, /voice_model_id/);
   assert.match(runtime, /const THRESHOLD\s*=\s*0\.8/);
   assert.match(runtime, /speechbrain\/spkrec-ecapa-voxceleb/);
-  assert.match(runtime, /speechbrain-1\.0\.3/);
+  assert.match(runtime, /speechbrain-1\.1\.0/);
   assert.match(runtime, /MODEL_REVISION\s*=\s*'b8937e0343bf9fc9741ab12b445b86a93a6e3e25'/);
   assert.match(runtime, /identity_self_reference_rejected/);
   assert.match(runtime, /artifact_hash_mismatch/);
@@ -31,7 +31,7 @@ test('speaker identity runtime is bound to distinct verified artifacts and the f
 test('trusted GitHub worker performs pinned ECAPA scoring without exposing raw biometric vectors', () => {
   assert.match(worker, /id-token:\s*write/);
   assert.match(worker, /environment:\s*pablovoice-production/);
-  assert.match(worker, /speechbrain==1\.0\.3/);
+  assert.match(worker, /speechbrain==1\.1\.0/);
   assert.match(worker, /MODEL_REVISION:\s*b8937e0343bf9fc9741ab12b445b86a93a6e3e25/);
   assert.match(worker, /speechbrain\.inference\.speaker import EncoderClassifier/);
   assert.match(worker, /encode_batch\(c\)/);
