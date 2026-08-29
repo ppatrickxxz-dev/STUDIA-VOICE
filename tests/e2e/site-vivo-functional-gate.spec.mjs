@@ -16,7 +16,7 @@ test('SITE VIVO GATE: canonical landing page loads, reacts and links back to Stu
 
   await expect(page).toHaveTitle(/PabloVoice — Você tá no estúdio/i);
   await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Abrir o Studio' })).toHaveAttribute('href', '/');
+  await expect(page.getByRole('link', { name: 'Abrir o Studio', exact: true })).toHaveAttribute('href', '/');
 
   const canonicalImages = [
     ['#hero-screen-img', /Tela do PabloVoice/i],
@@ -30,16 +30,16 @@ test('SITE VIVO GATE: canonical landing page loads, reacts and links back to Stu
     await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
   }
 
-  await page.getByRole('button', { name: 'Voice Lab' }).click();
+  await page.getByRole('button', { name: 'Voice Lab', exact: true }).click();
   await expect(page.locator('#tab-voice')).toHaveClass(/active/);
   await expect(page.locator('#reaction-title')).toHaveText('Modo Voice Lab');
   await expect(page.locator('#reaction-meter-fill')).toHaveCSS('width', /.+/);
 
-  await page.getByRole('button', { name: 'Beat Lab' }).click();
+  await page.getByRole('button', { name: 'Beat Lab', exact: true }).click();
   await expect(page.locator('#tab-beat')).toHaveClass(/active/);
   await expect(page.locator('#reaction-title')).toHaveText('Modo Beat Lab');
 
-  await page.getByRole('link', { name: 'Companions' }).click();
+  await page.getByRole('link', { name: 'Companions', exact: true }).click();
   await expect(page.locator('#companions')).toBeInViewport();
   await expect(page.getByText('Vinyl Groove', { exact: true })).toBeVisible();
   await expect(page.getByText('EQ Bloom', { exact: true })).toBeVisible();
