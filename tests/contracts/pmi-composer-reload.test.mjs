@@ -22,11 +22,15 @@ test('restored Composer draft remains explicit review with apply append and disc
   assert.match(source, /await clearPmiComposerState\(saved\.id\)/);
 });
 
-test('Composer pending state lazily reuses the existing IndexedDB settings store rather than another database', async () => {
+test('Composer pending state lazily reuses and physically clears the existing IndexedDB settings store', async () => {
   const source = await readFile(new URL('../../packages/app/pmi-composer-state.mjs', import.meta.url), 'utf8');
+  const storage = await readFile(new URL('../../packages/app/storage.mjs', import.meta.url), 'utf8');
   assert.match(source, /await import\('\.\/storage\.mjs'\)/);
   assert.match(source, /const \{ getSetting \} = await import\('\.\/storage\.mjs'\)/);
   assert.match(source, /const \{ saveSetting \} = await import\('\.\/storage\.mjs'\)/);
+  assert.match(source, /const \{ deleteSetting \} = await import\('\.\/storage\.mjs'\)/);
+  assert.match(storage, /export async function deleteSetting\(key\)/);
+  assert.match(storage, /transaction\.objectStore\(store\)\.delete\(id\)/);
   assert.doesNotMatch(source, /indexedDB\.open/);
   assert.doesNotMatch(source, /localStorage|sessionStorage/);
 });
