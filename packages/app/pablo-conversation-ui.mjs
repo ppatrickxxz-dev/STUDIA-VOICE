@@ -9,6 +9,12 @@ import { replaceBreathAutomation } from './audio/src/voice/breath-intelligence.m
 import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
 import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
 import { clearPmiPendingDraft, executePabloAudioMessage } from './pablo-conversation-audio.mjs';
+import {
+  clearPmiDraftApplyState,
+  confirmPmiDraftApply,
+  getPmiDraftApplyConfirmation,
+  registerPmiDraftPreview,
+} from './pmi-draft-apply-state.mjs';
 
 const analysisCache = new Map();
 const remoteAuth = new RemoteAuthAdapter();
@@ -162,20 +168,23 @@ async function generateMusicDraft(request) {
   };
 }
 
-async function applyPmiGeneratedDraft(text, mode = 'replace') {
+async function applyPmiGeneratedDraft(text, draftVersion) {
   const value = String(text || '').trim();
   if (!value) return false;
   const project = await activeProject();
   if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+  const confirmation = getPmiDraftApplyConfirmation(project.id, { draftVersion, text: value });
+  if (!confirmation) throw new Error('Confirme a versão atual do rascunho antes de aplicar.');
   const current = String(project.lyrics || '').trimEnd();
-  project.lyrics = mode === 'append' && current ? `${current}\n\n${value}` : value;
-  const label = mode === 'append' ? 'Rascunho PMI adicionado à letra' : 'Rascunho PMI usado como letra';
+  project.lyrics = confirmation.mode === 'append' && current ? `${current}\n\n${value}` : value;
+  const label = confirmation.mode === 'append' ? 'Rascunho PMI adicionado à letra' : 'Rascunho PMI usado como letra';
   const saved = snapshotProject(project, label);
   await persistProject(saved);
   clearPmiPendingDraft(saved.id);
+  clearPmiDraftApplyState(saved.id);
   const lyrics = document.querySelector('#lyrics');
   if (lyrics) lyrics.value = saved.lyrics;
-  return true;
+  return confirmation.mode;
 }
 
 async function contextForMessage() {
@@ -262,6 +271,9 @@ async function submitMessage(form) {
       generateMusicDraft,
     });
     if (result?.supported) {
+      if (result.kind === 'pmi_generated_draft') {
+        registerPmiDraftPreview(context.projectId, { draftVersion: result.draftVersion, text: result.text });
+      }
       appendMessage(formatResult(result), 'assistant', result);
       if (result.kind === 'deterministic_edit' && result.canApply) {
         appendMessage(result.domain === 'beat_lab'
@@ -338,8 +350,16 @@ function appendMessage(text, role, result = null) {
         const buttons = [...actions.querySelectorAll('button')];
         buttons.forEach((item) => { item.disabled = true; });
         try {
-          await applyPmiGeneratedDraft(result.text, mode);
-          appendMessage(mode === 'append' ? 'Adicionei o rascunho à letra e salvei uma revisão.' : 'Usei o rascunho como letra e salvei uma revisão.', 'assistant');
+          const project = await activeProject();
+          if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+          const confirmation = confirmPmiDraftApply(project.id, {
+            mode,
+            draftVersion: result.draftVersion,
+            text: result.text,
+          });
+          if (!confirmation) throw new Error('Este rascunho não é mais a versão atual. Revise a versão mais recente antes de aplicar.');
+          const appliedMode = await applyPmiGeneratedDraft(result.text, result.draftVersion);
+          appendMessage(appliedMode === 'append' ? 'Adicionei o rascunho à letra e salvei uma revisão.' : 'Usei o rascunho como letra e salvei uma revisão.', 'assistant');
         } catch (error) {
           appendMessage(error?.message || 'Não consegui aplicar esse rascunho.', 'assistant', { error: true });
           buttons.forEach((item) => { item.disabled = false; });
