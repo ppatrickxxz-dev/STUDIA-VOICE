@@ -52,16 +52,21 @@ test('rewrite without current lyrics and without a pending draft is blocked befo
   assert.equal(result.canApply, false);
 });
 
-test('conversation UI uses authenticated agentTurn and requires manual review before lyrics change', async () => {
+test('conversation UI uses stored draft acceptance once, then clears revision state after persistence', async () => {
   const source = await readFile(new URL('../../packages/app/pablo-conversation-ui.mjs', import.meta.url), 'utf8');
   assert.match(source, /REVIEWED_SONG_COMMANDS = new Set\(\['generate', 'continue_section', 'rewrite', 'adapt_genre'\]\)/);
   assert.match(source, /remoteAuth\.ensureRemoteProject\(project\)/);
   assert.match(source, /remoteAuth\.agentTurn\(\{/);
   assert.match(source, /review_before_apply: true/);
-  assert.match(source, /clearPmiPendingDraft\(saved\.id\)/);
+  assert.match(source, /registerPmiDraftPreview\(context\.projectId, \{ draftVersion: result\.draftVersion, text: result\.text \}\)/);
+  assert.match(source, /confirmPmiDraftApply\(project\.id, \{/);
+  assert.match(source, /const confirmation = getPmiDraftApplyConfirmation\(project\.id, \{ draftVersion, text: value \}\)/);
+  assert.match(source, /project\.lyrics = confirmation\.mode === 'append'/);
+  assert.match(source, /await persistProject\(saved\);\s*clearPmiPendingDraft\(saved\.id\);\s*clearPmiDraftApplyState\(saved\.id\);/s);
   assert.match(source, /result\?\.kind === 'pmi_generated_draft'/);
   assert.match(source, /\['replace', 'Usar como letra'\], \['append', 'Adicionar à letra'\]/);
-  assert.match(source, /applyPmiGeneratedDraft\(result\.text, mode\)/);
+  assert.match(source, /applyPmiGeneratedDraft\(result\.text, result\.draftVersion\)/);
+  assert.doesNotMatch(source, /applyPmiGeneratedDraft\(result\.text, mode\)/);
 });
 
 test('PMI Composer bridge does not embed a private provider credential', async () => {
