@@ -1,6 +1,7 @@
 import { analyzePitch } from './pitch.mjs';
 import { analyzeTempo } from './tempo.mjs';
 import { analyzeVoice } from './voice.mjs';
+import { analyzeFormants } from './formants.mjs';
 import { detectBreathAndSibilance } from './breath-sibilance.mjs';
 import { detectPlosives } from './plosive.mjs';
 import { detectVocalPeaks } from './vocal-peaks.mjs';
@@ -20,7 +21,7 @@ export function analyzeMusicalAudio({
   peakEvents = null,
   clickEvents = null,
   noiseEvents = null,
-  formants = [],
+  formants = null,
   durationSeconds = null,
   pitchOptions = DEFAULT_INTERACTIVE_PITCH_OPTIONS,
   breathDetectionOptions = undefined,
@@ -29,9 +30,30 @@ export function analyzeMusicalAudio({
   clickDetectionOptions = undefined,
   noiseDetectionOptions = undefined,
   restorationOptions = undefined,
+  formantOptions = undefined,
 } = {}) {
   const pitch = analyzePitch(samples, sampleRate, pitchOptions);
   const tempo = analyzeTempo(onsets, { durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : (samples?.length && sampleRate ? samples.length / sampleRate : null) });
+  const suppliedFormants = Array.isArray(formants) && formants.length >= 3;
+  const formantEvidence = suppliedFormants
+    ? {
+        source: 'provided',
+        formantsHz: formants.slice(0, 3).map(Number).filter(Number.isFinite),
+        confidence: 1,
+        stable: true,
+        frameCount: null,
+        stability: 1,
+        medianProminenceDb: null,
+        frames: [],
+      }
+    : analyzeFormants(samples, {
+        sampleRate,
+        pitchContour: pitch.pitchContour,
+        ...(formantOptions || {}),
+      });
+  const resolvedFormants = suppliedFormants
+    ? formants
+    : (formantEvidence.stable ? formantEvidence.formantsHz : []);
   const needsBreathDetection = !Array.isArray(breathEvents) || !Array.isArray(sibilanceEvents);
   const detected = needsBreathDetection
     ? detectBreathAndSibilance(samples, { sampleRate, ...(breathDetectionOptions || {}) })
@@ -87,7 +109,7 @@ export function analyzeMusicalAudio({
     peakEvents: resolvedPeaks,
     clickEvents: resolvedClicks,
     noiseEvents: resolvedNoise,
-    formants,
+    formants: resolvedFormants,
     restoration,
     snrDb: restoration.summary?.snrDb,
     roomReverb: restoration.summary?.reflectionCorrelation,
@@ -103,6 +125,7 @@ export function analyzeMusicalAudio({
     voice: {
       ...voice,
       pitchContour: pitch.pitchContour,
+      formantEvidence,
       eventDetection: {
         source: needsBreathDetection || needsPlosiveDetection || needsPeakDetection || needsClickDetection ? 'local-heuristic-v1' : 'provided',
         breathCount: resolvedBreaths.length,
