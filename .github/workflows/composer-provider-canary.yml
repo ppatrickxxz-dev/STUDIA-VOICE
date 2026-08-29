@@ -51,12 +51,47 @@ jobs:
           set -euo pipefail
           mkdir -p test-results/composer-provider
           BODY="$(jq -nc --arg project "$PROJECT_ID" '{command:"rewrite",project_id:$project,task:"Reescreva em português brasileiro, mantendo a intenção e a oralidade: Hoje eu saí sem procurar. Retorne somente uma linha curta para revisão.",constraints:{canary:true,max_lines:1}}')"
-          RESPONSE="$(curl --fail-with-body --silent --show-error \
-            -X POST "$SUPABASE_URL/functions/v1/validate-app-js-v71" \
-            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
-            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            -H 'content-type: application/json' \
-            --data "$BODY")"
+
+          call_provider() {
+            HTTP_CODE="$(curl --silent --show-error \
+              -o test-results/composer-provider/last-response.json \
+              -w '%{http_code}' \
+              -X POST "$SUPABASE_URL/functions/v1/validate-app-js-v71" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              -H 'content-type: application/json' \
+              --data "$BODY")"
+            RESPONSE="$(cat test-results/composer-provider/last-response.json)"
+          }
+
+          call_provider
+          if [ "$HTTP_CODE" = '429' ]; then
+            printf '%s' "$RESPONSE" | jq -e '
+              .ok == false and
+              .error == "provider_rate_limited" and
+              .fallback_allowed == false and
+              (.retry_after_ms | type == "number" and . >= 0)
+            ' >/dev/null
+            RETRY_MS="$(printf '%s' "$RESPONSE" | jq -r '.retry_after_ms // 250')"
+            RETRY_SECONDS="$(( (RETRY_MS + 999) / 1000 ))"
+            if [ "$RETRY_SECONDS" -gt 2 ]; then RETRY_SECONDS=2; fi
+            echo "Provider rate-limited the canary; applying the single bounded retry allowed by the runtime contract after ${RETRY_SECONDS}s."
+            sleep "$RETRY_SECONDS"
+            call_provider
+          fi
+
+          if [ "$HTTP_CODE" != '200' ]; then
+            printf '%s' "$RESPONSE" | jq \
+              --arg http_status "$HTTP_CODE" \
+              --arg github_sha "$GITHUB_SHA" \
+              --arg run_id "$GITHUB_RUN_ID" \
+              'del(.reply,.text) + {verdict:"AI_RUNTIME_PROVIDER_BLOCKED",http_status:($http_status|tonumber),github_sha:$github_sha,github_run_id:$run_id}' \
+              > test-results/composer-provider/evidence.json
+            jq '.' test-results/composer-provider/evidence.json
+            echo "::error::Composer provider round-trip remained blocked after the single bounded retry (HTTP $HTTP_CODE)."
+            exit 1
+          fi
+
           printf '%s' "$RESPONSE" | jq -e \
             --arg project "$PROJECT_ID" '
               .ok == true and
@@ -82,6 +117,7 @@ jobs:
           jq '.' test-results/composer-provider/evidence.json
 
       - name: Retain provider evidence without generated content
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: composer-provider-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}

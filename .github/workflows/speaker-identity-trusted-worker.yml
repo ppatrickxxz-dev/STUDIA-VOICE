@@ -96,11 +96,14 @@ jobs:
           printf 'REFERENCE_ID=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.reference_id')" >> "$GITHUB_ENV"
           printf 'VOICE_MODEL_ID=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job.voice_model_id')" >> "$GITHUB_ENV"
 
-      - name: Install deterministic speaker verification runtime
+      - name: Install audio and speaker verification runtime
         if: steps.claim.outputs.has_job == 'true'
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          command -v ffmpeg >/dev/null
           python -m pip install --disable-pip-version-check --no-input \
             'speechbrain==1.0.3' 'huggingface_hub>=0.25,<1' 'soundfile>=0.12,<1'
 
