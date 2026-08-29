@@ -120,40 +120,38 @@ test('direct PCM measurement overrides forged safe peak and clipping claims', ()
   assert.equal(evidence.local.candidateTechnical.clippingRatio, evidence.candidate.clippingRatio);
 });
 
-test('cleanup promotion needs only external identity when local technical/alignment facts and formants are available', () => {
-  const original = quietBuffer();
+test('caller-provided cosine cannot promote cleanup when local facts are available', () => {
+  const original = bufferFrom(syntheticVowel());
   const result = cloneWithIdentitySafeVocalRestoration(
     context,
     original,
     [denoiseEvent()],
     {
-      reference: { formantsHz: [510, 1510, 2490] },
-      candidate: {
-        formantsHz: [514, 1500, 2502],
-        speakerEmbeddingCosine: 0.99,
-      },
+      candidate: { speakerEmbeddingCosine: 0.99 },
+      formantOptions: { maxFrames: 10 },
     },
   );
 
-  assert.equal(result.promoted, true);
-  assert.equal(result.applied, true);
-  assert.equal(result.identityGate.promotable, true);
+  assert.equal(result.promoted, false);
+  assert.equal(result.applied, false);
+  assert.equal(result.buffer, original);
+  assert.notEqual(result.auditionBuffer, original);
+  assert.equal(result.identityGate.promotable, false);
   assert.equal(result.localEvidence.alignment.sameContent, true);
   assert.equal(result.localEvidence.candidate.durationSeconds, 1);
   assert.equal(result.localEvidence.candidate.clippingRatio, 0);
-  assert.ok(result.localEvidence.candidate.peak <= 0.01);
+  assert.equal(result.identityGate.evidence.timbre.status, 'pass');
+  assert.equal(result.identityGate.evidence.identity.status, 'missing');
+  assert.ok(result.identityGate.blockers.includes('cleanup_identity_evidence_missing'));
 });
 
 test('missing real identity still fails closed after all local evidence is derived', () => {
-  const original = quietBuffer();
+  const original = bufferFrom(syntheticVowel());
   const result = cloneWithIdentitySafeVocalRestoration(
     context,
     original,
     [denoiseEvent()],
-    {
-      reference: { formantsHz: [510, 1510, 2490] },
-      candidate: { formantsHz: [514, 1500, 2502] },
-    },
+    { formantOptions: { maxFrames: 10 } },
   );
 
   assert.equal(result.promoted, false);

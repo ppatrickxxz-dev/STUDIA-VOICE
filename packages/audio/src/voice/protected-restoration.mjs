@@ -1,5 +1,6 @@
 import { cloneWithVocalRestoration } from '../automation/region-restoration.mjs';
 import { deriveVocalCleanupLocalEvidence } from './cleanup-local-evidence.mjs';
+import { sanitizeCleanupCallerEvidence } from './cleanup-untrusted-evidence.mjs';
 import { selectIdentitySafeVocalCleanup } from './cleanup-identity-gate.mjs';
 
 /**
@@ -31,13 +32,14 @@ export function cloneWithIdentitySafeVocalRestoration(
     });
   }
 
+  const sanitized = sanitizeCleanupCallerEvidence({ reference, candidate, alignment });
   const localEvidence = deriveVocalCleanupLocalEvidence({
     originalBuffer: buffer,
     processedBuffer: restoration.buffer,
     events,
-    reference,
-    candidate,
-    alignment,
+    reference: sanitized.reference,
+    candidate: sanitized.candidate,
+    alignment: sanitized.alignment,
     ...(formantOptions ? { formantOptions } : {}),
   });
   const selection = selectIdentitySafeVocalCleanup({
