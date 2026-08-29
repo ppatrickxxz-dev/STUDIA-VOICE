@@ -5,10 +5,7 @@
   "framework": null,
   "cleanUrls": true,
   "git": {
-    "deploymentEnabled": {
-      "main": true,
-      "*": false
-    }
+    "deploymentEnabled": false
   },
   "headers": [
     {
