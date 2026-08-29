@@ -156,7 +156,7 @@ jobs:
   android-open-with-project-emulator:
     needs: android-build
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -183,11 +183,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash scripts/android-open-with-project-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+          script: |
+            bash scripts/android-open-with-project-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+            bash scripts/android-complete-user-flow-gate.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pablovoice-android-open-with-project-emulator-evidence-${{ github.sha }}
-          path: test-results/android-open-with-project-emulator
+          path: |
+            test-results/android-open-with-project-emulator
+            test-results/android-complete-user-flow
           if-no-files-found: warn
           retention-days: 14
