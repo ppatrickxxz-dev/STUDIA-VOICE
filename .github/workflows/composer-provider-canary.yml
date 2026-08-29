@@ -1,6 +1,11 @@
 name: Composer provider live canary
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/composer-provider-canary.yml'
+      - 'supabase/functions/validate-app-js-v71/**'
   workflow_dispatch:
 
 permissions:
