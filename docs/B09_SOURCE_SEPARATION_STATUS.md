@@ -2,63 +2,99 @@
 
 ## Current truth
 
-Demucs `htdemucs` is no longer an unproven engine in PabloVoice. The live Supabase database contains five completed `full_pipeline` jobs with `proof.verified=true` and the chain `demucs_htdemucs -> applio_rvc_natural -> ffmpeg_mix_v4_1 -> qa`.
+The standalone stems route has now executed successfully in production with a legitimate user session and a real Kaggle/Demucs provider run.
 
-The latest verified job persisted two real lossless stem assets:
+Canonical standalone job:
 
-- `guide_vocal`: 16,670,393 bytes, SHA-256 `7a5e7f293f4b856a1035390dc87dfff27434e0806e20a4e42391d3fff9656499`
-- `instrumental`: 15,893,538 bytes, SHA-256 `163c1cb9cbeb0fe17ad69ca9166f264bbead646e91671fdbe3c7d980ac6d983b`
+- `render_jobs.id`: `81a17053-5789-4cf1-9ba5-21c665f3b8cb`
+- `job_type`: `stems`
+- `provider`: `kaggle`
+- `external_job_id`: `132461854`
+- `engine`: `kaggle_ticketed`
+- `proof.engine`: `Demucs`
+- `proof.model`: `htdemucs`
+- `proof.demucs_version`: `4.0.1`
+- `status`: `completed`
+- `progress`: `100`
+- `proof.verified`: `true`
+- `finished_at`: `2026-08-29T14:10:16.740Z`
 
-Both assets declare `engine=Demucs`, `model=htdemucs`, and point to the same source asset. The job records Demucs version `4.0.1` and QA passed.
+The job used the frozen source asset `a5bc5f31-a546-4ded-99fb-9a0867980202`, SHA-256 `ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d`.
 
-## What this validates
+It persisted two independent private WAV outputs in `audio-private`:
 
-- real Demucs execution: **validated**
-- real vocal/instrumental output persistence: **validated**
-- SHA-256 proof chain: **validated**
-- lossless stem asset creation: **validated**
-- repeated execution evidence: **validated** (5 completed full-pipeline jobs observed)
+- `guide_vocal`
+  - asset id `1148fc38-e2ed-4925-9dec-f843c02163d2`
+  - size `32,627,022` bytes
+  - SHA-256 `1180440960ee1e0288509960763aa1e646ca5689c1d657de914617bbb4c95708`
+- `instrumental`
+  - asset id `9bef8c45-40af-4134-b816-4d135cb574e8`
+  - size `32,627,022` bytes
+  - SHA-256 `db2c5ee693934133a40ab9b561bd601377c50c72bc6c3c863db30e294c2625d3`
 
-## Standalone candidate readiness
+All three source/vocal/instrumental SHA-256 values are distinct. Both output IDs are the exact `render_jobs.output_asset_ids`, both assets belong to the frozen project, both point back to the same source asset, and both record `Demucs` / `htdemucs` / `4.0.1` provenance.
 
-The original candidate from PR #29 passed the four canonical repository gates on its final head:
+## Authenticated execution evidence
 
-- `web-and-contracts`: **success**
-- `browser-gate`: **success**
-- `android-build`: **success**
-- `android-emulator`: **success**
+GitHub Actions run `33256818152` (`B09 standalone stems live canary`) completed successfully. Its steps independently proved:
 
-PR #29 itself was not merged because review found route-safety defects. Its corrected current-main successor, PR #37, was merged as commit `2d5585ccbb2fba364f362659e68f0b36ed7053c9`.
+1. GitHub OIDC-backed PabloVoice user session acquisition;
+2. real standalone dispatch through `compute-kaggle-v54`;
+3. provider wait through the callback boundary;
+4. completed `render_jobs` retrieval through user RLS;
+5. exact two output assets retrieval through user RLS;
+6. retained standalone evidence artifact upload.
 
-A fresh live Supabase inspection on 2026-08-28 verified the deployed standalone path up to the live-canary boundary:
+Retained workflow artifact:
 
-- project `yokmhqoncdwvxmzzybqa`: `ACTIVE_HEALTHY`
-- `compute-kaggle-v54` version 3: `ACTIVE`, JWT required, dispatches `job_type='stems'` and records `compute-kaggle-v54:standalone-stems-v1`
-- dispatcher resolves worker `kaggle-worker-source-v56`
-- `kaggle-worker-source-v56` version 3: `ACTIVE`, installs Demucs `4.0.1`, runs `htdemucs --two-stems=vocals`, verifies source SHA-256 and rejects identical/tiny outputs
-- `complete-kaggle-stems-job` version 1: `ACTIVE`, requires three distinct SHA-256 proofs, verifies both uploaded objects exist, persists independent `guide_vocal` and `instrumental` assets, and only then completes the job
+- `b09-standalone-evidence-cdf6f4413ba5d23dbe769af4e951da0d4206754c`
+- artifact id `9716071373`
+- digest `sha256:e9e80352233b513309195b2a946f9b0f859d8ef7262a1c9c908da1d110da0efa`
+- retention expiry `2026-09-28T14:10:27Z`
 
-Canonical machine-readable evidence: `docs/B09_STANDALONE_READINESS_EVIDENCE_2026-08-28.json`.
+## What is validated now
 
-## What is still pending
+- real authenticated standalone user path: **validated**
+- real standalone `render_jobs.job_type='stems'`: **validated**
+- real Kaggle dispatch: **validated**
+- real Demucs `4.0.1` / `htdemucs` execution: **validated**
+- callback completion: **validated**
+- private storage persistence: **validated**
+- independent `guide_vocal` + `instrumental` output assets: **validated**
+- source/output SHA-256 proof chain: **validated**
+- exact output IDs resolving through user RLS: **validated**
+- retained machine evidence: **validated**
 
-The canonical standalone route:
+The six terminal standalone route criteria previously frozen in this document are therefore satisfied. The standalone route itself is no longer blocked.
 
-`recording-ticket-v63 source_import -> recording-finalize-v63 -> create-kaggle-ticket(job_type=stems) -> compute-kaggle-v54 -> kaggle-worker-source-v56 -> complete-kaggle-stems-job`
+## Acoustic benchmark gate still pending
 
-still has no completed standalone `render_jobs.job_type='stems'` row in the live database.
+This route validation is not being promoted to `B09_STANDALONE_STEMS_PASSED` yet because the frozen acoustic benchmark has a separate, explicit input gate.
 
-The next terminal evidence for B09 is therefore exactly one live completed standalone stems job with:
+`benchmarks/assets/binary-reference-manifest.json` currently declares:
 
-1. `job_type='stems'`;
-2. `proof.verified=true`;
-3. two independent persisted output assets (`guide_vocal` and `instrumental`);
-4. distinct source/vocal/instrumental SHA-256 values;
-5. non-trivial output sizes;
-6. the job's two `output_asset_ids` resolving to those persisted assets.
+- `state: runtime-asset-blocked`
+- `gate.acoustic_benchmark_runnable: false`
 
-Until that row exists, `routeValidated` remains false and B09 remains **not passed**.
+The exact blocker is the frozen `vocal_provider_input`:
 
-No physical Android approval is implied by CI or emulator evidence.
+- expected SHA-256 `85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95`
+- expected size `15,335,120` bytes
+- expected format `pcm_s16le`, `44,100 Hz`, mono
+- expected duration `173.866689 s`
+- `asset_id: null`
+- `runtime_addressable: false`
 
-This distinction is intentional: engine validation and route readiness are not the same as standalone route validation.
+A live database/storage inspection after the standalone run found no registered private asset matching either that exact provider-input SHA-256 or its canonical source SHA-256. Therefore the missing reference cannot be replaced by an older full-pipeline stem, approximated from another recording, or silently regenerated with unknown bytes.
+
+To open the final acoustic gate, ingest the exact frozen bytes, verify SHA-256 `85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95`, register the resulting private asset id in the frozen manifest, and only then execute B09 `stem_isolation`, `leakage`, `phase_integrity`, and `reconstruction_similarity` measurements.
+
+No threshold has been invented or changed after the run.
+
+## Classification
+
+- standalone route: **VALIDATED**
+- B09 acoustic benchmark: **BLOCKED_BY_FROZEN_REFERENCE_ASSET**
+- `B09_STANDALONE_STEMS_PASSED`: **not declared yet**
+
+This distinction is intentional: a real route PASS is necessary evidence, but it does not substitute for the frozen acoustic benchmark.
