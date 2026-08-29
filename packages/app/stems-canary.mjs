@@ -1,6 +1,7 @@
 import { RemoteAuthAdapter } from './remote-auth.mjs';
 import { getAudioAsset, listProjects } from './storage.mjs';
 import { encodeWav } from './audio/src/presets.mjs';
+import { importStandaloneStems, waitForStandaloneStems } from './stems-result-runtime.mjs';
 
 const PROJECT_URL='https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY='sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
@@ -28,11 +29,7 @@ async function resolveVisibleProject(){
   const projects=await listProjects();
   const candidates=projects.filter((project)=>project?.name===visibleName && (visibleTrack ? project?.tracks?.some((track)=>track.name===visibleTrack) : true));
   const remembered=localStorage.getItem(ACTIVE_PROJECT_KEY);
-  if(remembered){
-    const rememberedVisible=candidates.find((project)=>project.id===remembered);
-    if(rememberedVisible)return rememberedVisible;
-    localStorage.removeItem(ACTIVE_PROJECT_KEY);
-  }
+  if(remembered){const rememberedVisible=candidates.find((project)=>project.id===remembered);if(rememberedVisible)return rememberedVisible;localStorage.removeItem(ACTIVE_PROJECT_KEY)}
   if(candidates.length===1)return candidates[0];
   if(candidates.length>1)throw Error('Há mais de um projeto compatível com a tela atual. Reabra o projeto antes do canário para evitar enviar o áudio errado.');
   throw Error('Não foi possível identificar com segurança o projeto aberto. Reabra-o em Meus projetos e tente novamente.');
@@ -52,12 +49,7 @@ async function uploadSource({token,projectId,track,asset}){
   return{assetId:fin.asset_id,sha256:hash,duration:wav.duration};
 }
 
-async function dispatchStems({token,projectId,sourceAssetId}){
-  status('Enviando para Demucs htdemucs…','warn');
-  const out=await api(DISPATCHER,token,{project_id:projectId,source_asset_id:sourceAssetId});
-  if(!out.job_id)throw Error('O dispatcher não retornou job_id.');
-  return out;
-}
+async function dispatchStems({token,projectId,sourceAssetId}){status('Enviando para Demucs htdemucs…','warn');const out=await api(DISPATCHER,token,{project_id:projectId,source_asset_id:sourceAssetId});if(!out.job_id)throw Error('O dispatcher não retornou job_id.');return out}
 
 async function runCanary(){
   if(running)return;running=true;buttonDisabled(true);
@@ -70,21 +62,21 @@ async function runCanary(){
     const remote=await auth.ensureRemoteProject(project);if(!remote?.ok||!remote.project?.id)throw Error('Não foi possível ligar este projeto ao backend.');
     const source=await uploadSource({token:session.accessToken,projectId:remote.project.id,track,asset});
     const job=await dispatchStems({token:session.accessToken,projectId:remote.project.id,sourceAssetId:source.assetId});
-    localStorage.setItem('pablovoice.stems.canary.last',JSON.stringify({jobId:job.job_id,localProjectId:project.id,remoteProjectId:remote.project.id,sourceAssetId:source.assetId,sourceSha256:source.sha256,startedAt:new Date().toISOString(),dispatcher:DISPATCHER}));
-    status(`Canário enviado · job ${String(job.job_id).slice(0,8)}… O resultado só será promovido após prova dos dois stems.`,'ok');
+    const evidence={jobId:job.job_id,localProjectId:project.id,remoteProjectId:remote.project.id,sourceAssetId:source.assetId,sourceSha256:source.sha256,startedAt:new Date().toISOString(),dispatcher:DISPATCHER};
+    localStorage.setItem('pablovoice.stems.canary.last',JSON.stringify(evidence));
+    const completed=await waitForStandaloneStems({token:session.accessToken,jobId:job.job_id,onProgress:(current)=>status(`Separação ${Math.max(0,Number(current.progress||0))}% · ${current.status}`,'warn')});
+    const consumed=await importStandaloneStems({token:session.accessToken,job:completed,project});
+    const retained={...evidence,finishedAt:completed.finished_at||new Date().toISOString(),status:completed.status,provider:completed.provider||'kaggle',engine:completed.proof?.engine||completed.engine||'Demucs',model:completed.proof?.model||'htdemucs',externalJobId:completed.external_job_id||null,outputAssetIds:completed.output_asset_ids,proof:completed.proof,stems:consumed.imported};
+    localStorage.setItem('pablovoice.stems.canary.last',JSON.stringify(retained));
+    const associated=completed.output_asset_ids.every((id)=>project.tracks.some((item)=>item.renderJobId===completed.id&&item.remoteAssetId===id));
+    if(!associated)throw Error('Os stems concluíram, mas não foram associados ao projeto local.');
+    status(`Stems verificados e adicionados ao projeto · job ${String(job.job_id).slice(0,8)}…`,'ok');
   }catch(e){console.error('PabloVoice stems canary',e);status(e?.message||'Canário de stems falhou.','error')}
   finally{running=false;buttonDisabled(false)}
 }
 
 function status(text,kind=''){const el=document.querySelector('#pv-stems-canary-status');if(el){el.textContent=text;el.dataset.kind=kind}}
 function buttonDisabled(value){const b=document.querySelector('#pv-stems-canary-run');if(b)b.disabled=value}
-function ensureUi(){
-  const studio=document.querySelector('.pv-studio-actions');if(!studio||document.querySelector('#pv-stems-canary'))return;
-  const wrap=document.createElement('div');wrap.id='pv-stems-canary';wrap.className='pv-studio-actions';wrap.setAttribute('data-candidate','stems');
-  wrap.innerHTML='<button id="pv-stems-canary-run" class="pv-btn" type="button">Separar voz + instrumental · candidate</button><span id="pv-stems-canary-status" class="pv-health">Demucs validado; rota standalone em canário.</span>';
-  studio.insertAdjacentElement('afterend',wrap);document.querySelector('#pv-stems-canary-run')?.addEventListener('click',runCanary);
-}
-
+function ensureUi(){const studio=document.querySelector('.pv-studio-actions');if(!studio||document.querySelector('#pv-stems-canary'))return;const wrap=document.createElement('div');wrap.id='pv-stems-canary';wrap.className='pv-studio-actions';wrap.setAttribute('data-candidate','stems');wrap.innerHTML='<button id="pv-stems-canary-run" class="pv-btn" type="button">Separar voz + instrumental · candidate</button><span id="pv-stems-canary-status" class="pv-health">Demucs validado; rota standalone em canário.</span>';studio.insertAdjacentElement('afterend',wrap);document.querySelector('#pv-stems-canary-run')?.addEventListener('click',runCanary)}
 new MutationObserver(ensureUi).observe(document.documentElement,{subtree:true,childList:true});ensureUi();
-
 export const STANDALONE_STEMS_CANARY=Object.freeze({dispatcher:DISPATCHER,engine:'Demucs',model:'htdemucs',routeValidated:false});
