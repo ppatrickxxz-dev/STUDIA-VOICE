@@ -66,6 +66,13 @@ async function sendPablo(page, message) {
   await form.getByRole('button', { name: 'Enviar' }).click();
 }
 
+async function reopenProject(page, name = 'Gate Fluxo Completo') {
+  await page.locator('[data-route="projects"]').first().click();
+  await expect(page.getByText(name).first()).toBeVisible({ timeout: 10_000 });
+  await page.locator('[data-action="open-project"]').first().click();
+  await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 10_000 });
+}
+
 async function seedConfirmedSections(page) {
   await page.evaluate(async () => {
     const storage = await import('./storage.mjs');
@@ -193,6 +200,7 @@ test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track
   expect(afterContinue.automation.some((event) => event.source === 'pablo_section_vocal_cleanup_click')).toBe(true);
   expect(afterContinue.automation.some((event) => event.source === 'pablo_section_vocal_cleanup_dynamics')).toBe(true);
 
+  await reopenProject(page);
   const revisionCountBeforeExport = afterContinue.revisions;
   const mixDownloadPromise = page.waitForEvent('download');
   await page.locator('[data-action="export"]').first().click();
@@ -216,10 +224,7 @@ test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track
 
   await page.reload({ waitUntil: 'networkidle' });
   await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
-  await page.locator('[data-route="projects"]').first().click();
-  await expect(page.getByText('Gate Fluxo Completo').first()).toBeVisible();
-  await page.locator('[data-action="open-project"]').first().click();
-  await expect(page.getByRole('heading', { name: 'Gate Fluxo Completo' })).toBeVisible();
+  await reopenProject(page);
   await expect(page.getByText('voz-fluxo-completo.wav').first()).toBeVisible();
 
   const afterReload = await projectState(page);
