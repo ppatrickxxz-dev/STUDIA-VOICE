@@ -16,6 +16,7 @@ concurrency:
 env:
   SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
   SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  IDENTITY_CANARY_CANDIDATE_ID: 6f4ade75-6106-4a28-ae52-d0d9e89af00a
   MODEL: speechbrain/spkrec-ecapa-voxceleb
   MODEL_REVISION: b8937e0343bf9fc9741ab12b445b86a93a6e3e25
   ENGINE_VERSION: speechbrain-1.0.3
@@ -40,6 +41,29 @@ jobs:
           OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           printf 'PV_OIDC_TOKEN=%s\n' "$OIDC_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Dispatch canonical identity canary
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SESSION_RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $PV_OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          USER_TOKEN="$(printf '%s' "$SESSION_RESPONSE" | jq -er '.session.access_token')"
+          echo "::add-mask::$USER_TOKEN"
+          mkdir -p test-results/speaker-identity
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/test-voice-v71-identity-once" \
+            -H "Authorization: Bearer $USER_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "{\"action\":\"dispatch\",\"candidate_asset_id\":\"$IDENTITY_CANARY_CANDIDATE_ID\"}")"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/speaker-identity/dispatch.json
+          printf '%s' "$RESPONSE" | jq -e '.ok == true and .status == "waiting_trusted_worker" and .trusted_authority == "github_repository_oidc"' >/dev/null
 
       - name: Claim one pending attestation
         id: claim
