@@ -10,6 +10,8 @@ const previewWorkflow = await readFile(new URL('../../.github/workflows/cloudfla
 test('Cloudflare runtime serves canonical static build with API-first routing', () => {
   assert.equal(wrangler.name, 'pablovoice-web');
   assert.equal(wrangler.main, './cloudflare/worker.mjs');
+  assert.equal(wrangler.workers_dev, true);
+  assert.equal(wrangler.preview_urls, true);
   assert.equal(wrangler.assets.directory, './apps/web/dist');
   assert.equal(wrangler.assets.binding, 'ASSETS');
   assert.equal(wrangler.assets.not_found_handling, 'single-page-application');
@@ -40,7 +42,9 @@ test('physical preview workflow can only upload a non-production Worker version 
   assert.match(previewWorkflow, /Physical Cloudflare preview is BLOCKED/);
   assert.match(previewWorkflow, /exit 1/);
   assert.match(previewWorkflow, /PV_COMMIT: \$\{\{ github\.sha \}\}/);
+  assert.match(previewWorkflow, /PREVIEW_ALIAS: pr-\$\{\{ github\.event\.pull_request\.number \}\}/);
   assert.match(previewWorkflow, /wrangler@4\.127\.1 versions upload/);
+  assert.match(previewWorkflow, /--preview-alias/);
   assert.doesNotMatch(previewWorkflow, /wrangler@4\.127\.1 deploy(?! --dry-run)/);
   assert.doesNotMatch(previewWorkflow, /versions deploy/);
   assert.doesNotMatch(previewWorkflow, /AI_GATEWAY_API_KEY:\s*\$\{\{/);
