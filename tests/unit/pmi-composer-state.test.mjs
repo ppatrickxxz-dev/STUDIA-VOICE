@@ -4,6 +4,7 @@ import { createProject, createTrack, snapshotProject } from '../../packages/core
 import {
   applyConfirmedPmiDraft,
   clearPmiComposerState,
+  composerStateKey,
   loadPmiComposerState,
   savePmiComposerState,
 } from '../../packages/app/pmi-composer-state.mjs';
@@ -13,6 +14,7 @@ function memoryStore() {
   return {
     read: async (key, fallback = null) => values.has(key) ? values.get(key) : fallback,
     write: async (key, value) => { values.set(key, value); },
+    remove: async (key) => { values.delete(key); },
     values,
   };
 }
@@ -36,13 +38,17 @@ test('pending Composer draft survives a storage round-trip only while base lyric
 
   const stale = await loadPmiComposerState('project-1', '[Verso]\nEditei manualmente', storage);
   assert.equal(stale, null);
+  assert.equal(storage.values.has(composerStateKey('project-1')), false);
   assert.equal(await loadPmiComposerState('project-1', '[Verso]\nEstrada sem destino', storage), null);
 });
 
-test('explicit clear removes the pending draft without touching project content', async () => {
+test('explicit clear physically removes the pending draft without touching project content', async () => {
   const storage = memoryStore();
   await savePmiComposerState('project-2', { text: 'rascunho', version: 1, baseLyrics: 'base' }, storage);
+  const key = composerStateKey('project-2');
+  assert.equal(storage.values.has(key), true);
   assert.equal(await clearPmiComposerState('project-2', storage), true);
+  assert.equal(storage.values.has(key), false);
   assert.equal(await loadPmiComposerState('project-2', 'base', storage), null);
 });
 
