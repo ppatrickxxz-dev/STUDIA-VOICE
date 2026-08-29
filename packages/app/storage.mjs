@@ -97,6 +97,10 @@ export async function getSetting(key, fallback = null) {
   return (await get('settings', key))?.value ?? fallback;
 }
 
+export async function deleteSetting(key) {
+  await remove('settings', key);
+}
+
 async function put(store, value) {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
@@ -123,5 +127,16 @@ async function all(store) {
     const request = database.transaction(store, 'readonly').objectStore(store).getAll();
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
+  });
+}
+
+async function remove(store, id) {
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(store, 'readwrite');
+    transaction.objectStore(store).delete(id);
+    transaction.oncomplete = () => resolve(true);
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error || new Error('Operação local cancelada.'));
   });
 }

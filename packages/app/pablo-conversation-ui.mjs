@@ -15,6 +15,12 @@ import {
   getPmiDraftApplyConfirmation,
   registerPmiDraftPreview,
 } from './pmi-draft-apply-state.mjs';
+import {
+  applyConfirmedPmiDraft,
+  clearPmiComposerState,
+  loadPmiComposerState,
+  savePmiComposerState,
+} from './pmi-composer-state.mjs';
 
 const analysisCache = new Map();
 const remoteAuth = new RemoteAuthAdapter();
@@ -175,13 +181,11 @@ async function applyPmiGeneratedDraft(text, draftVersion) {
   if (!project) throw new Error('Crie ou abra um projeto primeiro.');
   const confirmation = getPmiDraftApplyConfirmation(project.id, { draftVersion, text: value });
   if (!confirmation) throw new Error('Confirme a versão atual do rascunho antes de aplicar.');
-  const current = String(project.lyrics || '').trimEnd();
-  project.lyrics = confirmation.mode === 'append' && current ? `${current}\n\n${value}` : value;
-  const label = confirmation.mode === 'append' ? 'Rascunho PMI adicionado à letra' : 'Rascunho PMI usado como letra';
-  const saved = snapshotProject(project, label);
+  const saved = applyConfirmedPmiDraft(project, { ...confirmation, draftVersion }, snapshotProject);
   await persistProject(saved);
   clearPmiPendingDraft(saved.id);
   clearPmiDraftApplyState(saved.id);
+  await clearPmiComposerState(saved.id);
   const lyrics = document.querySelector('#lyrics');
   if (lyrics) lyrics.value = saved.lyrics;
   return confirmation.mode;
@@ -191,16 +195,19 @@ async function contextForMessage() {
   const project = await activeProject();
   const active = project?.tracks?.find((track) => track.id === project.activeTrackId) || project?.tracks?.[0] || null;
   const other = project?.tracks?.find((track) => track.id !== active?.id) || null;
+  const lyrics = String(project?.lyrics || '').slice(0, 12000);
+  const pendingDraft = project?.id ? await loadPmiComposerState(project.id, lyrics) : null;
   return {
     projectId: project?.id || null,
     trackId: active?.id || null,
     assetId: active?.assetId || null,
     referenceAssetId: active?.assetId || null,
     targetAssetId: other?.assetId || null,
-    lyrics: String(project?.lyrics || '').slice(0, 12000),
+    lyrics,
     notes: String(project?.notes || '').slice(0, 4000),
     preset: project?.preset || null,
     authorialMemory: project?.authorialMemory ? structuredClone(project.authorialMemory) : null,
+    pendingDraft,
   };
 }
 
@@ -272,6 +279,16 @@ async function submitMessage(form) {
     });
     if (result?.supported) {
       if (result.kind === 'pmi_generated_draft') {
+        await savePmiComposerState(context.projectId, {
+          text: result.text,
+          version: result.draftVersion,
+          command: result.command,
+          targetSection: result.targetSection,
+          targetGenre: result.targetGenre,
+          baseLyrics: context.lyrics,
+          provider: result.provider,
+          model: result.model,
+        });
         registerPmiDraftPreview(context.projectId, { draftVersion: result.draftVersion, text: result.text });
       }
       appendMessage(formatResult(result), 'assistant', result);
@@ -317,6 +334,29 @@ function injectConversationBox() {
     submitMessage(event.currentTarget);
   });
   injecting = false;
+  restorePendingComposerDraft().catch(() => {});
+}
+
+async function restorePendingComposerDraft() {
+  const project = await activeProject();
+  if (!project) return;
+  const pending = await loadPmiComposerState(project.id, String(project.lyrics || '').slice(0, 12000));
+  if (!pending) return;
+  registerPmiDraftPreview(project.id, { draftVersion: pending.version, text: pending.text });
+  appendMessage(`Rascunho v${pending.version} restaurado após recarregar. Revise, aplique ou descarte quando quiser.\n\n${pending.text}`, 'assistant', {
+    supported: true,
+    kind: 'pmi_generated_draft',
+    text: pending.text,
+    draftVersion: pending.version,
+    command: pending.command,
+    targetSection: pending.targetSection,
+    targetGenre: pending.targetGenre,
+    provider: pending.provider,
+    model: pending.model,
+    execution: 'preview_only',
+    canApply: false,
+    reviewRequired: true,
+  });
 }
 
 function appendMessage(text, role, result = null) {
@@ -341,7 +381,7 @@ function appendMessage(text, role, result = null) {
   if (result?.kind === 'pmi_generated_draft' && String(result.text || '').trim()) {
     const actions = document.createElement('div');
     actions.className = 'pv-actions';
-    for (const [mode, label] of [['replace', 'Usar como letra'], ['append', 'Adicionar à letra']]) {
+    for (const [mode, label] of [['replace', 'Usar como letra'], ['append', 'Adicionar à letra'], ['discard', 'Descartar']]) {
       const button = document.createElement('button');
       button.className = 'pv-btn';
       button.type = 'button';
@@ -352,6 +392,13 @@ function appendMessage(text, role, result = null) {
         try {
           const project = await activeProject();
           if (!project) throw new Error('Crie ou abra um projeto primeiro.');
+          if (mode === 'discard') {
+            clearPmiPendingDraft(project.id);
+            clearPmiDraftApplyState(project.id);
+            await clearPmiComposerState(project.id);
+            appendMessage('Rascunho descartado. A letra salva e o restante do projeto ficaram intactos.', 'assistant');
+            return;
+          }
           const confirmation = confirmPmiDraftApply(project.id, {
             mode,
             draftVersion: result.draftVersion,
