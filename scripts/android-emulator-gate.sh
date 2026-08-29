@@ -125,8 +125,155 @@ resume_and_wait() {
   wait_for_render foreground-resume
 }
 
+assert_export_bridge_smoke() {
+  local smoke_name="pv-android-export-smoke.wav"
+  local smoke_path="/sdcard/Download/PabloVoice/${smoke_name}"
+  local pid socket_name
+
+  pid="$(adb shell pidof "$package_name" 2>/dev/null | tr -d '\r' || true)"
+  if [ -z "$pid" ]; then
+    capture_diagnostics export-smoke-missing-pid
+    echo 'ANDROID_EXPORT_BRIDGE_SMOKE_PID_MISSING' >&2
+    return 1
+  fi
+
+  adb shell rm -f "$smoke_path" >/dev/null 2>&1 || true
+  socket_name="$(adb shell cat /proc/net/unix 2>/dev/null | tr -d '\r' | grep -o "webview_devtools_remote_${pid}" | head -n 1 || true)"
+  if [ -z "$socket_name" ]; then
+    socket_name="$(adb shell cat /proc/net/unix 2>/dev/null | tr -d '\r' | grep -o 'webview_devtools_remote_[^ ]*' | head -n 1 || true)"
+  fi
+  if [ -z "$socket_name" ]; then
+    capture_diagnostics export-smoke-devtools-missing
+    echo 'ANDROID_EXPORT_BRIDGE_DEVTOOLS_SOCKET_MISSING' >&2
+    return 1
+  fi
+
+  adb forward --remove tcp:9222 >/dev/null 2>&1 || true
+  adb forward tcp:9222 "localabstract:${socket_name}" > "$evidence_dir/export-smoke-forward.txt" 2>&1
+  python3 > "$evidence_dir/export-smoke-devtools.txt" <<'PY'
+import base64
+import json
+import os
+import socket
+import struct
+import urllib.request
+
+pages = json.loads(urllib.request.urlopen('http://127.0.0.1:9222/json', timeout=10).read().decode('utf-8'))
+page = next((item for item in pages if item.get('type') == 'page'), pages[0])
+ws_url = page['webSocketDebuggerUrl']
+assert ws_url.startswith('ws://127.0.0.1:9222') or ws_url.startswith('ws://localhost:9222')
+path = '/' + ws_url.split('://', 1)[1].split('/', 1)[1]
+
+key = base64.b64encode(os.urandom(16)).decode('ascii')
+sock = socket.create_connection(('127.0.0.1', 9222), timeout=10)
+sock.sendall((
+    f'GET {path} HTTP/1.1\r\n'
+    'Host: 127.0.0.1:9222\r\n'
+    'Upgrade: websocket\r\n'
+    'Connection: Upgrade\r\n'
+    f'Sec-WebSocket-Key: {key}\r\n'
+    'Sec-WebSocket-Version: 13\r\n\r\n'
+).encode('ascii'))
+response = b''
+while b'\r\n\r\n' not in response:
+    response += sock.recv(4096)
+if b' 101 ' not in response.split(b'\r\n', 1)[0]:
+    raise RuntimeError(response.decode('utf-8', 'replace'))
+
+def send_text(message):
+    payload = message.encode('utf-8')
+    header = bytearray([0x81])
+    if len(payload) < 126:
+        header.append(0x80 | len(payload))
+    elif len(payload) < 65536:
+        header.append(0x80 | 126)
+        header.extend(struct.pack('!H', len(payload)))
+    else:
+        header.append(0x80 | 127)
+        header.extend(struct.pack('!Q', len(payload)))
+    mask = os.urandom(4)
+    header.extend(mask)
+    sock.sendall(bytes(header) + bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload)))
+
+def recv_text():
+    first = sock.recv(2)
+    if len(first) < 2:
+        raise RuntimeError('websocket closed')
+    opcode = first[0] & 0x0F
+    length = first[1] & 0x7F
+    if length == 126:
+        length = struct.unpack('!H', sock.recv(2))[0]
+    elif length == 127:
+        length = struct.unpack('!Q', sock.recv(8))[0]
+    payload = b''
+    while len(payload) < length:
+        payload += sock.recv(length - len(payload))
+    if opcode == 8:
+        raise RuntimeError('websocket close frame')
+    return payload.decode('utf-8')
+
+expression = r"""
+(() => {
+  const bridge = globalThis.PabloVoiceAndroid;
+  if (!bridge || typeof bridge.beginSave !== 'function') throw new Error('BRIDGE_MISSING');
+  const payload = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  if (!bridge.beginSave('pv-android-export-smoke.wav', 'audio/wav')) throw new Error('BEGIN_FAILED');
+  try {
+    if (!bridge.appendBase64(payload)) throw new Error('APPEND_FAILED');
+    if (!bridge.finishSave()) throw new Error('FINISH_FAILED');
+    return 'ANDROID_EXPORT_BRIDGE_SMOKE_PASSED';
+  } catch (error) {
+    try { bridge.abortSave(); } catch (_) {}
+    throw error;
+  }
+})()
+"""
+command = {
+    'id': 1,
+    'method': 'Runtime.evaluate',
+    'params': {
+        'expression': expression,
+        'awaitPromise': True,
+        'returnByValue': True,
+        'timeout': 10000,
+    },
+}
+send_text(json.dumps(command))
+while True:
+    data = json.loads(recv_text())
+    if data.get('id') != 1:
+        continue
+    print(json.dumps(data, sort_keys=True))
+    result = data.get('result', {}).get('result', {})
+    if result.get('subtype') == 'error' or 'exceptionDetails' in data.get('result', {}):
+        raise RuntimeError(json.dumps(data, sort_keys=True))
+    if result.get('value') != 'ANDROID_EXPORT_BRIDGE_SMOKE_PASSED':
+        raise RuntimeError(json.dumps(data, sort_keys=True))
+    break
+PY
+  adb forward --remove tcp:9222 >/dev/null 2>&1 || true
+
+  for attempt in $(seq 1 20); do
+    adb shell ls -l "$smoke_path" > "$evidence_dir/export-smoke-file.txt" 2>&1 && break
+    sleep 1
+  done
+  adb shell content query --uri content://media/external_primary/downloads > "$evidence_dir/export-smoke-mediastore.txt" 2>/dev/null || true
+  if ! grep -q "$smoke_name" "$evidence_dir/export-smoke-file.txt"; then
+    capture_diagnostics export-smoke-file-missing
+    echo 'ANDROID_EXPORT_BRIDGE_MEDIASTORE_FILE_MISSING' >&2
+    return 1
+  fi
+  if ! grep -Eq '[1-9][0-9]*' "$evidence_dir/export-smoke-file.txt"; then
+    capture_diagnostics export-smoke-file-empty
+    echo 'ANDROID_EXPORT_BRIDGE_MEDIASTORE_FILE_EMPTY' >&2
+    return 1
+  fi
+  echo 'ANDROID_EXPORT_BRIDGE_MEDIASTORE_SMOKE_PASSED'
+}
+
 assert_native_package_contract
 launch_and_wait launch-offline
+assert_export_bridge_smoke
 launch_pid="$(cat "$evidence_dir/launch-offline-pid.txt")"
 launch_start_ticks="$(process_start_ticks "$launch_pid")"
 if [ -z "$launch_start_ticks" ]; then
