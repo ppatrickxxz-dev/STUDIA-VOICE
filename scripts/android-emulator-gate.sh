@@ -41,6 +41,35 @@ assert_no_fatal_crash() {
   fi
 }
 
+assert_native_package_contract() {
+  local package_dump="$evidence_dir/package-contract.txt"
+  local appops_dump="$evidence_dir/package-appops.txt"
+  adb shell dumpsys package "$package_name" > "$package_dump" 2>/dev/null || true
+  adb shell appops get "$package_name" RECORD_AUDIO > "$appops_dump" 2>/dev/null || true
+
+  if ! grep -q "android.permission.RECORD_AUDIO" "$package_dump"; then
+    capture_diagnostics package-contract-missing-record-audio
+    echo 'ANDROID_NATIVE_RECORD_AUDIO_PERMISSION_MISSING' >&2
+    return 1
+  fi
+  if ! grep -Eq "android.permission.RECORD_AUDIO: granted=true|RECORD_AUDIO: allow" "$package_dump" "$appops_dump" 2>/dev/null; then
+    capture_diagnostics package-contract-record-audio-not-granted
+    echo 'ANDROID_NATIVE_RECORD_AUDIO_PERMISSION_NOT_GRANTED' >&2
+    return 1
+  fi
+  if ! grep -q "$activity_name" "$package_dump"; then
+    capture_diagnostics package-contract-missing-activity
+    echo 'ANDROID_NATIVE_MAIN_ACTIVITY_MISSING' >&2
+    return 1
+  fi
+  if ! grep -Eq "android.intent.action.VIEW|android.intent.action.SEND|audio/\*" "$package_dump"; then
+    capture_diagnostics package-contract-missing-audio-entrypoint
+    echo 'ANDROID_NATIVE_AUDIO_IMPORT_ENTRYPOINT_MISSING' >&2
+    return 1
+  fi
+  echo 'ANDROID_NATIVE_PACKAGE_CONTRACT_PASSED'
+}
+
 process_start_ticks() {
   local pid="$1"
   adb shell cat "/proc/$pid/stat" 2>/dev/null | tr -d '\r' | awk '{print $22}'
@@ -96,6 +125,7 @@ resume_and_wait() {
   wait_for_render foreground-resume
 }
 
+assert_native_package_contract
 launch_and_wait launch-offline
 launch_pid="$(cat "$evidence_dir/launch-offline-pid.txt")"
 launch_start_ticks="$(process_start_ticks "$launch_pid")"
@@ -160,4 +190,5 @@ launch_variation="$(cat "$evidence_dir/launch-offline-variation.txt")"
 foreground_variation="$(cat "$evidence_dir/foreground-resume-variation.txt")"
 relaunch_variation="$(cat "$evidence_dir/relaunch-variation.txt")"
 echo "ANDROID_EMULATOR_LIFECYCLE_GATE_PASSED launch_pid=$launch_pid launch_ticks=$launch_start_ticks resume_pid=$resume_pid resume_ticks=$resume_start_ticks relaunch_pid=$relaunch_pid relaunch_ticks=$relaunch_start_ticks launch_variation=$launch_variation foreground_variation=$foreground_variation relaunch_variation=$relaunch_variation"
+echo 'ANDROID_NATIVE_PACKAGE_CONTRACT_EVIDENCE_CAPTURED'
 echo 'MIC_CAPTURE_REQUIRES_PHYSICAL_DEVICE'
