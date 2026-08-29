@@ -118,6 +118,7 @@ path = '/' + ws_url.split('://', 1)[1].split('/', 1)[1]
 
 key = base64.b64encode(os.urandom(16)).decode('ascii')
 sock = socket.create_connection(('127.0.0.1', 9223), timeout=10)
+sock.settimeout(30)
 sock.sendall((
     f'GET {path} HTTP/1.1\r\n'
     'Host: 127.0.0.1:9223\r\n'
