@@ -8,7 +8,7 @@ import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
 import { replaceBreathAutomation } from './audio/src/voice/breath-intelligence.mjs';
 import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
 import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
-import { executePabloAudioMessage } from './pablo-conversation-audio.mjs';
+import { clearPmiPendingDraft, executePabloAudioMessage } from './pablo-conversation-audio.mjs';
 
 const analysisCache = new Map();
 const remoteAuth = new RemoteAuthAdapter();
@@ -172,6 +172,7 @@ async function applyPmiGeneratedDraft(text, mode = 'replace') {
   const label = mode === 'append' ? 'Rascunho PMI adicionado à letra' : 'Rascunho PMI usado como letra';
   const saved = snapshotProject(project, label);
   await persistProject(saved);
+  clearPmiPendingDraft(saved.id);
   const lyrics = document.querySelector('#lyrics');
   if (lyrics) lyrics.value = saved.lyrics;
   return true;

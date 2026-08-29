@@ -41,7 +41,7 @@ test('does not treat audio or mix requests as pending lyric revision', () => {
 });
 
 test('a request for another or new refrain remains a fresh generation, not a revision', () => {
-  for (const message of ['faz outro refrão', 'cria uma nova versão do refrão']) {
+  for (const message of ['faz outro refrão', 'cria uma nova versão do refrão', 'Faz uma ponte sobre a volta']) {
     const result = planPendingDraftRevision(message, {
       pendingDraft: { text: '[Refrão]\nAlguma coisa', version: 2 },
     });

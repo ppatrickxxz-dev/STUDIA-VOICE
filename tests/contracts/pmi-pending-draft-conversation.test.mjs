@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executePabloAudioMessage } from '../../packages/app/pablo-conversation-audio.mjs';
+import { clearPmiPendingDraft, executePabloAudioMessage } from '../../packages/app/pablo-conversation-audio.mjs';
 
 test('generated draft can be revised conversationally before anything is applied to project lyrics', async () => {
   const calls = [];
@@ -81,4 +81,48 @@ test('asking for another refrain starts a fresh preview chain instead of rewriti
   assert.equal(next.command, 'generate');
   assert.equal(next.draftVersion, 1);
   assert.equal(next.revisionOfPending, false);
+});
+
+test('asking for a bridge starts a fresh preview chain instead of rewriting an older draft', async () => {
+  const projectId = 'pending-draft-contract-4';
+  const calls = [];
+  const generateMusicDraft = async (request) => {
+    calls.push(request);
+    return { text: calls.length === 1 ? '[Refrão]\nPrimeiro' : '[Ponte]\nVolta sem mapa' };
+  };
+  const context = { projectId, lyrics: '[Verso]\nAté onde deu', preset: 'music' };
+  await executePabloAudioMessage('Escreve um refrão sobre a estrada', context, { generateMusicDraft });
+
+  const bridge = await executePabloAudioMessage('Faz uma ponte sobre a volta', context, { generateMusicDraft });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].command, 'generate');
+  assert.equal(calls[1].targetSection, 'ponte');
+  assert.equal(Object.hasOwn(calls[1].contextPack, 'pending_draft'), false);
+  assert.equal(bridge.command, 'generate');
+  assert.equal(bridge.draftVersion, 1);
+  assert.equal(bridge.revisionOfPending, false);
+});
+
+test('cleared pending draft cannot be revised after apply', async () => {
+  const projectId = 'pending-draft-contract-5';
+  let calls = 0;
+  const context = { projectId, lyrics: '[Verso]\nAté onde deu', preset: 'music' };
+  await executePabloAudioMessage('Escreve um refrão sobre a estrada', context, {
+    generateMusicDraft: async () => {
+      calls += 1;
+      return { text: '[Refrão]\nPreview antigo' };
+    },
+  });
+
+  assert.equal(clearPmiPendingDraft(projectId), true);
+  const result = await executePabloAudioMessage('Gostei, mas deixa esse refrão menos óbvio', context, {
+    generateMusicDraft: async () => {
+      calls += 1;
+      return { text: 'não deveria revisar' };
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.notEqual(result.kind, 'pmi_generated_draft');
 });

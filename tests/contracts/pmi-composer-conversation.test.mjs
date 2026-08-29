@@ -58,6 +58,7 @@ test('conversation UI uses authenticated agentTurn and requires manual review be
   assert.match(source, /remoteAuth\.ensureRemoteProject\(project\)/);
   assert.match(source, /remoteAuth\.agentTurn\(\{/);
   assert.match(source, /review_before_apply: true/);
+  assert.match(source, /clearPmiPendingDraft\(saved\.id\)/);
   assert.match(source, /result\?\.kind === 'pmi_generated_draft'/);
   assert.match(source, /\['replace', 'Usar como letra'\], \['append', 'Adicionar à letra'\]/);
   assert.match(source, /applyPmiGeneratedDraft\(result\.text, mode\)/);
