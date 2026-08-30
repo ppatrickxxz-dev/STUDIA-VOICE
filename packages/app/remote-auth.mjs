@@ -1,7 +1,9 @@
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
 const DEVICE_AUTH_URL = `${PROJECT_URL}/functions/v1/device-auth`;
-const AGENT_URL = `${PROJECT_URL}/functions/v1/validate-app-js-v71`;
+const CLOUDFLARE_RUNTIME_URL = 'https://studia-voice.ppatrickxxz.workers.dev';
+const CLOUDFLARE_WORKER_ORIGIN = /^https:\/\/(?:[a-z0-9-]+-)?studia-voice\.ppatrickxxz\.workers\.dev$/i;
+const LOCAL_WEB_ORIGIN = /^https?:\/\/(?:127\.0\.0\.1|localhost):4173$/i;
 const SESSION_KEY = 'pablovoice.remote.session.v1';
 const DEVICE_KEY = 'pablovoice.remote.device.v1';
 const EXPIRY_SKEW_MS = 60_000;
@@ -13,6 +15,13 @@ function decodeJwtPayload(token = '') { try { const payload=String(token).split(
 function authHeaders(accessToken='') { const headers={apikey:PUBLISHABLE_KEY,'content-type':'application/json'}; if(accessToken) headers.authorization=`Bearer ${accessToken}`; return headers; }
 function sessionFromPayload(payload={}) { const accessToken=String(payload.access_token||''); const refreshToken=String(payload.refresh_token||''); if(!accessToken||!refreshToken)return null; const expiresIn=Math.max(30,Number(payload.expires_in||3600)); return {accessToken,refreshToken,tokenType:String(payload.token_type||'bearer'),expiresAt:Date.now()+expiresIn*1000}; }
 function defaultFetch(){ const fn=globalThis.fetch; return typeof fn==='function'?fn.bind(globalThis):null; }
+export function resolveAgentUrl(location = globalThis.location) {
+  const origin = String(location?.origin || '').trim();
+  if (LOCAL_WEB_ORIGIN.test(origin)) return '';
+  if (CLOUDFLARE_WORKER_ORIGIN.test(origin)) return `${origin}/api/pablo-agent`;
+  return `${CLOUDFLARE_RUNTIME_URL}/api/pablo-agent`;
+}
+const AGENT_URL = resolveAgentUrl();
 
 async function loadGeneratorAdapter() {
   if (generatorAdapterPromise) return generatorAdapterPromise;
@@ -42,8 +51,9 @@ export class RemoteAuthAdapter {
  async loginWithBootstrapCode(code){const value=String(code||'').trim().replace(/\s+/g,'');if(value.length<6||value.length>64)throw new Error('Código de conexão inválido.');const response=await this.fetch(DEVICE_AUTH_URL,{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'bootstrap',code:value,label:'PabloVoice Android'})});const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(String(data?.human_message||data?.error||`device_bootstrap_${response.status}`));const next=sessionFromPayload(data.session||{});if(!next)throw new Error('Sessão de conexão inválida.');this.setSession(next);if(data.device_token)this.setDeviceToken(data.device_token);this.status='authenticated';return next;}
  async ensureSession(){if(this.isSessionUsable())return this.session;const refreshed=await this.refreshSession();if(refreshed)return refreshed;return this.loginWithDevice();}
  async ensureRemoteProject(localProject={}){const session=await this.ensureSession();const accessToken=session?.accessToken||'';const localId=String(localProject?.id||'').trim().slice(0,160);const title=String(localProject?.name||localProject?.title||'Projeto PabloVoice').trim().slice(0,160)||'Projeto PabloVoice';if(!accessToken)return {ok:false,error:'auth_required',fallback_allowed:true};if(!localId)return {ok:false,error:'local_project_id_required',fallback_allowed:true};const subject=String(decodeJwtPayload(accessToken)?.sub||'');if(!subject)return {ok:false,error:'invalid_session',fallback_allowed:true};const filter=encodeURIComponent(JSON.stringify({local_project_id:localId}));try{const lookup=await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at&metadata=cs.${filter}&limit=1`,{headers:authHeaders(accessToken)});const matches=await lookup.json().catch(()=>[]);if(!lookup.ok)throw new Error(`project_lookup_${lookup.status}`);if(Array.isArray(matches)&&matches[0]?.id)return {ok:true,created:false,project:matches[0]};const response=await this.fetch(`${PROJECT_URL}/rest/v1/projects?select=id,title,metadata,updated_at`,{method:'POST',headers:{...authHeaders(accessToken),prefer:'return=representation'},body:JSON.stringify({user_id:subject,title,metadata:{local_project_id:localId,source:'pablovoice-local-first',linked_at:new Date().toISOString()}})});const created=await response.json().catch(()=>[]);if(!response.ok||!Array.isArray(created)||!created[0]?.id)throw new Error(`project_create_${response.status}`);return {ok:true,created:true,project:created[0]};}catch{return {ok:false,error:'project_link_failed',fallback_allowed:true};}}
- async agentHealth(){try{const response=await this.fetch(AGENT_URL,{headers:{apikey:PUBLISHABLE_KEY}});const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(`agent_health_${response.status}`);return {available:Boolean(data.configured),authenticated:Boolean(await this.ensureSession()),...data};}catch{return {available:false,authenticated:false,fallback_allowed:true,error:'remote_unavailable'};}}
+ async agentHealth(){if(!AGENT_URL)return {available:false,authenticated:false,fallback_allowed:true,error:'local_runtime'};try{const response=await this.fetch(AGENT_URL,{headers:{apikey:PUBLISHABLE_KEY}});const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(`agent_health_${response.status}`);return {available:Boolean(data.configured),authenticated:Boolean(await this.ensureSession()),...data};}catch{return {available:false,authenticated:false,fallback_allowed:true,error:'remote_unavailable'};}}
  async agentTurn(payload, options={}){
+   if(!AGENT_URL)return {ok:false,error:'remote_unavailable',fallback_allowed:true};
    const command=String(payload?.command||'');
    if(SONG_COMMANDS.has(command)&&options?.bypassGeneratorAdapter!==true){
      const Adapter=await loadGeneratorAdapter();

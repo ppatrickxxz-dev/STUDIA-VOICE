@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
 import test from 'node:test';
+import cloudflareWorker from '../../cloudflare/worker.mjs';
 
 const wrangler = JSON.parse(await readFile(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
 const worker = await readFile(new URL('../../cloudflare/worker.mjs', import.meta.url), 'utf8');
 const headers = await readFile(new URL('../../packages/app/_headers', import.meta.url), 'utf8');
+const html = await readFile(new URL('../../packages/app/index.html', import.meta.url), 'utf8');
+const remoteAuth = await readFile(new URL('../../packages/app/remote-auth.mjs', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
 const vercelQuarantine = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
 
@@ -31,6 +34,51 @@ test('Cloudflare worker owns the canonical API routes with no Vercel runtime dep
   assert.doesNotMatch(worker, /OPENAI_API_KEY|api\.openai\.com/);
   assert.doesNotMatch(worker, /@vercel\/oidc|getVercelOidcToken|VERCEL_OIDC_TOKEN|AI_GATEWAY_API_KEY/i);
   assert.doesNotMatch(worker, /ai-gateway\.vercel\.sh|vercel_ai_gateway/i);
+});
+
+test('Composer clients use Cloudflare and Android preflight is explicitly allowed', async () => {
+  assert.match(remoteAuth, /const CLOUDFLARE_RUNTIME_URL = 'https:\/\/studia-voice\.ppatrickxxz\.workers\.dev';/);
+  assert.match(remoteAuth, /const AGENT_URL = resolveAgentUrl\(\);/);
+  assert.match(remoteAuth, /LOCAL_WEB_ORIGIN/);
+  assert.match(remoteAuth, /CLOUDFLARE_WORKER_ORIGIN/);
+  assert.doesNotMatch(remoteAuth, /const AGENT_URL = `\$\{PROJECT_URL\}\/functions\/v1\/validate-app-js-v71`;/);
+  assert.match(html, /connect-src[^\n]*https:\/\/studia-voice\.ppatrickxxz\.workers\.dev/);
+  assert.match(headers, /connect-src[^\n]*https:\/\/studia-voice\.ppatrickxxz\.workers\.dev/);
+
+  const androidOrigin = 'https://appassets.androidplatform.net';
+  const env = { AI: { run: async () => ({ response: 'unused' }) }, ASSETS: { fetch: async () => new Response('asset') } };
+  const preflight = await cloudflareWorker.fetch(new Request('https://studia-voice.ppatrickxxz.workers.dev/api/pablo-agent', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: androidOrigin,
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'authorization, content-type, apikey',
+    },
+  }), env);
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), androidOrigin);
+  assert.match(preflight.headers.get('access-control-allow-methods') || '', /POST/);
+  assert.match(preflight.headers.get('access-control-allow-headers') || '', /Authorization/);
+
+  const localOrigin = 'http://127.0.0.1:4173';
+  const localPreflight = await cloudflareWorker.fetch(new Request('https://studia-voice.ppatrickxxz.workers.dev/api/pablo-agent', {
+    method: 'OPTIONS',
+    headers: { Origin: localOrigin, 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'apikey' },
+  }), env);
+  assert.equal(localPreflight.status, 204);
+  assert.equal(localPreflight.headers.get('access-control-allow-origin'), localOrigin);
+
+  const health = await cloudflareWorker.fetch(new Request('https://studia-voice.ppatrickxxz.workers.dev/api/health', {
+    headers: { Origin: androidOrigin },
+  }), env);
+  assert.equal(health.status, 200);
+  assert.equal(health.headers.get('access-control-allow-origin'), androidOrigin);
+
+  const denied = await cloudflareWorker.fetch(new Request('https://studia-voice.ppatrickxxz.workers.dev/api/pablo-agent', {
+    headers: { Origin: 'https://evil.example' },
+  }), env);
+  assert.equal(denied.status, 200);
+  assert.equal(denied.headers.get('access-control-allow-origin'), null);
 });
 
 test('Cloudflare AI provider failures remain typed and fail closed with no fabricated fallback', () => {
