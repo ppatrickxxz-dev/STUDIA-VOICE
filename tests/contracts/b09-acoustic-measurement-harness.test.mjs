@@ -18,10 +18,11 @@ test('B09 harness measures the frozen metric families without inventing threshol
 });
 
 test('B09 harness verifies retained byte identity before measurement', () => {
-  assert.match(harness, /sha256_file/);
-  assert.match(harness, /source_sha256_mismatch/);
-  assert.match(harness, /vocal_sha256_mismatch/);
-  assert.match(harness, /instrumental_sha256_mismatch/);
+  assert.match(harness, /def require_hash/);
+  assert.match(harness, /\{label\}_sha256_mismatch/);
+  assert.match(harness, /require_hash\("source"/);
+  assert.match(harness, /require_hash\("vocal"/);
+  assert.match(harness, /require_hash\("instrumental"/);
 });
 
 test('leakage remains explicitly unmeasured without independent ground truth', () => {
