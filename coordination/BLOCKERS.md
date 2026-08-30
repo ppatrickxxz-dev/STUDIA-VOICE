@@ -8,7 +8,7 @@ Only blockers that affect cross-module coordination belong here.
 
 Status: OPEN.
 
-Build and emulator evidence do not replace the required physical-device validation. The final Android pass must cover at minimum install/open, refresh, upload, microphone, playback/export, keyboard, background/foreground and navigation on a real device.
+The signed release and emulator evidence for the current main SHA passed, but they do not replace the required physical-device validation. The Android delta pass must cover at minimum install/open, refresh, upload, microphone, playback/export, keyboard, background/foreground and navigation on a real device.
 
 ### B09 standalone stems route
 
