@@ -79,3 +79,17 @@ Consequence: the first closure target is spectral-envelope delivery into Mix Int
 Decision: AI-driven edits should converge on the lifecycle `interpret -> validate -> plan -> preview -> A/B -> commit -> selective undo`, with safe reversible exceptions explicitly registered.
 
 Consequence: action ownership, preservation constraints, processing recipes, provider/model versions, confidence and provenance are recorded in an Action Ledger so project history is finer-grained than global snapshots alone.
+
+## 2026-08-30 — Cloudflare Worker is the canonical online Composer runtime
+
+Decision: Composer health and turns use the canonical Cloudflare Worker, with Supabase retained only for device authentication and project ownership. Cloudflare Worker responses are origin-scoped for the WebView/local gate and the app CSP names the Worker explicitly.
+
+Evidence: PR #201 merged as `14c01351db671c0e5737ec78ae7b015cfef6df84`; Cloudflare Workers Build `5d834187-190d-4c0f-8b10-5800b91079eb`; Cloudflare Runtime Gate, Web Functional Gate, CI, signed release and authenticated production canary all passed.
+
+Consequence: no client may route Composer turns to the retired `validate-app-js-v71` endpoint. Preview and production Workers resolve same-origin, Android resolves the canonical Worker, and local functional gates fail closed without inventing remote success.
+
+## 2026-08-30 — Release evidence is SHA-bound and physical Android remains open
+
+Decision: automated release evidence is recorded against main SHA `14c01351db671c0e5737ec78ae7b015cfef6df84`; emulator, signed artifact and production canary are separate evidence axes and do not close the physical-device delta gate.
+
+Consequence: the next Android validation must install this signed update on real hardware and record lifecycle/export/navigation evidence before physical release promotion is marked complete.

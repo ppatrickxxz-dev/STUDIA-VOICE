@@ -1,7 +1,7 @@
 {
   "product": "PabloVoice",
   "sourceOfTruth": "ppatrickxxz-dev/STUDIA-VOICE:main",
-  "updatedAt": "2026-08-27T15:20:00Z",
+  "updatedAt": "2026-08-30T19:04:39Z",
   "productGoal": "Um único PabloVoice para Web e Android em que o usuário cria música, trabalha a própria voz, edita áudio e exporta sem precisar operar infraestrutura técnica.",
   "rules": {
     "singleCanonicalSource": true,
@@ -21,18 +21,23 @@
       "package": "com.pablovoice.studio",
       "permanentSigning": true,
       "signedReleasePipeline": "passing",
+      "lastSignedReleaseCommit": "14c01351db671c0e5737ec78ae7b015cfef6df84",
       "physicalInstall": "confirmed",
       "status": "installed-baseline-needs-delta-update",
-      "notes": "O APK permanente já instala no aparelho físico. Funções antigas já foram testadas repetidamente; próximos testes físicos devem se limitar às novidades relevantes."
+      "notes": "O APK permanente já instala no aparelho físico. O signed-release e o signed-release-emulator passaram no SHA atual; a instalação física desta atualização ainda precisa ser registrada. Funções antigas já foram testadas repetidamente; próximos testes físicos devem se limitar às novidades relevantes."
     },
     "web": {
       "canonicalBuild": "passing",
       "browserGate": "passing",
-      "publicDeployment": "temporarily-rate-limited",
-      "notes": "O limite Hobby da Vercel pode atrasar publicação, mas não redefine o estado do código canônico."
+      "publicDeployment": "passing",
+      "deploymentOwner": "cloudflare_workers",
+      "productionUrl": "https://studia-voice.ppatrickxxz.workers.dev",
+      "lastVerifiedCommit": "14c01351db671c0e5737ec78ae7b015cfef6df84",
+      "notes": "Workers Builds publicou a produção e o canário autenticado do Composer passou no mesmo SHA. O campo commit de /api/health ainda usa o fallback local do wrangler; a proveniência exata está no Build/Canary vinculados ao SHA."
     }
   },
   "recentlyMerged": [
+    {"pr":201,"area":"Cloudflare runtime closure","notes":"Composer migrou do endpoint Edge aposentado para o Worker canônico; CORS/preflight Android, CSP, preview/local runtime selection e gates de produção foram fechados no SHA 14c01351."},
     {"pr":43,"area":"Unified AI Studio","notes":"Pablo AI, Generator Adapter, RVC/Applio Voice Lab e harmonias high/low foram unificados numa única superfície."},
     {"pr":44,"area":"Breath review","notes":"Automação regional não destrutiva com A/B, manter/ignorar/desfazer e persistência revisionada."},
     {"pr":46,"area":"Android physical remediation","notes":"Criar música roteia para Composer, áudio pode ser reidratado após perda de buffer e contexto usa o projeto realmente aberto."},
@@ -53,7 +58,7 @@
     {"pr":73,"area":"Pablo Music Intelligence 1.0","notes":"Concept Engine, Composition Session Engine, Critic inicial e Authorial Memory foram absorvidos como núcleo interno, sem nova superfície de produto."}
   ],
   "activeWorkstreams": [
-    {"area":"Composer live provider","status":"blocked-by-provider-account","notes":"Backend canônico consegue guardar e resolver credencial server-side; a primeira chamada real foi recusada pelo provedor por billing_not_active. Não é falha de UI ou do roteamento do app."},
+    {"area":"Composer live provider","status":"validated-live-canary","notes":"Cloudflare Workers AI respondeu ao canário autenticado de produção com resposta criativa, metadados e falha fechada preservados; evidência retida no run 33329760884 para o SHA 14c01351."},
     {"area":"B09 standalone stems","status":"merged-awaiting-live-canary","notes":"Demucs/rota existem; falta uma execução autenticada atual que persista stems independentes."},
     {"area":"B07 harmony pair","status":"implementation-ready-evidence-pending","notes":"High/low existem; promoção depende de evidência acústica válida e correlacionada do par."},
     {"area":"Voice Lab live quality","status":"implementation-ready-evidence-pending","notes":"Natural/Identity/Smooth e referência de identidade existem; qualidade final ainda exige execução retida e revisão acústica."},
@@ -81,18 +86,42 @@
     {"id":"studio-life","name":"Pocket Studio / Studio Life / Avatar / Pets","priority":"P2","status":"canonical-creative-direction","validated":false,"notes":"Preservar identidade pixel/console, progressão não punitiva e pets musicais; integrar depois do fluxo musical P0 estar utilizável."}
   ],
   "currentBlockers": [
-    "Provider online de composição recusa chamadas por billing_not_active; não bloquear o restante do produto por isso.",
+    "A atualização Android desta release ainda precisa ser instalada e validada em aparelho físico; os gates de emulador não substituem esse passo.",
     "Stems, Voice Lab e par high/low precisam de evidência real atual para serem promovidos como finalizados.",
     "Instrument Lab, Podcast Cleanup, Video Audio e Studio Life ainda precisam ser migrados do conhecimento/runtime histórico para módulos atuais.",
-    "Publicação Web pode atrasar pelo limite gratuito da Vercel."
+    "A proveniência do commit no endpoint /api/health ainda usa o fallback local do wrangler; a evidência exata desta release está vinculada ao Build/Canary do Cloudflare."
   ],
   "nextClosureOrder": [
     "Manter main como fonte única e remover branches/PRs superseded.",
     "Fechar um fluxo musical utilizável sem depender de provider pago: projeto -> análise -> edição -> voz -> mix -> exportação.",
-    "Conectar geração online quando existir provider realmente disponível, sem exigir configuração técnica do usuário.",
+    "Manter o Composer online ligado ao Worker canônico e promover novas capacidades somente com canário autenticado e evidência retida.",
     "Executar evidência real de stems, Voice Lab, harmonias e continuidade sequencial.",
     "Migrar Instrument Lab, Podcast Cleanup e Video Audio.",
     "Integrar Studio Life/avatar/pets como camada criativa sobre o Studio já estável.",
     "Publicar Web e entregar atualização Android única contendo o conjunto consolidado."
-  ]
+  ],
+  "releaseLedger": {
+    "commit": "14c01351db671c0e5737ec78ae7b015cfef6df84",
+    "mergedPr": 201,
+    "verifiedAt": "2026-08-30T19:04:39Z",
+    "cloudflare": {
+      "productionUrl": "https://studia-voice.ppatrickxxz.workers.dev",
+      "workersBuildId": "5d834187-190d-4c0f-8b10-5800b91079eb",
+      "versionId": "7edff7d1-01c8-4d6a-b31e-9d627875e03a",
+      "providerCanaryRun": 33329760884
+    },
+    "gates": {
+      "cloudflareRuntime": "passed",
+      "cloudflareProductionCanary": "passed",
+      "webFunctional": "passed",
+      "ciWebAndContracts": "passed",
+      "androidBuild": "passed",
+      "androidEmulator": "passed",
+      "androidImportEmulator": "passed",
+      "androidOpenWithProjectEmulator": "passed",
+      "signedRelease": "passed",
+      "signedReleaseEmulator": "passed",
+      "physicalAndroidDevice": "open"
+    }
+  }
 }
