@@ -7,9 +7,16 @@ const workflow = await readFile(
   'utf8',
 );
 
-test('Composer canary does not retry terminal provider billing failures', () => {
-  assert.match(workflow, /PROVIDER_ERROR_CODE=.*provider_error_code.*provider_error_type/);
-  assert.match(workflow, /PROVIDER_ERROR_CODE.*billing_not_active/);
-  assert.match(workflow, /PROVIDER_ERROR_CODE.*insufficient_quota/);
-  assert.match(workflow, /if \[ "\$PROVIDER_ERROR_CODE" != 'billing_not_active' \].*insufficient_quota/);
+test('Composer canary is bound to the canonical Workers AI production round-trip', () => {
+  assert.match(workflow, /CLOUDFLARE_PRODUCTION_URL:\s*https:\/\/studia-voice\.ppatrickxxz\.workers\.dev/);
+  assert.match(workflow, /provider == \"cloudflare_workers_ai\"/);
+  assert.match(workflow, /fallback_allowed == false/);
+  assert.match(workflow, /AI_RUNTIME_PROVIDER_BLOCKED/);
+  assert.doesNotMatch(workflow, /billing_not_active|insufficient_quota|openai_backend|validate-app-js-v71/);
+});
+
+test('Composer canary never fabricates success or loops retries around provider failure', () => {
+  assert.match(workflow, /if \[ \"\$HTTP_CODE\" != '200' \]; then/);
+  assert.match(workflow, /exit 1/);
+  assert.doesNotMatch(workflow, /RETRY_MS|RETRY_SECONDS|call_provider\(\)/);
 });
