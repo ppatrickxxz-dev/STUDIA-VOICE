@@ -38,7 +38,9 @@ test('Cloudflare worker owns the canonical API routes with no Vercel runtime dep
 
 test('Composer clients use Cloudflare and Android preflight is explicitly allowed', async () => {
   assert.match(remoteAuth, /const CLOUDFLARE_RUNTIME_URL = 'https:\/\/studia-voice\.ppatrickxxz\.workers\.dev';/);
-  assert.match(remoteAuth, /const AGENT_URL = `\$\{CLOUDFLARE_RUNTIME_URL\}\/api\/pablo-agent`;/);
+  assert.match(remoteAuth, /const AGENT_URL = resolveAgentUrl\(\);/);
+  assert.match(remoteAuth, /LOCAL_WEB_ORIGIN/);
+  assert.match(remoteAuth, /CLOUDFLARE_WORKER_ORIGIN/);
   assert.doesNotMatch(remoteAuth, /const AGENT_URL = `\$\{PROJECT_URL\}\/functions\/v1\/validate-app-js-v71`;/);
   assert.match(html, /connect-src[^\n]*https:\/\/studia-voice\.ppatrickxxz\.workers\.dev/);
   assert.match(headers, /connect-src[^\n]*https:\/\/studia-voice\.ppatrickxxz\.workers\.dev/);

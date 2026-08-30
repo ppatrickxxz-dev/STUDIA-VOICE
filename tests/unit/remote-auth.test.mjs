@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RemoteAuthAdapter } from '../../packages/app/remote-auth.mjs';
+import { RemoteAuthAdapter, resolveAgentUrl } from '../../packages/app/remote-auth.mjs';
 
 class MemoryStorage {
   constructor() { this.map = new Map(); }
@@ -98,4 +98,12 @@ test('agent health targets the canonical Cloudflare Composer runtime', async () 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'https://studia-voice.ppatrickxxz.workers.dev/api/pablo-agent');
   assert.equal(calls[0].options.headers.apikey, 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH');
+});
+
+  
+test('agent runtime selection uses the Worker preview, canonical Worker, or local fail-closed mode', () => {
+  assert.equal(resolveAgentUrl({ origin: 'https://fix-cloudflare-composer-client-cutover-studia-voice.ppatrickxxz.workers.dev' }), 'https://fix-cloudflare-composer-client-cutover-studia-voice.ppatrickxxz.workers.dev/api/pablo-agent');
+  assert.equal(resolveAgentUrl({ origin: 'https://studia-voice.ppatrickxxz.workers.dev' }), 'https://studia-voice.ppatrickxxz.workers.dev/api/pablo-agent');
+  assert.equal(resolveAgentUrl({ origin: 'http://127.0.0.1:4173' }), '');
+  assert.equal(resolveAgentUrl({ origin: 'http://localhost:4173' }), '');
 });
