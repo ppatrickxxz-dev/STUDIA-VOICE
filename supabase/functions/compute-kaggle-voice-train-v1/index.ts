@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.112.2'
 
 const APPLIO_COMMIT = '085197e738ce9dd4c0bae1e0a74df5de25b89444'
+const IDENTITY_THRESHOLD = 0.8
 const cors = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',
@@ -64,14 +65,15 @@ Deno.serve(async (req: Request) => {
     const { data: project } = await admin.from('projects').select('id,title').eq('id', projectId).eq('user_id', user.id).maybeSingle()
     if (!project) return out({ ok: false, error: 'project_access_denied' }, 403)
 
-    const activeStates = ['created','waiting_gpu','queued','dispatched','provisioning','training','uploading','finalizing','retrying','stalled']
+    const activeStates = ['created','waiting_gpu','waiting_kaggle','queued','dispatched','provisioning','training','uploading','finalizing','retrying','stalled']
     const active = async () => {
       const { data } = await admin.from('render_jobs').select('*').eq('user_id', user.id).eq('job_type', 'voice_model_training').in('status', activeStates).order('created_at', { ascending: false }).limit(1)
       return data?.[0] || null
     }
     if (action === 'status') {
+      const { data: jobs } = await admin.from('render_jobs').select('*').eq('user_id', user.id).eq('job_type', 'voice_model_training').order('created_at', { ascending: false }).limit(1)
       const { data: models } = await admin.from('voice_models').select('id,name,status,is_active,pth_sha256,index_sha256,metadata,created_at,updated_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(12)
-      return out({ ok: true, active_job: await active(), models: models || [] })
+      return out({ ok: true, active_job: await active(), latest_job: jobs?.[0] || null, models: models || [] })
     }
     if (action !== 'dispatch') return out({ ok: false, error: 'unsupported_action' }, 400)
     const existing = await active()
@@ -91,12 +93,27 @@ Deno.serve(async (req: Request) => {
     const uniqueHashes = new Set(ordered.map((a: any) => String(a.sha256).toLowerCase()))
     if (uniqueHashes.size !== ordered.length) return out({ ok: false, error: 'duplicate_training_source_rejected' }, 409)
 
+    const guideId = String(body.validation_guide_asset_id || '')
+    if (!uuid(guideId) || sourceIds.includes(guideId)) return out({ ok: false, error: 'separate_validation_guide_required' }, 400)
+    const { data: guide } = await admin.from('audio_assets').select('*').eq('id', guideId).eq('user_id', user.id).eq('project_id', projectId).eq('kind', 'guide_vocal').maybeSingle()
+    if (!guide || !shaOk(guide.sha256)) return out({ ok: false, error: 'validation_guide_missing_or_unverified' }, 409)
+    const regionStart = Number(body.validation_region_start_seconds ?? 64)
+    const regionEnd = Number(body.validation_region_end_seconds ?? 72)
+    if (!Number.isFinite(regionStart) || !Number.isFinite(regionEnd) || regionStart < 0 || regionEnd <= regionStart || regionEnd - regionStart < 4 || regionEnd - regionStart > 20) return out({ ok: false, error: 'invalid_validation_region' }, 400)
+
+    const { data: refs, error: re } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label,voice_model_id').eq('user_id', user.id).eq('is_active', true).order('updated_at', { ascending: false }).limit(1)
+    if (re) throw re
+    const reference = refs?.[0]
+    if (!reference || !uuid(reference.id) || !uuid(reference.asset_id) || !shaOk(reference.source_sha256)) return out({ ok: false, error: 'active_identity_reference_required' }, 409)
+    const { data: referenceAsset } = await admin.from('audio_assets').select('id,sha256').eq('id', reference.asset_id).eq('user_id', user.id).maybeSingle()
+    if (!referenceAsset || String(referenceAsset.sha256 || '').toLowerCase() !== String(reference.source_sha256).toLowerCase()) return out({ ok: false, error: 'identity_reference_asset_mismatch' }, 409)
+
     const { data: connRows, error: ce } = await admin.rpc('admin_get_compute_connection', { p_user_id: user.id, p_provider: 'kaggle' })
     if (ce) throw ce
     const conn = Array.isArray(connRows) ? connRows[0] : null
     if (!conn?.secret || !conn?.handle) return out({ ok: false, error: 'kaggle_not_connected' }, 409)
 
-    const ttl = 7200
+    const ttl = 10800
     async function signedDownload(asset: any) {
       const { data, error } = await admin.storage.from(asset.storage_bucket).createSignedUrl(asset.storage_path, ttl)
       if (error || !data?.signedUrl) throw error || new Error('signed_download_failed')
@@ -104,6 +121,7 @@ Deno.serve(async (req: Request) => {
     }
     const jobId = crypto.randomUUID()
     const modelId = crypto.randomUUID()
+    const validationAssetId = crypto.randomUUID()
     const callback = token()
     const callbackHash = await sha256(callback)
     const expiresAt = Math.floor(Date.now() / 1000) + ttl
@@ -119,6 +137,9 @@ Deno.serve(async (req: Request) => {
     const indexPath = `${storageBase}/PabloVoice.index`
     const { data: indexUpload, error: ie } = await admin.storage.from('voice-models-private').createSignedUploadUrl(indexPath)
     if (ie || !indexUpload?.token) throw ie || new Error('signed_index_upload_failed')
+    const validationPath = `${user.id}/${projectId}/renders/${jobId}-candidate-identity-validation.flac`
+    const { data: validationUpload, error: ve } = await admin.storage.from('audio-private').createSignedUploadUrl(validationPath)
+    if (ve || !validationUpload?.token) throw ve || new Error('signed_validation_upload_failed')
 
     const signedSources = []
     for (const source of ordered) signedSources.push({ id: source.id, sha256: String(source.sha256).toLowerCase(), url: await signedDownload(source), original_name: source.original_name, duration_seconds: Number(source.duration_seconds || 0) })
@@ -139,12 +160,24 @@ Deno.serve(async (req: Request) => {
       normalization_mode: 'none',
       noise_reduction: false,
     }
+    const validation = {
+      guide_asset_id: guide.id,
+      guide_sha256: String(guide.sha256).toLowerCase(),
+      region: { start_seconds: regionStart, end_seconds: regionEnd, duration_seconds: regionEnd - regionStart },
+      output_asset_id: validationAssetId,
+      output_path: validationPath,
+      reference_id: reference.id,
+      reference_asset_id: reference.asset_id,
+      reference_sha256: String(reference.source_sha256).toLowerCase(),
+      identity_threshold: IDENTITY_THRESHOLD,
+    }
     const parameters = {
       candidate_model_id: modelId,
       candidate_model_name: modelName,
       source_assets: signedSources.map(({ url: _url, ...source }) => source),
       applio_commit: APPLIO_COMMIT,
       settings,
+      validation,
       callback_hash: callbackHash,
       callback_expires_at: expiresAt,
       output_base: storageBase,
@@ -162,17 +195,17 @@ Deno.serve(async (req: Request) => {
       progress: 5,
       current_stage: 'created',
       human_message: 'Preparando modelo vocal candidato',
-      input_asset_ids: sourceIds,
+      input_asset_ids: [...sourceIds, guide.id, reference.asset_id],
       output_asset_ids: [],
       parameters,
-      proof: { required: true, activation_forbidden_before_identity_gate: true, identity_threshold: 0.8 },
+      proof: { required: true, activation_forbidden_before_identity_gate: true, identity_threshold: IDENTITY_THRESHOLD },
       started_at: new Date().toISOString(),
       attempt_number: 1,
     })
     if (je) throw je
 
     const ticket = {
-      version: 1,
+      version: 2,
       job_id: jobId,
       project_id: projectId,
       user_id: user.id,
@@ -181,6 +214,13 @@ Deno.serve(async (req: Request) => {
       sources: signedSources,
       applio_commit: APPLIO_COMMIT,
       settings,
+      validation: {
+        guide_asset_id: guide.id,
+        guide_sha256: String(guide.sha256).toLowerCase(),
+        guide_url: await signedDownload(guide),
+        region: validation.region,
+        output: { asset_id: validationAssetId, bucket: 'audio-private', path: validationPath, token: validationUpload.token },
+      },
       outputs: { bucket: 'voice-models-private', parts: partUploads, index: { path: indexPath, token: indexUpload.token } },
       supabase_url: url,
       supabase_publishable_key: pub,
@@ -196,15 +236,10 @@ Deno.serve(async (req: Request) => {
       slug: `${owner}/${slug}`,
       newTitle: `PabloVoice candidate train ${short}`,
       text: bootstrap,
-      language: 'python',
-      kernelType: 'script',
-      isPrivate: true,
-      enableGpu: true,
-      enableInternet: true,
-      machineShape: 'NvidiaTeslaT4',
-      kernelExecutionType: 'SAVE_AND_RUN_ALL',
+      language: 'python', kernelType: 'script', isPrivate: true,
+      enableGpu: true, enableInternet: true, machineShape: 'NvidiaTeslaT4', kernelExecutionType: 'SAVE_AND_RUN_ALL',
       datasetDataSources: [], competitionDataSources: [], kernelDataSources: [], modelDataSources: [],
-      sessionTimeoutSeconds: 7200,
+      sessionTimeoutSeconds: ttl,
     }
     let push: any
     try { push = await kaggleRpc(conn.secret, 'SaveKernel', payload) }
@@ -223,7 +258,7 @@ Deno.serve(async (req: Request) => {
       external_job_id: String(push.kernelId),
       parameters: { ...parameters, kaggle_owner: owner, kaggle_slug: slug, kaggle_ref: push.ref || `/code/${owner}/${slug}`, kaggle_url: push.url || null, kaggle_kernel_id: push.kernelId, kaggle_version_number: push.versionNumber || null },
     }).eq('id', jobId)
-    return out({ ok: true, job_id: jobId, status: 'waiting_gpu', candidate_model_id: modelId, candidate_model_name: modelName, kernel: `${owner}/${slug}`, activation_policy: parameters.activation_policy })
+    return out({ ok: true, job_id: jobId, status: 'waiting_gpu', candidate_model_id: modelId, candidate_model_name: modelName, validation_asset_id: validationAssetId, kernel: `${owner}/${slug}`, activation_policy: parameters.activation_policy })
   } catch (error) {
     return out({ ok: false, error: String(error instanceof Error ? error.message : error).slice(0, 1400) }, 500)
   }
