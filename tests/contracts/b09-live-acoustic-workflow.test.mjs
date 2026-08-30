@@ -14,9 +14,10 @@ test('B09 live acoustic workflow is bound to the frozen source and retained stan
   ]) assert.match(workflow, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
-test('B09 measurement does not depend on the frozen provider-input vocal or fabricate promotion', () => {
+test('B09 measurement validates the harness schema without fabricating promotion', () => {
   assert.doesNotMatch(workflow, /85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95/);
   assert.doesNotMatch(workflow, /B09_STANDALONE_STEMS_PASSED/);
-  assert.match(workflow, /promotion_state == \"not_promoted\"/);
+  assert.match(workflow, /promotion_state == \"not_decided_by_this_tool\"/);
+  assert.match(workflow, /assets\.guide_vocal\.sha256/);
   assert.match(workflow, /proof\.verified == true/);
 });
