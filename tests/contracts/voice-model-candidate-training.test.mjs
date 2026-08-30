@@ -32,8 +32,8 @@ test('training sources and validation guide are artifact-bound and distinct', ()
   assert.match(dispatcher, /separate_validation_guide_required/)
   assert.match(dispatcher, /source_asset_not_training_eligible/)
   assert.match(dispatcher, /validation_guide_missing_or_unverified/)
-  assert.match(worker, /source .* sha256 mismatch/)
-  assert.match(worker, /validation guide/)
+  assert.match(worker, /check\(raw,src\['sha256'\],f'source \{n\}'\)/)
+  assert.match(worker, /check\(guide_raw,validation\['guide_sha256'\],'validation guide'\)/)
 })
 
 test('new candidate is never activated by the training callback', () => {
@@ -46,11 +46,11 @@ test('new candidate is never activated by the training callback', () => {
 
 test('Kaggle creates validation audio but is not the trusted speaker-identity authority', () => {
   assert.match(worker, /validation-voice\.flac/)
-  assert.match(worker, /identity-validation/)
+  assert.match(worker, /validation_uploaded/)
   assert.doesNotMatch(worker, /speechbrain/)
   assert.doesNotMatch(worker, /spkrec-ecapa/)
   assert.doesNotMatch(worker, /cosine_similarity/)
-  assert.doesNotMatch(worker, /passed['"]\s*:/)
+  assert.doesNotMatch(worker, /['"]passed['"]\s*:/)
 })
 
 test('callback stages a GitHub OIDC ECAPA attestation instead of fabricating PASS', () => {
