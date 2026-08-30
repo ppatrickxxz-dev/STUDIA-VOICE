@@ -1,0 +1,126 @@
+name: B09 acoustic evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/b09-acoustic-evidence.yml'
+      - 'benchmarks/validate_b09.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  JOB_ID: 81a17053-5789-4cf1-9ba5-21c665f3b8cb
+  SOURCE_ID: a5bc5f31-a546-4ded-99fb-9a0867980202
+  SOURCE_SHA256: ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d
+  VOCAL_ID: 1148fc38-e2ed-4925-9dec-f843c02163d2
+  VOCAL_SHA256: 1180440960ee1e0288509960763aa1e646ca5689c1d657de914617bbb4c95708
+  INSTRUMENTAL_ID: 9bef8c45-40af-4134-b816-4d135cb574e8
+  INSTRUMENTAL_SHA256: db2c5ee693934133a40ab9b561bd601377c50c72bc6c3c863db30e294c2625d3
+
+jobs:
+  measure:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire legitimate PabloVoice user session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          SESSION="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
+          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Resolve and download exact private B09 assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/b09-acoustic /tmp/pv-b09
+          AUTH=(-H "Authorization: Bearer $PV_ACCESS_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+          fetch_asset() {
+            local id="$1" expected="$2" out="$3"
+            local row bucket path actual
+            row="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+              "$SUPABASE_URL/rest/v1/audio_assets?select=id,sha256,storage_bucket,storage_path&id=eq.$id")"
+            test "$(printf '%s' "$row" | jq -er 'if length == 1 then .[0].id else error("asset_missing") end')" = "$id"
+            actual="$(printf '%s' "$row" | jq -er '.[0].sha256 | ascii_downcase')"
+            test "$actual" = "$expected"
+            bucket="$(printf '%s' "$row" | jq -er '.[0].storage_bucket')"
+            path="$(printf '%s' "$row" | jq -er '.[0].storage_path | @uri')"
+            curl --fail-with-body --silent --show-error -L "${AUTH[@]}" \
+              "$SUPABASE_URL/storage/v1/object/authenticated/$bucket/$path" -o "$out"
+            test "$(sha256sum "$out" | awk '{print $1}')" = "$expected"
+          }
+          fetch_asset "$SOURCE_ID" "$SOURCE_SHA256" /tmp/pv-b09/source.bin
+          fetch_asset "$VOCAL_ID" "$VOCAL_SHA256" /tmp/pv-b09/vocal.wav
+          fetch_asset "$INSTRUMENTAL_ID" "$INSTRUMENTAL_SHA256" /tmp/pv-b09/instrumental.wav
+
+          JOB="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/render_jobs?select=id,job_type,status,provider,input_asset_ids,output_asset_ids,proof&id=eq.$JOB_ID")"
+          printf '%s' "$JOB" | jq -e \
+            --arg job "$JOB_ID" --arg source "$SOURCE_ID" --arg vocal "$VOCAL_ID" --arg instrumental "$INSTRUMENTAL_ID" '
+              length == 1 and
+              .[0].id == $job and
+              .[0].job_type == "stems" and
+              .[0].status == "completed" and
+              .[0].proof.verified == true and
+              (.[0].input_asset_ids | index($source) != null) and
+              (.[0].output_asset_ids | index($vocal) != null) and
+              (.[0].output_asset_ids | index($instrumental) != null)
+            ' >/dev/null
+          printf '%s' "$JOB" | jq '.[0]' > test-results/b09-acoustic/job-evidence.json
+
+      - name: Measure retained B09 acoustic evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python benchmarks/validate_b09.py \
+            --source /tmp/pv-b09/source.bin \
+            --vocal /tmp/pv-b09/vocal.wav \
+            --instrumental /tmp/pv-b09/instrumental.wav \
+            --source-sha256 "$SOURCE_SHA256" \
+            --vocal-sha256 "$VOCAL_SHA256" \
+            --instrumental-sha256 "$INSTRUMENTAL_SHA256" \
+            --job-evidence test-results/b09-acoustic/job-evidence.json \
+            --output test-results/b09-acoustic/measurement.json
+          jq -e '
+            .test_id == "B09" and
+            .measurement_state == "measured" and
+            .promotion_state == "not_promoted" and
+            .assets.source.sha256 == env.SOURCE_SHA256 and
+            .assets.vocal.sha256 == env.VOCAL_SHA256 and
+            .assets.instrumental.sha256 == env.INSTRUMENTAL_SHA256
+          ' test-results/b09-acoustic/measurement.json >/dev/null
+          jq '.' test-results/b09-acoustic/measurement.json
+
+      - name: Retain B09 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b09-acoustic-evidence-${{ github.sha }}-${{ github.run_id }}
+          path: test-results/b09-acoustic
+          if-no-files-found: error
+          retention-days: 30
