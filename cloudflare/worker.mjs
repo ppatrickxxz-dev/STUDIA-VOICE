@@ -2,8 +2,8 @@ import { healthPayload } from '../services/api/health.mjs';
 
 const SUPABASE_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
-const OPENAI_URL = 'https://api.openai.com/v1/responses';
-const MODEL = 'gpt-5.4-mini';
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const PROVIDER = 'cloudflare_workers_ai';
 const SONG_COMMANDS = new Set(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
 const PROVIDER_TIMEOUT_MS = 20_000;
 
@@ -61,14 +61,9 @@ function compact(value, max = 24000) {
 }
 
 function outputText(data) {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim();
-  const parts = [];
-  for (const item of data?.output || []) {
-    for (const part of item?.content || []) {
-      if (typeof part?.text === 'string' && part.text.trim()) parts.push(part.text.trim());
-    }
-  }
-  return parts.join('\n').trim();
+  if (typeof data?.response === 'string' && data.response.trim()) return data.response.trim();
+  if (typeof data?.result?.response === 'string' && data.result.response.trim()) return data.result.response.trim();
+  return '';
 }
 
 function requestId() {
@@ -79,28 +74,16 @@ function safeLog(fields) {
   console.info(JSON.stringify({ scope: 'pablovoice_cloudflare_composer', ...fields }));
 }
 
-function boundedRetryAfter(value) {
-  if (!value) return 250;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) return Math.max(0, Math.min(1500, Math.round(seconds * 1000)));
-  const date = Date.parse(value);
-  return Number.isFinite(date) ? Math.max(0, Math.min(1500, date - Date.now())) : 250;
-}
-
-function providerError(status) {
-  if (status === 401 || status === 403) return 'provider_auth_failed';
-  if (status === 429) return 'provider_rate_limited';
-  if (status >= 500) return 'provider_unavailable';
-  return 'remote_provider_failed';
-}
-
-function providerHttpStatus(status) {
-  if (status === 429) return 429;
-  return 502;
+function workersAiError(error) {
+  const status = Number(error?.status || error?.statusCode || error?.cause?.status || 0);
+  const message = String(error?.message || '').toLowerCase();
+  if (status === 429 || /rate.?limit|quota|neuron/.test(message)) return { error: 'provider_rate_limited', httpStatus: 429, retryAfterMs: 1000 };
+  if (status === 401 || status === 403 || /unauthori[sz]ed|forbidden/.test(message)) return { error: 'provider_auth_failed', httpStatus: 502, retryAfterMs: 0 };
+  return { error: 'provider_unavailable', httpStatus: 502, retryAfterMs: 0 };
 }
 
 function providerReadiness(env) {
-  const composerReady = Boolean(String(env.OPENAI_API_KEY || '').trim());
+  const composerReady = Boolean(env.AI && typeof env.AI.run === 'function');
   return {
     ok: true,
     benchmark: 'PabloVoice Benchmark v1',
@@ -117,7 +100,7 @@ function providerReadiness(env) {
         automation: false,
       },
       pablovoice: {
-        transport: 'openai_responses_api',
+        transport: PROVIDER,
         configured: composerReady,
         runnable: composerReady,
       },
@@ -126,80 +109,45 @@ function providerReadiness(env) {
   };
 }
 
-async function callComposerProvider(request, key, instructions, input, id) {
+async function callComposerProvider(request, ai, instructions, input, id) {
   const started = Date.now();
-  const controller = new AbortController();
-  const abortFromClient = () => controller.abort('client_cancelled');
-  if (request.signal.aborted) abortFromClient();
-  else request.signal.addEventListener('abort', abortFromClient, { once: true });
-  const timer = setTimeout(() => controller.abort('provider_timeout'), PROVIDER_TIMEOUT_MS);
-
+  if (request.signal.aborted) return { ok: false, error: 'request_cancelled', httpStatus: 499, retryAfterMs: 0, latencyMs: 0 };
+  let timer;
   try {
-    let upstream;
-    try {
-      upstream = await fetch(OPENAI_URL, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          authorization: `Bearer ${key}`,
-          'content-type': 'application/json',
-          'user-agent': 'PabloVoice-Studio/8.1',
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          instructions,
-          input,
-          max_output_tokens: 1800,
-        }),
-      });
-    } catch {
-      const errorType = request.signal.aborted ? 'request_cancelled' : controller.signal.aborted ? 'provider_timeout' : 'provider_connection_failed';
-      const latencyMs = Date.now() - started;
-      safeLog({ request_id: id, provider: 'openai_responses_api', model: MODEL, status: 'error', latency_ms: latencyMs, error_type: errorType });
-      return { ok: false, error: errorType, httpStatus: errorType === 'request_cancelled' ? 499 : 502, retryAfterMs: 0, latencyMs };
-    }
-
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('provider_timeout')), PROVIDER_TIMEOUT_MS); });
+    const data = await Promise.race([
+      ai.run(MODEL, { messages: [{ role: 'system', content: instructions }, { role: 'user', content: input }], max_tokens: 1800 }),
+      timeout,
+    ]);
     const latencyMs = Date.now() - started;
-    const raw = await upstream.text();
-    let data = {};
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch {
-      safeLog({ request_id: id, provider: 'openai_responses_api', model: MODEL, status: upstream.status, latency_ms: latencyMs, error_type: 'provider_invalid_response' });
-      return { ok: false, error: 'provider_invalid_response', httpStatus: 502, retryAfterMs: 0, latencyMs };
-    }
-
-    if (!upstream.ok) {
-      const error = providerError(upstream.status);
-      const retryAfterMs = error === 'provider_rate_limited' ? boundedRetryAfter(upstream.headers.get('retry-after')) : 0;
-      safeLog({ request_id: id, provider: 'openai_responses_api', model: MODEL, status: upstream.status, latency_ms: latencyMs, error_type: error });
-      return { ok: false, error, httpStatus: providerHttpStatus(upstream.status), retryAfterMs, latencyMs };
-    }
-
     const text = outputText(data);
     if (!text) {
-      safeLog({ request_id: id, provider: 'openai_responses_api', model: String(data?.model || MODEL), status: upstream.status, latency_ms: latencyMs, error_type: 'remote_empty_response' });
+      safeLog({ request_id: id, provider: PROVIDER, model: MODEL, status: 'error', latency_ms: latencyMs, error_type: 'remote_empty_response' });
       return { ok: false, error: 'remote_empty_response', httpStatus: 502, retryAfterMs: 0, latencyMs };
     }
-
-    const model = String(data?.model || MODEL).slice(0, 160);
-    safeLog({ request_id: id, provider: 'openai_responses_api', model, status: upstream.status, latency_ms: latencyMs, error_type: null });
-    return { ok: true, text, model, latencyMs };
+    safeLog({ request_id: id, provider: PROVIDER, model: MODEL, status: 200, latency_ms: latencyMs, error_type: null });
+    return { ok: true, text, model: MODEL, latencyMs };
+  } catch (error) {
+    const latencyMs = Date.now() - started;
+    const classified = error?.message === 'provider_timeout'
+      ? { error: 'provider_timeout', httpStatus: 502, retryAfterMs: 0 }
+      : workersAiError(error);
+    safeLog({ request_id: id, provider: PROVIDER, model: MODEL, status: 'error', latency_ms: latencyMs, error_type: classified.error });
+    return { ok: false, ...classified, latencyMs };
   } finally {
     clearTimeout(timer);
-    request.signal.removeEventListener?.('abort', abortFromClient);
   }
 }
 
 async function pabloAgent(request, env) {
-  const providerKey = String(env.OPENAI_API_KEY || '').trim();
+  const providerReady = Boolean(env.AI && typeof env.AI.run === 'function');
 
   if (request.method === 'GET') {
     return json({
       ok: true,
       service: 'pablovoice-cloudflare-agent',
-      configured: Boolean(providerKey),
-      provider: 'openai_responses_api',
+      configured: providerReady,
+      provider: PROVIDER,
       model: MODEL,
       credential_exposed: false,
       auth_for_turns: 'required',
@@ -223,7 +171,7 @@ async function pabloAgent(request, env) {
 
   const project = await ownedProject(jwt, String(body.project_id || '')).catch(() => null);
   if (!project) return json({ ok: false, error: 'project_not_found', request_id: id }, 404);
-  if (!providerKey) return json({ ok: false, error: 'provider_unavailable', request_id: id, fallback_allowed: false }, 503);
+  if (!providerReady) return json({ ok: false, error: 'provider_unavailable', request_id: id, fallback_allowed: false }, 503);
 
   const instructions = [
     'Você é o motor de composição do PabloVoice.',
@@ -246,7 +194,7 @@ async function pabloAgent(request, env) {
   });
 
   try {
-    const provider = await callComposerProvider(request, providerKey, instructions, input, id);
+    const provider = await callComposerProvider(request, env.AI, instructions, input, id);
     if (!provider.ok) {
       return json({
         ok: false,
@@ -260,7 +208,7 @@ async function pabloAgent(request, env) {
     return json({
       ok: true,
       service: 'pablovoice-cloudflare-agent',
-      provider: 'openai_responses_api',
+      provider: PROVIDER,
       model: provider.model,
       command,
       project_id: project.id,
@@ -271,7 +219,7 @@ async function pabloAgent(request, env) {
       fallback_allowed: false,
     });
   } catch {
-    safeLog({ request_id: id, provider: 'openai_responses_api', model: MODEL, status: 'error', latency_ms: null, error_type: 'agent_backend_error' });
+    safeLog({ request_id: id, provider: PROVIDER, model: MODEL, status: 'error', latency_ms: null, error_type: 'agent_backend_error' });
     return json({ ok: false, error: 'agent_backend_error', request_id: id, fallback_allowed: false }, 503);
   }
 }

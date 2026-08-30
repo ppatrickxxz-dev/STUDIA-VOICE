@@ -18,6 +18,7 @@ test('Cloudflare runtime serves canonical static build with API-first routing', 
   assert.equal(wrangler.assets.binding, 'ASSETS');
   assert.equal(wrangler.assets.not_found_handling, 'single-page-application');
   assert.deepEqual(wrangler.assets.run_worker_first, ['/api/*']);
+  assert.equal(wrangler.ai.binding, 'AI');
 });
 
 test('Cloudflare worker owns the canonical API routes with no Vercel runtime dependency', () => {
@@ -25,14 +26,15 @@ test('Cloudflare worker owns the canonical API routes with no Vercel runtime dep
     assert.match(worker, new RegExp(route.replaceAll('/', '\\/')));
   }
   assert.match(worker, /env\.ASSETS\.fetch\(request\)/);
-  assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
-  assert.match(worker, /env\.OPENAI_API_KEY/);
+  assert.match(worker, /@cf\/meta\/llama-3\.3-70b-instruct-fp8-fast/);
+  assert.match(worker, /env\.AI/);
+  assert.doesNotMatch(worker, /OPENAI_API_KEY|api\.openai\.com/);
   assert.doesNotMatch(worker, /@vercel\/oidc|getVercelOidcToken|VERCEL_OIDC_TOKEN|AI_GATEWAY_API_KEY/i);
   assert.doesNotMatch(worker, /ai-gateway\.vercel\.sh|vercel_ai_gateway/i);
 });
 
 test('Cloudflare AI provider failures remain typed and fail closed with no fabricated fallback', () => {
-  for (const error of ['provider_auth_failed', 'provider_rate_limited', 'provider_unavailable', 'provider_invalid_response', 'provider_connection_failed', 'provider_timeout', 'remote_empty_response', 'agent_backend_error']) {
+  for (const error of ['provider_auth_failed', 'provider_rate_limited', 'provider_unavailable', 'provider_timeout', 'remote_empty_response', 'agent_backend_error']) {
     assert.match(worker, new RegExp(error));
   }
   assert.match(worker, /fallback_allowed:\s*false/);
