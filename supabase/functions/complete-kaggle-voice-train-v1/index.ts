@@ -2,6 +2,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2.112.2'
 
 const APPLIO_COMMIT = '085197e738ce9dd4c0bae1e0a74df5de25b89444'
 const IDENTITY_THRESHOLD = 0.8
+const IDENTITY_MODEL = 'speechbrain/spkrec-ecapa-voxceleb'
+const IDENTITY_MODEL_REVISION = 'b8937e0343bf9fc9741ab12b445b86a93a6e3e25'
+const IDENTITY_ENGINE_VERSION = 'speechbrain-1.1.0'
 const cors = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',
@@ -46,6 +49,11 @@ Deno.serve(async (req: Request) => {
       const progress = Math.max(10, Math.min(95, Number(body.progress || 10)))
       await admin.from('render_jobs').update({ status: stage === 'uploading' ? 'uploading' : 'training', progress, current_stage: stage, human_message: String(body.message || 'Treinando modelo vocal candidato').slice(0, 300), heartbeat_at: new Date().toISOString() }).eq('id', jobId)
       return out({ ok: true })
+    }
+    if (action === 'error') {
+      const message = String(body.message || 'Falha no treino do modelo vocal candidato').slice(0, 1400)
+      await admin.from('render_jobs').update({ status: 'error', progress: 0, current_stage: 'error', human_message: 'Falha no treino do modelo vocal candidato', error_code: 'voice_model_training_failed', error_message: message, technical_error: message, heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString() }).eq('id', jobId)
+      return out({ ok: true, job_id: jobId, status: 'error' })
     }
     if (action !== 'complete') return out({ ok: false, error: 'unsupported_action' }, 400)
     if (job.status === 'completed') return out({ ok: true, already_completed: true, proof: job.proof })
@@ -92,76 +100,99 @@ Deno.serve(async (req: Request) => {
     const indexObject = (rootObjects || []).find((entry: any) => entry.name === 'PabloVoice.index')
     if (!indexObject || Number(indexObject.metadata?.size || 0) !== indexSize) return out({ ok: false, error: 'index_not_persisted' }, 409)
 
+    const expectedValidation = parameters.validation || {}
+    const validation = body.validation || {}
+    const validationAssetId = String(validation.asset_id || '')
+    const validationSha = String(validation.sha256 || '').toLowerCase()
+    const validationSize = Number(validation.size_bytes || 0)
+    const validationDuration = Number(validation.duration_seconds || 0)
+    const expectedDuration = Number(expectedValidation.region?.duration_seconds || 0)
+    if (!uuid(validationAssetId) || validationAssetId !== String(expectedValidation.output_asset_id || '')) return out({ ok: false, error: 'validation_asset_binding_mismatch' }, 409)
+    if (!shaOk(validationSha) || validationSize < 4096 || Number(validation.sample_rate) !== 48000 || Number(validation.channels) !== 1) return out({ ok: false, error: 'validation_audio_contract_mismatch' }, 409)
+    if (!Number.isFinite(validationDuration) || Math.abs(validationDuration - expectedDuration) > 0.6) return out({ ok: false, error: 'validation_duration_mismatch' }, 409)
+    if (String(validation.storage_bucket || '') !== 'audio-private' || String(validation.storage_path || '') !== String(expectedValidation.output_path || '')) return out({ ok: false, error: 'validation_storage_binding_mismatch' }, 409)
+    if (String(validation.guide_asset_id || '') !== String(expectedValidation.guide_asset_id || '') || String(validation.guide_sha256 || '').toLowerCase() !== String(expectedValidation.guide_sha256 || '').toLowerCase()) return out({ ok: false, error: 'validation_guide_binding_mismatch' }, 409)
+    const validationFolder = String(expectedValidation.output_path).split('/').slice(0, -1).join('/')
+    const validationName = String(expectedValidation.output_path).split('/').pop() || ''
+    const { data: validationObjects, error: voe } = await admin.storage.from('audio-private').list(validationFolder, { limit: 20, search: validationName })
+    if (voe) throw voe
+    const validationObject = (validationObjects || []).find((entry: any) => entry.name === validationName)
+    if (!validationObject || Number(validationObject.metadata?.size || 0) !== validationSize) return out({ ok: false, error: 'validation_audio_not_persisted' }, 409)
+
     const metadata = {
-      client: 'voice-train-v1',
-      storage_mode: 'multipart',
-      pth_parts: parts,
-      pth_size: pthSize,
-      index_size: indexSize,
-      source_assets: expectedSources,
-      applio_commit: APPLIO_COMMIT,
-      training_settings: parameters.settings,
-      training_job_id: jobId,
-      activation_policy: 'inactive_until_verified_ecapa_gte_0_8',
-      identity_threshold: IDENTITY_THRESHOLD,
-      candidate: true,
-      proof: 'sha256-full-and-parts',
+      client: 'voice-train-v1', storage_mode: 'multipart', pth_parts: parts, pth_size: pthSize, index_size: indexSize,
+      source_assets: expectedSources, applio_commit: APPLIO_COMMIT, training_settings: parameters.settings, training_job_id: jobId,
+      activation_policy: 'inactive_until_verified_ecapa_gte_0_8', identity_threshold: IDENTITY_THRESHOLD, candidate: true, proof: 'sha256-full-and-parts',
     }
     const { error: me } = await admin.from('voice_models').upsert({
-      id: candidateModelId,
-      user_id: job.user_id,
-      name: String(parameters.candidate_model_name || 'PabloVoice Candidate'),
-      engine: 'rvc',
-      pth_storage_path: String(parts[0].path),
-      index_storage_path: expectedIndexPath,
-      pth_sha256: pthSha,
-      index_sha256: indexSha,
-      status: 'ready',
-      is_active: false,
-      metadata,
+      id: candidateModelId, user_id: job.user_id, name: String(parameters.candidate_model_name || 'PabloVoice Candidate'), engine: 'rvc',
+      pth_storage_path: String(parts[0].path), index_storage_path: expectedIndexPath, pth_sha256: pthSha, index_sha256: indexSha,
+      status: 'ready', is_active: false, metadata,
     }, { onConflict: 'id' })
     if (me) throw me
 
-    const { data: existingRef, error: ere } = await admin.from('voice_identity_references').select('id').eq('user_id', job.user_id).eq('voice_model_id', candidateModelId).eq('is_active', true).maybeSingle()
-    if (ere) throw ere
-    if (!existingRef) {
-      const { data: activeRefs, error: are } = await admin.from('voice_identity_references').select('asset_id,source_sha256,label').eq('user_id', job.user_id).eq('is_active', true).neq('voice_model_id', candidateModelId).order('updated_at', { ascending: false }).limit(1)
-      if (are) throw are
-      const reference = activeRefs?.[0]
-      if (!reference || !uuid(reference.asset_id) || !shaOk(reference.source_sha256)) return out({ ok: false, error: 'identity_reference_required_before_candidate_registration' }, 409)
-      const { error: rie } = await admin.from('voice_identity_references').insert({
-        id: crypto.randomUUID(),
-        user_id: job.user_id,
-        voice_model_id: candidateModelId,
-        asset_id: reference.asset_id,
-        source_sha256: String(reference.source_sha256).toLowerCase(),
-        label: reference.label ? `${reference.label} · candidate` : 'Candidate identity reference',
-        is_active: true,
-      })
+    let { data: candidateRef, error: cre } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label').eq('user_id', job.user_id).eq('voice_model_id', candidateModelId).eq('is_active', true).maybeSingle()
+    if (cre) throw cre
+    if (!candidateRef) {
+      const referenceId = String(expectedValidation.reference_id || '')
+      const referenceAssetId = String(expectedValidation.reference_asset_id || '')
+      const referenceSha = String(expectedValidation.reference_sha256 || '').toLowerCase()
+      if (!uuid(referenceId) || !uuid(referenceAssetId) || !shaOk(referenceSha)) return out({ ok: false, error: 'identity_reference_binding_missing' }, 409)
+      const { data: sourceRef, error: sre } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label').eq('id', referenceId).eq('user_id', job.user_id).eq('is_active', true).maybeSingle()
+      if (sre) throw sre
+      if (!sourceRef || String(sourceRef.asset_id) !== referenceAssetId || String(sourceRef.source_sha256).toLowerCase() !== referenceSha) return out({ ok: false, error: 'identity_reference_binding_mismatch' }, 409)
+      const { data: insertedRef, error: rie } = await admin.from('voice_identity_references').insert({
+        id: crypto.randomUUID(), user_id: job.user_id, voice_model_id: candidateModelId, asset_id: referenceAssetId, source_sha256: referenceSha,
+        label: sourceRef.label ? `${sourceRef.label} · candidate` : 'Candidate identity reference', is_active: true,
+      }).select('id,asset_id,source_sha256,label').single()
       if (rie) throw rie
+      candidateRef = insertedRef
+    }
+    if (!candidateRef || String(candidateRef.asset_id) !== String(expectedValidation.reference_asset_id) || String(candidateRef.source_sha256).toLowerCase() !== String(expectedValidation.reference_sha256).toLowerCase()) return out({ ok: false, error: 'candidate_identity_reference_mismatch' }, 409)
+
+    const { error: vae } = await admin.from('audio_assets').upsert({
+      id: validationAssetId, project_id: job.project_id, version_id: job.version_id || null, user_id: job.user_id, kind: 'pablo_voice_variant',
+      storage_bucket: 'audio-private', storage_path: String(expectedValidation.output_path), original_name: 'candidate-identity-validation.flac', mime_type: 'audio/flac',
+      size_bytes: validationSize, duration_seconds: validationDuration, sample_rate: 48000, channels: 1, sha256: validationSha,
+      metadata: { validation_only: true, voice_model_id: candidateModelId, training_job_id: jobId, guide_asset_id: expectedValidation.guide_asset_id, guide_sha256: expectedValidation.guide_sha256, localized_region: expectedValidation.region, activation_forbidden: true },
+    }, { onConflict: 'id' })
+    if (vae) throw vae
+
+    let { data: attestations, error: ae } = await admin.from('render_jobs').select('id,status,proof').eq('user_id', job.user_id).eq('job_type', 'speaker_identity_attestation').contains('parameters', { training_job_id: jobId }).order('created_at', { ascending: false }).limit(1)
+    if (ae) throw ae
+    let attestation = attestations?.[0] || null
+    if (!attestation) {
+      const attestationId = crypto.randomUUID()
+      const attestationParameters = {
+        candidate_asset_id: validationAssetId, candidate_sha256: validationSha,
+        reference_id: candidateRef.id, reference_asset_id: candidateRef.asset_id, reference_sha256: String(candidateRef.source_sha256).toLowerCase(),
+        voice_model_id: candidateModelId, threshold: IDENTITY_THRESHOLD, engine: IDENTITY_MODEL, engine_version: IDENTITY_ENGINE_VERSION,
+        model_revision: IDENTITY_MODEL_REVISION, trusted_authority: 'github_repository_oidc', training_job_id: jobId, candidate_activation_policy: 'inactive_until_verified_ecapa_gte_0_8',
+      }
+      const { data: inserted, error: aie } = await admin.from('render_jobs').insert({
+        id: attestationId, user_id: job.user_id, project_id: job.project_id, version_id: job.version_id || null, job_type: 'speaker_identity_attestation',
+        provider: 'pablovoice_github_oidc', status: 'waiting_trusted_worker', progress: 5, current_stage: 'waiting_trusted_worker',
+        human_message: 'Aguardando validação confiável do novo modelo vocal', parameters: attestationParameters,
+        input_asset_ids: [validationAssetId, candidateRef.asset_id], output_asset_ids: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).select('id,status,proof').single()
+      if (aie) throw aie
+      attestation = inserted
     }
 
     const proof = {
-      verified: true,
-      training_job_id: jobId,
-      candidate_model_id: candidateModelId,
-      candidate_active: false,
-      activation_forbidden_before_identity_gate: true,
-      identity_threshold: IDENTITY_THRESHOLD,
-      applio_commit: APPLIO_COMMIT,
-      pth_sha256: pthSha,
-      index_sha256: indexSha,
-      pth_size_bytes: pthSize,
-      index_size_bytes: indexSize,
-      pth_parts: parts,
-      source_assets: expectedSources,
-      training_settings: parameters.settings,
-      epochs_completed: Number(body.epochs_completed || parameters.settings?.total_epoch || 0),
-      worker_version: String(body.worker_version || ''),
+      verified: true, training_job_id: jobId, candidate_model_id: candidateModelId, candidate_active: false,
+      activation_forbidden_before_identity_gate: true, identity_threshold: IDENTITY_THRESHOLD, applio_commit: APPLIO_COMMIT,
+      pth_sha256: pthSha, index_sha256: indexSha, pth_size_bytes: pthSize, index_size_bytes: indexSize, pth_parts: parts,
+      source_assets: expectedSources, training_settings: parameters.settings, epochs_completed: Number(body.epochs_completed || parameters.settings?.total_epoch || 0),
+      worker_version: String(body.worker_version || ''), validation_asset_id: validationAssetId, validation_sha256: validationSha,
+      speaker_identity_attestation_job_id: attestation.id, speaker_identity_attestation_status: attestation.status,
     }
-    const { error: fue } = await admin.from('render_jobs').update({ status: 'completed', progress: 100, current_stage: 'completed', human_message: 'Modelo vocal candidato treinado; aguardando gate de identidade', heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString(), proof, error_code: null, error_message: null, technical_error: null }).eq('id', jobId)
+    const { error: fue } = await admin.from('render_jobs').update({
+      status: 'completed', progress: 100, current_stage: 'completed', human_message: 'Modelo candidato treinado; validação de identidade confiável pendente',
+      heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString(), proof, output_asset_ids: [validationAssetId], error_code: null, error_message: null, technical_error: null,
+    }).eq('id', jobId)
     if (fue) throw fue
-    return out({ ok: true, job_id: jobId, candidate_model_id: candidateModelId, is_active: false, identity_gate_required: true, identity_threshold: IDENTITY_THRESHOLD, proof })
+    return out({ ok: true, job_id: jobId, candidate_model_id: candidateModelId, is_active: false, validation_asset_id: validationAssetId, identity_gate_required: true, identity_threshold: IDENTITY_THRESHOLD, attestation_job_id: attestation.id, attestation_status: attestation.status, proof })
   } catch (error) {
     return out({ ok: false, error: String(error instanceof Error ? error.message : error).slice(0, 1400) }, 500)
   }
