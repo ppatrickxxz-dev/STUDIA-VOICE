@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { extname, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const roots = ['packages', 'scripts', 'services', 'tests', 'api'];
+const roots = ['packages', 'scripts', 'services', 'tests', 'cloudflare'];
 const files = [];
 async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -22,4 +22,3 @@ for (const file of files) {
   }
 }
 console.log(`Syntax gate passed for ${files.length} JavaScript files.`);
-
