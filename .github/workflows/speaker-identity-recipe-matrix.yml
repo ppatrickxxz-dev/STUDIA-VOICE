@@ -1,0 +1,179 @@
+name: Speaker identity recipe matrix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/speaker-identity-recipe-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: pablovoice-speaker-identity-recipe-matrix
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  MODEL: speechbrain/spkrec-ecapa-voxceleb
+  MODEL_REVISION: b8937e0343bf9fc9741ab12b445b86a93a6e3e25
+  ENGINE_VERSION: speechbrain-1.1.0
+  THRESHOLD: '0.8'
+  VARIANTS: identity=bad6d443-9ec0-44a6-991a-8044830bae84,natural=45f2cf70-a2ff-40c6-b544-9e3fc6ad4bae,smooth=dd9a5bca-37ff-4fe4-ad78-df25b3eea8a9
+
+jobs:
+  recipe-matrix:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire repository OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          printf 'PV_OIDC_TOKEN=%s\n' "$OIDC_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Acquire legitimate user session
+        shell: bash
+        run: |
+          set -euo pipefail
+          SESSION_RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $PV_OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          USER_TOKEN="$(printf '%s' "$SESSION_RESPONSE" | jq -er '.session.access_token')"
+          echo "::add-mask::$USER_TOKEN"
+          printf 'PV_USER_TOKEN=%s\n' "$USER_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Freeze one model and reference binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH=(-H "Authorization: Bearer $PV_USER_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+          MODEL_JSON="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/voice_models?select=id&is_active=eq.true&status=eq.ready&order=updated_at.desc&limit=1")"
+          VOICE_MODEL_ID="$(printf '%s' "$MODEL_JSON" | jq -er 'if length == 1 then .[0].id else error("active_voice_model_not_unique") end')"
+          REF_JSON="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/voice_identity_references?select=id,asset_id,source_sha256,voice_model_id&voice_model_id=eq.$VOICE_MODEL_ID&is_active=eq.true")"
+          REFERENCE_ID="$(printf '%s' "$REF_JSON" | jq -er 'if length == 1 then .[0].id else error("active_identity_reference_not_unique") end')"
+          REFERENCE_ASSET_ID="$(printf '%s' "$REF_JSON" | jq -er '.[0].asset_id')"
+          REFERENCE_SHA="$(printf '%s' "$REF_JSON" | jq -er '.[0].source_sha256 | ascii_downcase')"
+          test "$(printf '%s' "$REF_JSON" | jq -r '.[0].voice_model_id')" = "$VOICE_MODEL_ID"
+          printf 'PV_VOICE_MODEL_ID=%s\nPV_REFERENCE_ID=%s\nPV_REFERENCE_ASSET_ID=%s\nPV_REFERENCE_SHA=%s\n' \
+            "$VOICE_MODEL_ID" "$REFERENCE_ID" "$REFERENCE_ASSET_ID" "$REFERENCE_SHA" >> "$GITHUB_ENV"
+
+      - name: Install pinned scoring runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install --disable-pip-version-check --no-input \
+            'speechbrain==1.1.0' 'huggingface_hub>=0.25,<1' 'soundfile>=0.12,<1'
+          python - <<'PY'
+          import os
+          from huggingface_hub import snapshot_download
+          snapshot_download(repo_id=os.environ['MODEL'], revision=os.environ['MODEL_REVISION'], local_dir='/tmp/pv-ecapa-model')
+          PY
+
+      - name: Score preserved variants against frozen reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/speaker-identity-recipe-matrix
+          : > test-results/speaker-identity-recipe-matrix/results.jsonl
+          AUTH=(-H "Authorization: Bearer $PV_USER_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+
+          REF_ASSET="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/audio_assets?select=id,sha256,storage_bucket,storage_path&id=eq.$PV_REFERENCE_ASSET_ID")"
+          test "$(printf '%s' "$REF_ASSET" | jq -er 'if length == 1 then .[0].id else error("reference_asset_missing") end')" = "$PV_REFERENCE_ASSET_ID"
+          test "$(printf '%s' "$REF_ASSET" | jq -er '.[0].sha256 | ascii_downcase')" = "$PV_REFERENCE_SHA"
+          REF_BUCKET="$(printf '%s' "$REF_ASSET" | jq -er '.[0].storage_bucket')"
+          REF_PATH="$(printf '%s' "$REF_ASSET" | jq -er '.[0].storage_path | @uri')"
+          curl --fail-with-body --silent --show-error -L "${AUTH[@]}" \
+            "$SUPABASE_URL/storage/v1/object/authenticated/$REF_BUCKET/$REF_PATH" -o /tmp/pv-reference.bin
+          test "$(sha256sum /tmp/pv-reference.bin | awk '{print $1}')" = "$PV_REFERENCE_SHA"
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/pv-reference.bin -ar 16000 -ac 1 -c:a pcm_s16le /tmp/pv-reference.wav
+
+          IFS=',' read -ra ITEMS <<< "$VARIANTS"
+          for ITEM in "${ITEMS[@]}"; do
+            NAME="${ITEM%%=*}"
+            CANDIDATE_ID="${ITEM#*=}"
+            echo "Scoring $NAME ($CANDIDATE_ID)"
+            ASSET="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+              "$SUPABASE_URL/rest/v1/audio_assets?select=id,sha256,storage_bucket,storage_path&id=eq.$CANDIDATE_ID")"
+            test "$(printf '%s' "$ASSET" | jq -er 'if length == 1 then .[0].id else error("candidate_asset_missing") end')" = "$CANDIDATE_ID"
+            CANDIDATE_SHA="$(printf '%s' "$ASSET" | jq -er '.[0].sha256 | ascii_downcase')"
+            test "$CANDIDATE_SHA" != "$PV_REFERENCE_SHA"
+            BUCKET="$(printf '%s' "$ASSET" | jq -er '.[0].storage_bucket')"
+            PATH_ENC="$(printf '%s' "$ASSET" | jq -er '.[0].storage_path | @uri')"
+            curl --fail-with-body --silent --show-error -L "${AUTH[@]}" \
+              "$SUPABASE_URL/storage/v1/object/authenticated/$BUCKET/$PATH_ENC" -o "/tmp/pv-${NAME}-candidate.bin"
+            test "$(sha256sum "/tmp/pv-${NAME}-candidate.bin" | awk '{print $1}')" = "$CANDIDATE_SHA"
+            ffmpeg -hide_banner -loglevel error -y -i "/tmp/pv-${NAME}-candidate.bin" -ar 16000 -ac 1 -c:a pcm_s16le "/tmp/pv-${NAME}-candidate.wav"
+
+            SCORE_JSON="$(NAME="$NAME" python - <<'PY'
+          import json, os, torch
+          import soundfile as sf
+          from speechbrain.inference.speaker import EncoderClassifier
+          name=os.environ['NAME']
+          model=EncoderClassifier.from_hparams(source='/tmp/pv-ecapa-model', savedir='/tmp/pv-ecapa-runtime', run_opts={'device':'cpu'})
+          c,csr=sf.read(f'/tmp/pv-{name}-candidate.wav', dtype='float32', always_2d=True)
+          r,rsr=sf.read('/tmp/pv-reference.wav', dtype='float32', always_2d=True)
+          if csr != 16000 or rsr != 16000 or c.shape[1] != 1 or r.shape[1] != 1:
+              raise RuntimeError('normalized_audio_contract_mismatch')
+          c=torch.from_numpy(c[:,0]).unsqueeze(0)
+          r=torch.from_numpy(r[:,0]).unsqueeze(0)
+          with torch.no_grad():
+              ce=model.encode_batch(c).reshape(-1)
+              re=model.encode_batch(r).reshape(-1)
+              score=float(torch.nn.functional.cosine_similarity(ce.unsqueeze(0),re.unsqueeze(0)).item())
+          score=max(-1.0,min(1.0,score))
+          threshold=float(os.environ['THRESHOLD'])
+          print(json.dumps({'score':score,'passed':score>=threshold}))
+          PY
+            )"
+            SCORE="$(printf '%s' "$SCORE_JSON" | jq -er '.score')"
+            PASSED="$(printf '%s' "$SCORE_JSON" | jq -r '.passed')"
+            case "$PASSED" in true|false) ;; *) exit 1 ;; esac
+            jq -nc \
+              --arg name "$NAME" \
+              --arg candidate_asset_id "$CANDIDATE_ID" \
+              --arg candidate_sha256 "$CANDIDATE_SHA" \
+              --arg reference_id "$PV_REFERENCE_ID" \
+              --arg reference_asset_id "$PV_REFERENCE_ASSET_ID" \
+              --arg reference_sha256 "$PV_REFERENCE_SHA" \
+              --arg voice_model_id "$PV_VOICE_MODEL_ID" \
+              --arg engine "$MODEL" \
+              --arg engine_version "$ENGINE_VERSION" \
+              --arg model_revision "$MODEL_REVISION" \
+              --argjson threshold "$THRESHOLD" \
+              --argjson score "$SCORE" \
+              --argjson passed "$PASSED" \
+              '{name:$name,candidate_asset_id:$candidate_asset_id,candidate_sha256:$candidate_sha256,reference_id:$reference_id,reference_asset_id:$reference_asset_id,reference_sha256:$reference_sha256,voice_model_id:$voice_model_id,engine:$engine,engine_version:$engine_version,model_revision:$model_revision,threshold:$threshold,score:$score,passed:$passed,diagnostic_only:true}' \
+              >> test-results/speaker-identity-recipe-matrix/results.jsonl
+          done
+          jq -s '.' test-results/speaker-identity-recipe-matrix/results.jsonl > test-results/speaker-identity-recipe-matrix/results.json
+          cat test-results/speaker-identity-recipe-matrix/results.json
+
+      - name: Retain recipe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaker-identity-recipe-matrix-${{ github.sha }}-${{ github.run_id }}
+          path: test-results/speaker-identity-recipe-matrix
+          if-no-files-found: error
+          retention-days: 30
