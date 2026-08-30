@@ -1,0 +1,73 @@
+{
+  "test_id": "B09",
+  "scope": "standalone_route_only",
+  "route_validated": true,
+  "b09_acoustic_validated": false,
+  "provider": "kaggle",
+  "engine": "Demucs",
+  "model": "htdemucs",
+  "runtime_version": "4.0.1",
+  "source": {
+    "asset_id": "a5bc5f31-a546-4ded-99fb-9a0867980202",
+    "sha256": "ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d"
+  },
+  "executions": [
+    {
+      "render_job_id": "81a17053-5789-4cf1-9ba5-21c665f3b8cb",
+      "external_job_id": "132461854",
+      "status": "completed",
+      "progress": 100,
+      "proof_verified": true,
+      "finished_at": "2026-08-29T14:10:16.740Z",
+      "outputs": [
+        {
+          "kind": "guide_vocal",
+          "asset_id": "1148fc38-e2ed-4925-9dec-f843c02163d2",
+          "sha256": "1180440960ee1e0288509960763aa1e646ca5689c1d657de914617bbb4c95708",
+          "size_bytes": 32627022,
+          "mime_type": "audio/wav"
+        },
+        {
+          "kind": "instrumental",
+          "asset_id": "9bef8c45-40af-4134-b816-4d135cb574e8",
+          "sha256": "db2c5ee693934133a40ab9b561bd601377c50c72bc6c3c863db30e294c2625d3",
+          "size_bytes": 32627022,
+          "mime_type": "audio/wav"
+        }
+      ]
+    },
+    {
+      "render_job_id": "47b57281-66a0-443b-8f55-ea14ed7c97b3",
+      "external_job_id": "132464307",
+      "status": "completed",
+      "progress": 100,
+      "proof_verified": true,
+      "finished_at": "2026-08-29T14:39:30.063Z",
+      "outputs": [
+        {
+          "kind": "guide_vocal",
+          "asset_id": "0af3991b-ee38-40f4-bae2-563f67b13177",
+          "sha256": "49498e2563107da27a1eefcb28620648367365980d0b085199b78fc972532caf"
+        },
+        {
+          "kind": "instrumental",
+          "asset_id": "fe409635-e1dd-43a9-aacf-75181c928085",
+          "sha256": "6de57917ef3bfa03119478774c95442945aa6be071ca785bdff6a015f9b744d5"
+        }
+      ]
+    }
+  ],
+  "github_actions_evidence": {
+    "workflow_run_id": 33256818152,
+    "workflow": "B09 standalone stems live canary",
+    "conclusion": "success",
+    "artifact_id": 9716071373,
+    "artifact_digest": "sha256:e9e80352233b513309195b2a946f9b0f859d8ef7262a1c9c908da1d110da0efa"
+  },
+  "remaining_blocker": {
+    "kind": "frozen_acoustic_reference_not_runtime_addressable",
+    "vocal_provider_input_sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+    "b09_promotion_allowed": false
+  },
+  "audio_committed_to_public_repo": false
+}

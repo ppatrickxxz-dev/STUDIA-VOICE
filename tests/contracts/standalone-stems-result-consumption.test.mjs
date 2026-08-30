@@ -36,7 +36,9 @@ test('completed outputs are durably promoted into the same local project', () =>
   assert.match(canary, /stems:consumed\.imported/);
 });
 
-test('canary stays candidate-only until real B09 evidence exists', () => {
-  assert.match(canary, /routeValidated:false/);
+test('standalone route validation is distinct from B09 acoustic promotion', () => {
+  assert.match(canary, /routeValidated:true/);
+  assert.match(canary, /b09AcousticValidated:false/);
   assert.match(canary, /dispatcher:DISPATCHER,engine:'Demucs',model:'htdemucs'/);
+  assert.doesNotMatch(canary, /B09_STANDALONE_STEMS_PASSED/);
 });
