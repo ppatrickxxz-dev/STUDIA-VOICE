@@ -6,6 +6,22 @@ const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const PROVIDER = 'cloudflare_workers_ai';
 const SONG_COMMANDS = new Set(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
 const PROVIDER_TIMEOUT_MS = 20_000;
+const CANONICAL_RUNTIME_ORIGIN = 'https://studia-voice.ppatrickxxz.workers.dev';
+const ANDROID_APP_ORIGIN = 'https://appassets.androidplatform.net';
+const LOCAL_WEB_ORIGINS = ['http://127.0.0.1:4173', 'http://localhost:4173'];
+const ALLOWED_CORS_ORIGINS = new Set([CANONICAL_RUNTIME_ORIGIN, ANDROID_APP_ORIGIN, ...LOCAL_WEB_ORIGINS]);
+
+function corsHeaders(request) {
+  const origin = String(request.headers.get('origin') || '').trim();
+  if (!ALLOWED_CORS_ORIGINS.has(origin)) return {};
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'Authorization, Content-Type, apikey',
+    'access-control-max-age': '600',
+    vary: 'Origin',
+  };
+}
 
 function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
@@ -141,6 +157,7 @@ async function callComposerProvider(request, ai, instructions, input, id) {
 
 async function pabloAgent(request, env) {
   const providerReady = Boolean(env.AI && typeof env.AI.run === 'function');
+  const cors = corsHeaders(request);
 
   if (request.method === 'GET') {
     return json({
@@ -153,25 +170,25 @@ async function pabloAgent(request, env) {
       auth_for_turns: 'required',
       songwriting_commands: [...SONG_COMMANDS],
       provider_timeout_ms: PROVIDER_TIMEOUT_MS,
-    });
+    }, 200, cors);
   }
 
-  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405, cors);
 
   const id = requestId();
   const jwt = bearer(request);
   const user = await authenticatedUser(jwt).catch(() => null);
-  if (!user) return json({ ok: false, error: 'auth_required', request_id: id }, 401);
+  if (!user) return json({ ok: false, error: 'auth_required', request_id: id }, 401, cors);
 
   const body = await request.json().catch(() => ({}));
   const command = String(body.command || '');
   const task = String(body.task || body.message || '').trim().slice(0, 12000);
-  if (!SONG_COMMANDS.has(command)) return json({ ok: false, error: 'unsupported_command', request_id: id }, 400);
-  if (!task) return json({ ok: false, error: 'message_required', request_id: id }, 400);
+  if (!SONG_COMMANDS.has(command)) return json({ ok: false, error: 'unsupported_command', request_id: id }, 400, cors);
+  if (!task) return json({ ok: false, error: 'message_required', request_id: id }, 400, cors);
 
   const project = await ownedProject(jwt, String(body.project_id || '')).catch(() => null);
-  if (!project) return json({ ok: false, error: 'project_not_found', request_id: id }, 404);
-  if (!providerReady) return json({ ok: false, error: 'provider_unavailable', request_id: id, fallback_allowed: false }, 503);
+  if (!project) return json({ ok: false, error: 'project_not_found', request_id: id }, 404, cors);
+  if (!providerReady) return json({ ok: false, error: 'provider_unavailable', request_id: id, fallback_allowed: false }, 503, cors);
 
   const instructions = [
     'Você é o motor de composição do PabloVoice.',
@@ -203,7 +220,7 @@ async function pabloAgent(request, env) {
         retry_after_ms: provider.retryAfterMs,
         latency_ms: provider.latencyMs,
         fallback_allowed: false,
-      }, provider.httpStatus);
+      }, provider.httpStatus, cors);
     }
     return json({
       ok: true,
@@ -217,25 +234,30 @@ async function pabloAgent(request, env) {
       request_id: id,
       latency_ms: provider.latencyMs,
       fallback_allowed: false,
-    });
+    }, 200, cors);
   } catch {
     safeLog({ request_id: id, provider: PROVIDER, model: MODEL, status: 'error', latency_ms: null, error_type: 'agent_backend_error' });
-    return json({ ok: false, error: 'agent_backend_error', request_id: id, fallback_allowed: false }, 503);
+    return json({ ok: false, error: 'agent_backend_error', request_id: id, fallback_allowed: false }, 503, cors);
   }
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const cors = corsHeaders(request);
+
+    if (url.pathname.startsWith('/api/') && request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: cors });
+    }
 
     if (url.pathname === '/api/health') {
-      if (request.method !== 'GET') return json({ ok: false, error: 'method_not_allowed' }, 405);
-      return json(healthPayload(String(env.PV_COMMIT || 'cloudflare')));
+      if (request.method !== 'GET') return json({ ok: false, error: 'method_not_allowed' }, 405, cors);
+      return json(healthPayload(String(env.PV_COMMIT || 'cloudflare')), 200, cors);
     }
 
     if (url.pathname === '/api/provider-readiness') {
-      if (request.method !== 'GET') return json({ ok: false, error: 'method_not_allowed' }, 405);
-      return json(providerReadiness(env));
+      if (request.method !== 'GET') return json({ ok: false, error: 'method_not_allowed' }, 405, cors);
+      return json(providerReadiness(env), 200, cors);
     }
 
     if (url.pathname === '/api/pablo-agent') {
@@ -243,7 +265,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/')) {
-      return json({ ok: false, error: 'not_found' }, 404);
+      return json({ ok: false, error: 'not_found' }, 404, cors);
     }
 
     return env.ASSETS.fetch(request);

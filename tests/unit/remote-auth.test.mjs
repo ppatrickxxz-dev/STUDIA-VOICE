@@ -82,3 +82,20 @@ test('agent health remains non-fatal when remote service is unavailable', async 
   assert.equal(result.available, false);
   assert.equal(result.fallback_allowed, true);
 });
+
+test('agent health targets the canonical Cloudflare Composer runtime', async () => {
+  const calls = [];
+  const adapter = new RemoteAuthAdapter({
+    storage: new MemoryStorage(),
+    location: { hash: '' },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url: String(url), options });
+      return jsonResponse(200, { ok: true, configured: true, provider: 'cloudflare_workers_ai' });
+    },
+  });
+  const result = await adapter.agentHealth();
+  assert.equal(result.available, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://studia-voice.ppatrickxxz.workers.dev/api/pablo-agent');
+  assert.equal(calls[0].options.headers.apikey, 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH');
+});
