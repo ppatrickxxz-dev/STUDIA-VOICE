@@ -13,7 +13,9 @@ const APPLIO = '085197e738ce9dd4c0bae1e0a74df5de25b89444'
 const ECAPA_REVISION = 'b8937e0343bf9fc9741ab12b445b86a93a6e3e25'
 
 test('candidate training is pinned to the canonical Applio recipe and private Kaggle GPU path', () => {
-  for (const source of [dispatcher, worker, callback]) assert.match(source, new RegExp(APPLIO))
+  for (const source of [dispatcher, callback]) assert.match(source, new RegExp(APPLIO))
+  assert.match(worker, /T\['applio_commit'\]/)
+  assert.match(worker, /Applio commit binding mismatch/)
   assert.match(dispatcher, /machineShape: 'NvidiaTeslaT4'/)
   assert.match(dispatcher, /sample_rate: 48000/)
   assert.match(dispatcher, /f0_method: 'rmvpe'/)
@@ -36,12 +38,13 @@ test('training sources and validation guide are artifact-bound and distinct', ()
   assert.match(worker, /check\(guide_raw,validation\['guide_sha256'\],'validation guide'\)/)
 })
 
-test('new candidate is never activated by the training callback', () => {
+test('new candidate model is never activated by the training callback', () => {
   assert.match(dispatcher, /inactive_until_verified_ecapa_gte_0_8/)
-  assert.match(callback, /is_active: false/)
+  assert.match(callback, /from\('voice_models'\)\.upsert\(\{[\s\S]*?status: 'ready', is_active: false/)
   assert.match(callback, /activation_forbidden_before_identity_gate: true/)
   assert.match(callback, /identity_threshold: IDENTITY_THRESHOLD/)
-  assert.doesNotMatch(callback, /is_active: true/)
+  assert.doesNotMatch(callback, /from\('voice_models'\)\.update\(\{[^}]*is_active:\s*true/)
+  assert.doesNotMatch(callback, /promote_verified_voice_model_candidate/)
 })
 
 test('Kaggle creates validation audio but is not the trusted speaker-identity authority', () => {
