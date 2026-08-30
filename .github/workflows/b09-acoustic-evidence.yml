@@ -109,9 +109,9 @@ jobs:
           jq -e '
             .test_id == "B09" and
             .measurement_state == "measured" and
-            .promotion_state == "not_promoted" and
+            .promotion_state == "not_decided_by_this_tool" and
             .assets.source.sha256 == env.SOURCE_SHA256 and
-            .assets.vocal.sha256 == env.VOCAL_SHA256 and
+            .assets.guide_vocal.sha256 == env.VOCAL_SHA256 and
             .assets.instrumental.sha256 == env.INSTRUMENTAL_SHA256
           ' test-results/b09-acoustic/measurement.json >/dev/null
           jq '.' test-results/b09-acoustic/measurement.json
