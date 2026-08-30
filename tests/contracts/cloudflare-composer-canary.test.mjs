@@ -9,13 +9,15 @@ test('Composer production canary targets Cloudflare Workers AI instead of the re
   assert.match(workflow, /https:\/\/studia-voice\.ppatrickxxz\.workers\.dev/);
   assert.match(workflow, /cloudflare_workers_ai/);
   assert.match(workflow, /\/api\/pablo-agent/);
+  assert.match(workflow, /id-token:\s*write/);
+  assert.match(workflow, /Acquire OIDC-backed PabloVoice user session/);
   assert.doesNotMatch(workflow, /validate-app-js-v71|openai_backend|billing_not_active|api\.openai\.com/);
 });
 
-test('Cloudflare physical preview proves authenticated provider output before merge', () => {
-  assert.match(runtimeGate, /id-token:\s*write/);
-  assert.match(runtimeGate, /Acquire OIDC-backed PabloVoice user session/);
-  assert.match(runtimeGate, /Prove authenticated Workers AI generation on exact preview/);
+test('Cloudflare preview remains unprivileged while proving physical auth enforcement', () => {
+  assert.doesNotMatch(runtimeGate, /id-token:\s*write/);
+  assert.doesNotMatch(runtimeGate, /Acquire OIDC-backed PabloVoice user session/);
+  assert.match(runtimeGate, /\.error == \"auth_required\"/);
+  assert.match(runtimeGate, /test \"\$code\" = '401'/);
   assert.match(runtimeGate, /cloudflare_workers_ai/);
-  assert.match(runtimeGate, /fallback_allowed == false/);
 });
