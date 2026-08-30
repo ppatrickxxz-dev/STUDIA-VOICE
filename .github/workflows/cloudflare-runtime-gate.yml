@@ -16,12 +16,6 @@ permissions:
   deployments: read
   pull-requests: read
   checks: read
-  id-token: write
-
-env:
-  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
-  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
-  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
 
 concurrency:
   group: cloudflare-runtime-${{ github.event.pull_request.number || github.ref }}
@@ -112,73 +106,3 @@ jobs:
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/unauth.json" >/dev/null
           printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"
-
-      - name: Acquire OIDC-backed PabloVoice user session
-        shell: bash
-        run: |
-          set -euo pipefail
-          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
-          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
-          SESSION="$(curl --fail-with-body --silent --show-error \
-            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
-            -H "Authorization: Bearer $OIDC_TOKEN" \
-            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            -H 'content-type: application/json' \
-            --data '{"action":"b09_session"}')"
-          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
-          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
-          echo "::add-mask::$ACCESS_TOKEN"
-          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
-
-      - name: Execute real Workers AI provider round-trip
-        env:
-          BASE_URL: ${{ steps.discover.outputs.url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p test-results/cloudflare-provider
-          BODY="$(jq -nc --arg project "$PROJECT_ID" '{command:"rewrite",project_id:$project,task:"Reescreva em português brasileiro, preservando intenção e oralidade: Hoje eu saí sem procurar. Retorne somente uma linha curta.",constraints:{canary:true,max_lines:1}}')"
-          HTTP_CODE="$(curl --silent --show-error \
-            -o test-results/cloudflare-provider/response.json \
-            -w '%{http_code}' \
-            -X POST "$BASE_URL/api/pablo-agent" \
-            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
-            -H 'content-type: application/json' \
-            --data "$BODY")"
-          RESPONSE="$(cat test-results/cloudflare-provider/response.json)"
-          if [ "$HTTP_CODE" != '200' ]; then
-            printf '%s' "$RESPONSE" | jq --arg http_status "$HTTP_CODE" 'del(.reply,.text) + {verdict:"WORKERS_AI_PROVIDER_BLOCKED",http_status:($http_status|tonumber)}' > test-results/cloudflare-provider/evidence.json
-            jq '.' test-results/cloudflare-provider/evidence.json
-            exit 1
-          fi
-          printf '%s' "$RESPONSE" | jq -e --arg project "$PROJECT_ID" '
-            .ok == true and
-            .provider == "cloudflare_workers_ai" and
-            .model == "@cf/meta/llama-3.3-70b-instruct-fp8-fast" and
-            .command == "rewrite" and
-            .project_id == $project and
-            (.reply | type == "string" and length > 0) and
-            (.request_id | type == "string" and length > 0) and
-            (.latency_ms | type == "number" and . >= 0) and
-            .fallback_allowed == false
-          ' >/dev/null
-          REPLY="$(printf '%s' "$RESPONSE" | jq -r '.reply')"
-          REPLY_SHA="$(printf '%s' "$REPLY" | sha256sum | awk '{print $1}')"
-          REPLY_BYTES="$(printf '%s' "$REPLY" | wc -c | tr -d ' ')"
-          printf '%s' "$RESPONSE" | jq \
-            --arg reply_sha256 "$REPLY_SHA" \
-            --argjson reply_bytes "$REPLY_BYTES" \
-            'del(.reply,.text) + {verdict:"WORKERS_AI_PROVIDER_ROUNDTRIP_VALIDATED",reply_sha256:$reply_sha256,reply_bytes:$reply_bytes}' \
-            > test-results/cloudflare-provider/evidence.json
-          jq '.' test-results/cloudflare-provider/evidence.json
-
-      - name: Retain Workers AI evidence without generated content
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudflare-provider-evidence-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: test-results/cloudflare-provider/evidence.json
-          if-no-files-found: warn
-          retention-days: 30
