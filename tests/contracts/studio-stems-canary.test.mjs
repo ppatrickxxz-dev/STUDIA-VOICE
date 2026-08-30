@@ -40,9 +40,11 @@ test('candidate keeps strict CSP and only adds canonical Supabase connect origin
   assert.doesNotMatch(source,/service_role/i);
 });
 
-test('route remains candidate until persisted standalone evidence exists',()=>{
-  assert.match(source,/routeValidated:false/);
+test('persisted standalone route evidence is distinct from acoustic promotion',()=>{
+  assert.match(source,/routeValidated:true/);
+  assert.match(source,/b09AcousticValidated:false/);
   assert.match(source,/compute-kaggle-v54/);
   assert.match(source,/recording-ticket-v63/);
   assert.match(source,/recording-finalize-v63/);
+  assert.doesNotMatch(source,/B09_STANDALONE_STEMS_PASSED/);
 });
