@@ -1,7 +1,7 @@
 {
   "product": "PabloVoice",
   "sourceOfTruth": "ppatrickxxz-dev/STUDIA-VOICE:main",
-  "updatedAt": "2026-08-30T19:04:39Z",
+  "updatedAt": "2026-08-30T19:23:02.160Z",
   "productGoal": "Um único PabloVoice para Web e Android em que o usuário cria música, trabalha a própria voz, edita áudio e exporta sem precisar operar infraestrutura técnica.",
   "rules": {
     "singleCanonicalSource": true,
@@ -37,53 +37,272 @@
     }
   },
   "recentlyMerged": [
-    {"pr":201,"area":"Cloudflare runtime closure","notes":"Composer migrou do endpoint Edge aposentado para o Worker canônico; CORS/preflight Android, CSP, preview/local runtime selection e gates de produção foram fechados no SHA 14c01351."},
-    {"pr":43,"area":"Unified AI Studio","notes":"Pablo AI, Generator Adapter, RVC/Applio Voice Lab e harmonias high/low foram unificados numa única superfície."},
-    {"pr":44,"area":"Breath review","notes":"Automação regional não destrutiva com A/B, manter/ignorar/desfazer e persistência revisionada."},
-    {"pr":46,"area":"Android physical remediation","notes":"Criar música roteia para Composer, áudio pode ser reidratado após perda de buffer e contexto usa o projeto realmente aberto."},
-    {"pr":47,"area":"Stable Android release","notes":"APK/AAB de usuário usam assinatura permanente, não certificado debug por execução."},
-    {"pr":49,"area":"Online activation","notes":"Pareamento/autorização remota dentro do app."},
-    {"pr":52,"area":"Android pairing fix","notes":"Corrigido Illegal invocation no fetch do navegador Android."},
-    {"pr":53,"area":"Harmony provider","notes":"High/low adaptive_partial canonizado; validação acústica do par continua separada."},
-    {"pr":57,"area":"Natural pitch correction","notes":"Planejador de afinação conservador com preservação de vibrato/formante; primeiro smoke acústico posterior não é prova final."},
-    {"pr":59,"area":"Acoustic evidence ingestion","notes":"Voice Lab consome evidência acústica persistida de modo fail-closed."},
-    {"pr":61,"area":"Permanent signing hardening","notes":"Keystore rotacionada e fluxo de assinatura endurecido; release assinado posterior passou."},
-    {"pr":64,"area":"Voice identity reference","notes":"Referência humana explícita, privada e pertencente ao usuário para validar preservação de identidade vocal."},
-    {"pr":66,"area":"Activation UX","notes":"A experiência técnica de Conectar IA foi reformulada como ativação de recursos online e some após sessão válida."},
-    {"pr":67,"area":"Arrangement density","notes":"Macro-arranjo não destrutivo e limitado, sem fingir regeneração instrumental."},
-    {"pr":68,"area":"Composer bridge","notes":"Ponte de composição server-side adicionada."},
-    {"pr":69,"area":"Voice identity benchmark path","notes":"Caminho B04 congelado sem promover score sem evidência real."},
-    {"pr":70,"area":"Agent router","notes":"Composer conectado ao roteador canônico com fallback."},
-    {"pr":72,"area":"Runtime AI auth","notes":"Resolução de credencial curta em runtime implementada e gates passaram."},
-    {"pr":73,"area":"Pablo Music Intelligence 1.0","notes":"Concept Engine, Composition Session Engine, Critic inicial e Authorial Memory foram absorvidos como núcleo interno, sem nova superfície de produto."}
+    {
+      "pr": 201,
+      "area": "Cloudflare runtime closure",
+      "notes": "Composer migrou do endpoint Edge aposentado para o Worker canônico; CORS/preflight Android, CSP, preview/local runtime selection e gates de produção foram fechados no SHA 14c01351."
+    },
+    {
+      "pr": 43,
+      "area": "Unified AI Studio",
+      "notes": "Pablo AI, Generator Adapter, RVC/Applio Voice Lab e harmonias high/low foram unificados numa única superfície."
+    },
+    {
+      "pr": 44,
+      "area": "Breath review",
+      "notes": "Automação regional não destrutiva com A/B, manter/ignorar/desfazer e persistência revisionada."
+    },
+    {
+      "pr": 46,
+      "area": "Android physical remediation",
+      "notes": "Criar música roteia para Composer, áudio pode ser reidratado após perda de buffer e contexto usa o projeto realmente aberto."
+    },
+    {
+      "pr": 47,
+      "area": "Stable Android release",
+      "notes": "APK/AAB de usuário usam assinatura permanente, não certificado debug por execução."
+    },
+    {
+      "pr": 49,
+      "area": "Online activation",
+      "notes": "Pareamento/autorização remota dentro do app."
+    },
+    {
+      "pr": 52,
+      "area": "Android pairing fix",
+      "notes": "Corrigido Illegal invocation no fetch do navegador Android."
+    },
+    {
+      "pr": 53,
+      "area": "Harmony provider",
+      "notes": "High/low adaptive_partial canonizado; validação acústica do par continua separada."
+    },
+    {
+      "pr": 57,
+      "area": "Natural pitch correction",
+      "notes": "Planejador de afinação conservador com preservação de vibrato/formante; primeiro smoke acústico posterior não é prova final."
+    },
+    {
+      "pr": 59,
+      "area": "Acoustic evidence ingestion",
+      "notes": "Voice Lab consome evidência acústica persistida de modo fail-closed."
+    },
+    {
+      "pr": 61,
+      "area": "Permanent signing hardening",
+      "notes": "Keystore rotacionada e fluxo de assinatura endurecido; release assinado posterior passou."
+    },
+    {
+      "pr": 64,
+      "area": "Voice identity reference",
+      "notes": "Referência humana explícita, privada e pertencente ao usuário para validar preservação de identidade vocal."
+    },
+    {
+      "pr": 66,
+      "area": "Activation UX",
+      "notes": "A experiência técnica de Conectar IA foi reformulada como ativação de recursos online e some após sessão válida."
+    },
+    {
+      "pr": 67,
+      "area": "Arrangement density",
+      "notes": "Macro-arranjo não destrutivo e limitado, sem fingir regeneração instrumental."
+    },
+    {
+      "pr": 68,
+      "area": "Composer bridge",
+      "notes": "Ponte de composição server-side adicionada."
+    },
+    {
+      "pr": 69,
+      "area": "Voice identity benchmark path",
+      "notes": "Caminho B04 congelado sem promover score sem evidência real."
+    },
+    {
+      "pr": 70,
+      "area": "Agent router",
+      "notes": "Composer conectado ao roteador canônico com fallback."
+    },
+    {
+      "pr": 72,
+      "area": "Runtime AI auth",
+      "notes": "Resolução de credencial curta em runtime implementada e gates passaram."
+    },
+    {
+      "pr": 73,
+      "area": "Pablo Music Intelligence 1.0",
+      "notes": "Concept Engine, Composition Session Engine, Critic inicial e Authorial Memory foram absorvidos como núcleo interno, sem nova superfície de produto."
+    }
   ],
   "activeWorkstreams": [
-    {"area":"Composer live provider","status":"validated-live-canary","notes":"Cloudflare Workers AI respondeu ao canário autenticado de produção com resposta criativa, metadados e falha fechada preservados; evidência retida no run 33329760884 para o SHA 14c01351."},
-    {"area":"B09 standalone stems","status":"merged-awaiting-live-canary","notes":"Demucs/rota existem; falta uma execução autenticada atual que persista stems independentes."},
-    {"area":"B07 harmony pair","status":"implementation-ready-evidence-pending","notes":"High/low existem; promoção depende de evidência acústica válida e correlacionada do par."},
-    {"area":"Voice Lab live quality","status":"implementation-ready-evidence-pending","notes":"Natural/Identity/Smooth e referência de identidade existem; qualidade final ainda exige execução retida e revisão acústica."},
-    {"area":"B11 sequential edit continuity","status":"implementation-ready-unexecuted","notes":"Guarda de continuidade existe; falta executar sequência congelada e medir continuidade."}
+    {
+      "area": "Composer live provider",
+      "status": "validated-live-canary",
+      "notes": "Cloudflare Workers AI respondeu ao canário autenticado de produção com resposta criativa, metadados e falha fechada preservados; evidência retida no run 33329760884 para o SHA 14c01351."
+    },
+    {
+      "area": "B09 standalone stems",
+      "status": "merged-awaiting-live-canary",
+      "notes": "Demucs/rota existem; falta uma execução autenticada atual que persista stems independentes."
+    },
+    {
+      "area": "B07 harmony pair",
+      "status": "implementation-ready-evidence-pending",
+      "notes": "High/low existem; promoção depende de evidência acústica válida e correlacionada do par."
+    },
+    {
+      "area": "Voice Lab live quality",
+      "status": "implementation-ready-evidence-pending",
+      "notes": "Natural/Identity/Smooth e referência de identidade existem; qualidade final ainda exige execução retida e revisão acústica."
+    },
+    {
+      "area": "B11 sequential edit continuity",
+      "status": "implementation-ready-unexecuted",
+      "notes": "Guarda de continuidade existe; falta executar sequência congelada e medir continuidade."
+    }
   ],
   "modules": [
-    {"id":"project-core","name":"Project Core","priority":"P0","status":"implemented","validated":true},
-    {"id":"studio-editor","name":"Studio Editor / Mixer / Export","priority":"P0","status":"implemented","validated":true,"notes":"Baseline já foi testada fisicamente em ciclos anteriores; não repetir sem motivo de regressão."},
-    {"id":"audio-analysis-bus","name":"Audio Analysis Bus v2","priority":"P0","status":"implemented","validated":true},
-    {"id":"breath-alignment","name":"Breath / Alignment Intelligence","priority":"P1","status":"implemented","validated":true,"notes":"Inclui review regional A/B não destrutivo."},
-    {"id":"mix-intelligence","name":"Mix Intelligence Graph","priority":"P1","status":"implemented-foundation","validated":true},
-    {"id":"audio-to-instrument","name":"Audio-to-Instrument / Sampler foundations","priority":"P1","status":"implemented-foundation","validated":true},
-    {"id":"music-intelligence","name":"Pablo Music Intelligence 1.0","priority":"P0","status":"implemented-foundation","validated":true,"notes":"Concept Engine, Composition Session, Critic inicial e Authorial Memory; não reivindica geração autônoma."},
-    {"id":"songwriting","name":"Songwriting Engine / Composer","priority":"P0","status":"implemented-provider-blocked","validated":false,"notes":"Interface, comandos e backend existem; geração online real está bloqueada atualmente pela conta do provedor."},
-    {"id":"pablo-ai","name":"Pablo AI","priority":"P0","status":"implemented-partial","validated":true,"notes":"Ferramentas locais determinísticas e roteamento para criação existem; raciocínio remoto depende de provider disponível."},
-    {"id":"voice-lab","name":"Voice Lab","priority":"P0","status":"implementation-ready-evidence-pending","validated":false},
-    {"id":"harmony","name":"Harmony Intelligence high/low","priority":"P0","status":"implementation-ready-evidence-pending","validated":false},
-    {"id":"stem-engine","name":"StemEngine","priority":"P0","status":"implementation-ready-live-canary-pending","validated":false,"provider":"Demucs htdemucs"},
-    {"id":"note-correction","name":"Natural Note Correction","priority":"P0","status":"implementation-ready-smoke-proven","validated":false,"notes":"Smoke real mostrou melhora conservadora sem destruir vibrato, mas não é benchmark final."},
-    {"id":"arrangement","name":"Macro Arrangement Density","priority":"P1","status":"implementation-ready-unexecuted","validated":false},
-    {"id":"pmi","name":"PMI Knowledge Service","priority":"P1","status":"implemented-partial","validated":true},
-    {"id":"instrument-lab","name":"Instrument Lab","priority":"P2","status":"recovery-candidate","validated":false,"notes":"Funcionalidade histórica deve ser migrada para a arquitetura atual, não recriada em paralelo."},
-    {"id":"podcast-cleanup","name":"Podcast Cleanup","priority":"P2","status":"recovery-candidate","validated":false},
-    {"id":"video-audio","name":"Video Audio","priority":"P2","status":"recovery-candidate","validated":false},
-    {"id":"studio-life","name":"Pocket Studio / Studio Life / Avatar / Pets","priority":"P2","status":"canonical-creative-direction","validated":false,"notes":"Preservar identidade pixel/console, progressão não punitiva e pets musicais; integrar depois do fluxo musical P0 estar utilizável."}
+    {
+      "id": "project-core",
+      "name": "Project Core",
+      "priority": "P0",
+      "status": "implemented",
+      "validated": true
+    },
+    {
+      "id": "studio-editor",
+      "name": "Studio Editor / Mixer / Export",
+      "priority": "P0",
+      "status": "implemented",
+      "validated": true,
+      "notes": "Baseline já foi testada fisicamente em ciclos anteriores; não repetir sem motivo de regressão."
+    },
+    {
+      "id": "audio-analysis-bus",
+      "name": "Audio Analysis Bus v2",
+      "priority": "P0",
+      "status": "implemented",
+      "validated": true
+    },
+    {
+      "id": "breath-alignment",
+      "name": "Breath / Alignment Intelligence",
+      "priority": "P1",
+      "status": "implemented",
+      "validated": true,
+      "notes": "Inclui review regional A/B não destrutivo."
+    },
+    {
+      "id": "mix-intelligence",
+      "name": "Mix Intelligence Graph",
+      "priority": "P1",
+      "status": "implemented-foundation",
+      "validated": true
+    },
+    {
+      "id": "audio-to-instrument",
+      "name": "Audio-to-Instrument / Sampler foundations",
+      "priority": "P1",
+      "status": "implemented-foundation",
+      "validated": true
+    },
+    {
+      "id": "music-intelligence",
+      "name": "Pablo Music Intelligence 1.0",
+      "priority": "P0",
+      "status": "implemented-foundation",
+      "validated": true,
+      "notes": "Concept Engine, Composition Session, Critic inicial e Authorial Memory; não reivindica geração autônoma."
+    },
+    {
+      "id": "songwriting",
+      "name": "Songwriting Engine / Composer",
+      "priority": "P0",
+      "status": "implemented-live-validated",
+      "validated": true,
+      "notes": "Interface, comandos, backend e execução online no Worker canônico existem; o canário autenticado de produção respondeu com conteúdo criativo e preservou a falha fechada no run 33329760884."
+    },
+    {
+      "id": "pablo-ai",
+      "name": "Pablo AI",
+      "priority": "P0",
+      "status": "implemented-partial",
+      "validated": true,
+      "notes": "Ferramentas locais determinísticas e roteamento para criação existem; raciocínio remoto depende de provider disponível."
+    },
+    {
+      "id": "voice-lab",
+      "name": "Voice Lab",
+      "priority": "P0",
+      "status": "implementation-ready-evidence-pending",
+      "validated": false
+    },
+    {
+      "id": "harmony",
+      "name": "Harmony Intelligence high/low",
+      "priority": "P0",
+      "status": "implementation-ready-evidence-pending",
+      "validated": false
+    },
+    {
+      "id": "stem-engine",
+      "name": "StemEngine",
+      "priority": "P0",
+      "status": "implementation-ready-live-canary-pending",
+      "validated": false,
+      "provider": "Demucs htdemucs"
+    },
+    {
+      "id": "note-correction",
+      "name": "Natural Note Correction",
+      "priority": "P0",
+      "status": "implementation-ready-smoke-proven",
+      "validated": false,
+      "notes": "Smoke real mostrou melhora conservadora sem destruir vibrato, mas não é benchmark final."
+    },
+    {
+      "id": "arrangement",
+      "name": "Macro Arrangement Density",
+      "priority": "P1",
+      "status": "implementation-ready-unexecuted",
+      "validated": false
+    },
+    {
+      "id": "pmi",
+      "name": "PMI Knowledge Service",
+      "priority": "P1",
+      "status": "implemented-partial",
+      "validated": true
+    },
+    {
+      "id": "instrument-lab",
+      "name": "Instrument Lab",
+      "priority": "P2",
+      "status": "recovery-candidate",
+      "validated": false,
+      "notes": "Funcionalidade histórica deve ser migrada para a arquitetura atual, não recriada em paralelo."
+    },
+    {
+      "id": "podcast-cleanup",
+      "name": "Podcast Cleanup",
+      "priority": "P2",
+      "status": "recovery-candidate",
+      "validated": false
+    },
+    {
+      "id": "video-audio",
+      "name": "Video Audio",
+      "priority": "P2",
+      "status": "recovery-candidate",
+      "validated": false
+    },
+    {
+      "id": "studio-life",
+      "name": "Pocket Studio / Studio Life / Avatar / Pets",
+      "priority": "P2",
+      "status": "canonical-creative-direction",
+      "validated": false,
+      "notes": "Preservar identidade pixel/console, progressão não punitiva e pets musicais; integrar depois do fluxo musical P0 estar utilizável."
+    }
   ],
   "currentBlockers": [
     "A atualização Android desta release ainda precisa ser instalada e validada em aparelho físico; os gates de emulador não substituem esse passo.",
