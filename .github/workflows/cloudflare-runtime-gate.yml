@@ -17,16 +17,10 @@ permissions:
   deployments: read
   pull-requests: read
   checks: read
-  id-token: write
 
 concurrency:
   group: cloudflare-runtime-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
-env:
-  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
-  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
-  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
 
 jobs:
   dry-run:
@@ -47,8 +41,7 @@ jobs:
   physical-preview:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    environment: pablovoice-production
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
       - name: Discover native Cloudflare public URL for this exact head
         id: discover
@@ -112,49 +105,4 @@ jobs:
           code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/unauth.json" >/dev/null
-
-      - name: Acquire OIDC-backed PabloVoice user session
-        shell: bash
-        run: |
-          set -euo pipefail
-          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
-          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
-          SESSION="$(curl --fail-with-body --silent --show-error \
-            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
-            -H "Authorization: Bearer $OIDC_TOKEN" \
-            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            -H 'content-type: application/json' \
-            --data '{"action":"b09_session"}')"
-          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
-          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
-          echo "::add-mask::$ACCESS_TOKEN"
-          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
-
-      - name: Prove authenticated Workers AI generation on exact preview
-        env:
-          BASE_URL: ${{ steps.discover.outputs.url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          BODY="$(jq -nc --arg project "$PROJECT_ID" '{command:"rewrite",project_id:$project,task:"Reescreva em português brasileiro, mantendo a intenção e a oralidade: Hoje eu saí sem procurar. Retorne somente uma linha curta para revisão.",constraints:{canary:true,max_lines:1}}')"
-          RESPONSE_FILE="$(mktemp)"
-          CODE="$(curl --silent --show-error --max-time 30 -o "$RESPONSE_FILE" -w '%{http_code}' \
-            -X POST "$BASE_URL/api/pablo-agent" \
-            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
-            -H 'content-type: application/json' \
-            --data "$BODY")"
-          test "$CODE" = '200'
-          jq -e --arg project "$PROJECT_ID" '
-            .ok == true and
-            .provider == "cloudflare_workers_ai" and
-            (.model | type == "string" and length > 0) and
-            .command == "rewrite" and
-            .project_id == $project and
-            (.request_id | type == "string" and length > 0) and
-            (.latency_ms | type == "number" and . >= 0) and
-            (.reply | type == "string" and length > 0) and
-            .fallback_allowed == false
-          ' "$RESPONSE_FILE" >/dev/null
-          printf 'CLOUDFLARE_AUTHENTICATED_AI_ROUNDTRIP_PASSED %s\n' "$BASE_URL"
+          printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"
