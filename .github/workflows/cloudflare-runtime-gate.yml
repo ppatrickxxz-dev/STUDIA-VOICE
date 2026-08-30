@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  deployments: read
+  pull-requests: read
   checks: read
 
 concurrency:
@@ -35,80 +37,47 @@ jobs:
       - name: Bundle Worker and Static Assets without deployment
         run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
 
-  publish-preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: dry-run
+  physical-preview:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    environment: cloudflare-preview
-    timeout-minutes: 10
-    outputs:
-      url: ${{ steps.publish.outputs.url }}
+    timeout-minutes: 6
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Validate protected Cloudflare configuration
+      - name: Discover native Cloudflare public URL for this exact head
+        id: discover
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PREVIEW_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_ID is not configured in the cloudflare-preview environment.' >&2; exit 1; }
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'CLOUDFLARE_API_TOKEN is not configured in the cloudflare-preview environment.' >&2; exit 1; }
-          test -n "$PREVIEW_OPENAI_API_KEY" || { echo 'OPENAI_API_KEY is not configured in the cloudflare-preview environment.' >&2; exit 1; }
-      - name: Build canonical Web for the physical preview
-        run: npm run build:web
-      - name: Publish isolated Cloudflare preview for this PR head
-        id: publish
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PREVIEW_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
           set -euo pipefail
-          worker_name="studia-voice-pr-${PR_NUMBER}"
-          secrets_file="$RUNNER_TEMP/cloudflare-preview-secrets.json"
-          log_file="$RUNNER_TEMP/wrangler-preview.log"
-          trap 'rm -f "$secrets_file"' EXIT
-          SECRETS_FILE="$secrets_file" node --input-type=module -e "import { writeFileSync } from 'node:fs'; writeFileSync(process.env.SECRETS_FILE, JSON.stringify({ OPENAI_API_KEY: process.env.PREVIEW_OPENAI_API_KEY }), { mode: 0o600 });"
-          npx --yes wrangler@4.127.1 deploy \
-            --config wrangler.jsonc \
-            --name "$worker_name" \
-            --var "PV_COMMIT:${HEAD_SHA}" \
-            --secrets-file "$secrets_file" \
-            --keep-vars 2>&1 | tee "$log_file"
-          url="$(grep -Eo 'https://[a-z0-9-]+\.workers\.dev' "$log_file" | tail -n 1 || true)"
-          test -n "$url" || { echo 'CLOUDFLARE_PREVIEW_URL_MISSING: Wrangler completed without a workers.dev URL.' >&2; exit 1; }
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          printf 'Cloudflare preview: %s\nHead SHA: %s\nWorker: %s\n' "$url" "$HEAD_SHA" "$worker_name" >> "$GITHUB_STEP_SUMMARY"
-
-  physical-preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: publish-preview
-    runs-on: ubuntu-24.04
-    timeout-minutes: 6
-    steps:
-      - name: Bind physical gate to the preview published for this exact head
-        id: preview
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_URL: ${{ needs.publish-preview.outputs.url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$BASE_URL" || { echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: the publish job produced no preview URL.' >&2; exit 1; }
-          echo "url=${BASE_URL%/}" >> "$GITHUB_OUTPUT"
-          printf 'Cloudflare URL: %s\nHead SHA: %s\n' "$BASE_URL" "$HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
+          api="https://api.github.com/repos/$REPOSITORY"
+          auth=(-H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+          url=''
+          for attempt in $(seq 1 36); do
+            deployments="$(curl --fail-with-body --silent --show-error "${auth[@]}" "$api/deployments?sha=$HEAD_SHA&per_page=100")"
+            while IFS= read -r statuses_url; do
+              [ -n "$statuses_url" ] || continue
+              statuses="$(curl --fail-with-body --silent --show-error "${auth[@]}" "$statuses_url?per_page=100")"
+              candidate="$(printf '%s' "$statuses" | jq -r '[.[] | select(.state == "success") | .environment_url // empty] | map(select(test("^https://"))) | first // empty')"
+              if [ -n "$candidate" ]; then url="$candidate"; break; fi
+            done < <(printf '%s' "$deployments" | jq -r '.[].statuses_url // empty')
+            if [ -z "$url" ]; then
+              comments="$(curl --fail-with-body --silent --show-error "${auth[@]}" "$api/issues/$PR_NUMBER/comments?per_page=100")"
+              candidate="$(printf '%s' "$comments" | jq -r '.[].body // empty' | grep -Eo 'https://[^ )<"]+\.workers\.dev[^ )<"]*' | tail -n 1 || true)"
+              if [ -n "$candidate" ]; then url="$candidate"; fi
+            fi
+            if [ -n "$url" ]; then break; fi
+            sleep 5
+          done
+          test -n "$url" || { echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: native Workers Builds published no public same-head URL.' >&2; exit 1; }
+          echo "url=${url%/}" >> "$GITHUB_OUTPUT"
+          printf 'Cloudflare URL: %s\nHead SHA: %s\n' "$url" "$HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke physical Studio, Site Vivo and Cloudflare APIs
         env:
-          BASE_URL: ${{ steps.preview.outputs.url }}
+          BASE_URL: ${{ steps.discover.outputs.url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
@@ -130,9 +99,9 @@ jobs:
           fetch_200 '/api/health' "$tmp/health.json" "$tmp/health.headers"
           jq -e --arg sha "$HEAD_SHA" '.ok == true and .commit == $sha' "$tmp/health.json" >/dev/null
           fetch_200 '/api/provider-readiness' "$tmp/readiness.json" "$tmp/readiness.headers"
-          jq -e '.ok == true and .providers.pablovoice.transport == "openai_responses_api" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null
+          jq -e '.ok == true and .providers.pablovoice.transport == "cloudflare_workers_ai" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null
           fetch_200 '/api/pablo-agent' "$tmp/agent.json" "$tmp/agent.headers"
-          jq -e '.ok == true and .provider == "openai_responses_api" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
+          jq -e '.ok == true and .provider == "cloudflare_workers_ai" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
           code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/unauth.json" >/dev/null
