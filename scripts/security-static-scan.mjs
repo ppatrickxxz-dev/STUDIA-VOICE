@@ -6,7 +6,7 @@ export const CREDENTIAL_PATTERN = /(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY
 export const WEBVIEW_PATTERN = /usesCleartextTraffic="true"|setAllowFileAccess\(true\)|MIXED_CONTENT_ALWAYS_ALLOW/;
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const CREDENTIAL_ROOTS = ['packages', 'apps', 'services', 'api', 'scripts', 'tests', 'docs', '.github'];
+const CREDENTIAL_ROOTS = ['packages', 'apps', 'services', 'cloudflare', 'scripts', 'tests', 'docs', '.github'];
 const WEBVIEW_ROOTS = ['apps/android', 'packages'];
 
 export function findPatternLines(text, pattern) {

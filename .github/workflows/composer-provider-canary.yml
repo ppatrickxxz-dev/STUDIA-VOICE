@@ -5,7 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/composer-provider-canary.yml'
-      - 'supabase/functions/validate-app-js-v71/**'
+      - 'cloudflare/**'
+      - 'wrangler.jsonc'
   workflow_dispatch:
 
 permissions:
@@ -16,6 +17,7 @@ env:
   SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
   SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
   PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  CLOUDFLARE_PRODUCTION_URL: https://studia-voice.ppatrickxxz.workers.dev
 
 jobs:
   provider-roundtrip:
@@ -45,44 +47,34 @@ jobs:
           echo "::add-mask::$ACCESS_TOKEN"
           printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
 
-      - name: Execute real Composer provider round-trip
+      - name: Wait for Cloudflare production runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            RESPONSE="$(curl --silent --show-error --max-time 10 "$CLOUDFLARE_PRODUCTION_URL/api/pablo-agent" || true)"
+            if printf '%s' "$RESPONSE" | jq -e '.ok == true and .provider == "cloudflare_workers_ai" and .configured == true' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo '::error::Cloudflare production Composer did not become ready.'
+          exit 1
+
+      - name: Execute real authenticated Workers AI round-trip
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p test-results/composer-provider
           BODY="$(jq -nc --arg project "$PROJECT_ID" '{command:"rewrite",project_id:$project,task:"Reescreva em português brasileiro, mantendo a intenção e a oralidade: Hoje eu saí sem procurar. Retorne somente uma linha curta para revisão.",constraints:{canary:true,max_lines:1}}')"
-
-          call_provider() {
-            HTTP_CODE="$(curl --silent --show-error \
-              -o test-results/composer-provider/last-response.json \
-              -w '%{http_code}' \
-              -X POST "$SUPABASE_URL/functions/v1/validate-app-js-v71" \
-              -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
-              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-              -H 'content-type: application/json' \
-              --data "$BODY")"
-            RESPONSE="$(cat test-results/composer-provider/last-response.json)"
-          }
-
-          call_provider
-          if [ "$HTTP_CODE" = '429' ]; then
-            printf '%s' "$RESPONSE" | jq -e '
-              .ok == false and
-              .error == "provider_rate_limited" and
-              .fallback_allowed == false and
-              (.retry_after_ms | type == "number" and . >= 0)
-            ' >/dev/null
-            PROVIDER_ERROR_CODE="$(printf '%s' "$RESPONSE" | jq -r '.provider_error_code // .provider_error_type // ""')"
-            if [ "$PROVIDER_ERROR_CODE" != 'billing_not_active' ] && [ "$PROVIDER_ERROR_CODE" != 'insufficient_quota' ]; then
-              RETRY_MS="$(printf '%s' "$RESPONSE" | jq -r '.retry_after_ms // 250')"
-              RETRY_SECONDS="$(( (RETRY_MS + 999) / 1000 ))"
-              if [ "$RETRY_SECONDS" -gt 2 ]; then RETRY_SECONDS=2; fi
-              echo "Provider rate-limited the canary; applying the single bounded retry allowed by the runtime contract after ${RETRY_SECONDS}s."
-              sleep "$RETRY_SECONDS"
-              call_provider
-            fi
-          fi
-
+          HTTP_CODE="$(curl --silent --show-error --max-time 30 \
+            -o test-results/composer-provider/last-response.json \
+            -w '%{http_code}' \
+            -X POST "$CLOUDFLARE_PRODUCTION_URL/api/pablo-agent" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          RESPONSE="$(cat test-results/composer-provider/last-response.json)"
           if [ "$HTTP_CODE" != '200' ]; then
             printf '%s' "$RESPONSE" | jq \
               --arg http_status "$HTTP_CODE" \
@@ -91,14 +83,12 @@ jobs:
               'del(.reply,.text) + {verdict:"AI_RUNTIME_PROVIDER_BLOCKED",http_status:($http_status|tonumber),github_sha:$github_sha,github_run_id:$run_id}' \
               > test-results/composer-provider/evidence.json
             jq '.' test-results/composer-provider/evidence.json
-            echo "::error::Composer provider round-trip is blocked (HTTP $HTTP_CODE)."
             exit 1
           fi
-
           printf '%s' "$RESPONSE" | jq -e \
             --arg project "$PROJECT_ID" '
               .ok == true and
-              .provider == "openai_backend" and
+              .provider == "cloudflare_workers_ai" and
               (.model | type == "string" and length > 0) and
               .command == "rewrite" and
               .project_id == $project and
