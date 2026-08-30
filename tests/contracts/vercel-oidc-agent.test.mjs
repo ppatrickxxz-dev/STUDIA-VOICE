@@ -19,10 +19,10 @@ test('Vercel runtime dependencies stay removed from PabloVoice', () => {
   assert.doesNotMatch(worker, /ai-gateway\.vercel\.sh|vercel_ai_gateway/i);
 });
 
-test('Cloudflare Composer uses direct OpenAI Responses API with server-side secret only', () => {
-  assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
-  assert.match(worker, /env\.OPENAI_API_KEY/);
-  assert.match(worker, /const MODEL = 'gpt-5\.4-mini'/);
+test('Cloudflare Composer uses Workers AI binding without a billable provider secret', () => {
+  assert.match(worker, /env\.AI/);
+  assert.match(worker, /const MODEL = '@cf\/meta\/llama-3\.3-70b-instruct-fp8-fast'/);
+  assert.doesNotMatch(worker, /OPENAI_API_KEY|api\.openai\.com/);
   assert.match(worker, /credential_exposed:\s*false/);
   assert.doesNotMatch(worker, /sk-[A-Za-z0-9_-]{20,}/);
 });
@@ -37,7 +37,7 @@ test('Cloudflare Composer preserves authentication, project ownership and review
 });
 
 test('Cloudflare Composer fails closed and never fabricates provider output', () => {
-  for (const error of ['provider_auth_failed', 'provider_rate_limited', 'provider_unavailable', 'provider_invalid_response', 'provider_connection_failed', 'provider_timeout', 'remote_empty_response', 'agent_backend_error']) {
+  for (const error of ['provider_auth_failed', 'provider_rate_limited', 'provider_unavailable', 'provider_timeout', 'remote_empty_response', 'agent_backend_error']) {
     assert.match(worker, new RegExp(error));
   }
   assert.match(worker, /fallback_allowed:\s*false/);
