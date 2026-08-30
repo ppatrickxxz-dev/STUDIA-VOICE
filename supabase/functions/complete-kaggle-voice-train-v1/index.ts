@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
       candidate: true,
       proof: 'sha256-full-and-parts',
     }
-    const { error: me } = await admin.from('voice_models').insert({
+    const { error: me } = await admin.from('voice_models').upsert({
       id: candidateModelId,
       user_id: job.user_id,
       name: String(parameters.candidate_model_name || 'PabloVoice Candidate'),
@@ -119,28 +119,27 @@ Deno.serve(async (req: Request) => {
       status: 'ready',
       is_active: false,
       metadata,
-    })
+    }, { onConflict: 'id' })
     if (me) throw me
 
-    const { data: activeRefs, error: are } = await admin.from('voice_identity_references').select('*').eq('user_id', job.user_id).eq('is_active', true).order('updated_at', { ascending: false }).limit(1)
-    if (are) throw are
-    const reference = activeRefs?.[0]
-    if (!reference || !uuid(reference.asset_id) || !shaOk(reference.source_sha256)) return out({ ok: false, error: 'identity_reference_required_before_candidate_registration' }, 409)
-    const { error: rie } = await admin.from('voice_identity_references').insert({
-      id: crypto.randomUUID(),
-      user_id: job.user_id,
-      voice_model_id: candidateModelId,
-      asset_id: reference.asset_id,
-      source_sha256: String(reference.source_sha256).toLowerCase(),
-      source_duration_seconds: reference.source_duration_seconds,
-      source_sample_rate: reference.source_sample_rate,
-      source_channels: reference.source_channels,
-      reference_version: Number(reference.reference_version || 1),
-      status: reference.status || 'ready',
-      is_active: true,
-      metadata: { ...(reference.metadata || {}), cloned_for_candidate_training_job_id: jobId, candidate_model_id: candidateModelId },
-    })
-    if (rie) throw rie
+    const { data: existingRef, error: ere } = await admin.from('voice_identity_references').select('id').eq('user_id', job.user_id).eq('voice_model_id', candidateModelId).eq('is_active', true).maybeSingle()
+    if (ere) throw ere
+    if (!existingRef) {
+      const { data: activeRefs, error: are } = await admin.from('voice_identity_references').select('asset_id,source_sha256,label').eq('user_id', job.user_id).eq('is_active', true).neq('voice_model_id', candidateModelId).order('updated_at', { ascending: false }).limit(1)
+      if (are) throw are
+      const reference = activeRefs?.[0]
+      if (!reference || !uuid(reference.asset_id) || !shaOk(reference.source_sha256)) return out({ ok: false, error: 'identity_reference_required_before_candidate_registration' }, 409)
+      const { error: rie } = await admin.from('voice_identity_references').insert({
+        id: crypto.randomUUID(),
+        user_id: job.user_id,
+        voice_model_id: candidateModelId,
+        asset_id: reference.asset_id,
+        source_sha256: String(reference.source_sha256).toLowerCase(),
+        label: reference.label ? `${reference.label} · candidate` : 'Candidate identity reference',
+        is_active: true,
+      })
+      if (rie) throw rie
+    }
 
     const proof = {
       verified: true,
