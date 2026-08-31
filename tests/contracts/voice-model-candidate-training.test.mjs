@@ -79,6 +79,9 @@ test('promotion requires repository OIDC and a service-role-only transactional R
 })
 
 test('transactional promotion preserves the frozen identity threshold and trusted model revision', () => {
+  assert.match(migration, /v_score is null/)
+  assert.match(migration, /v_threshold is null/)
+  assert.match(migration, /identity_evidence_invalid/)
   assert.match(migration, /v_threshold <> 0\.8/)
   assert.match(migration, /v_score < v_threshold/)
   assert.match(migration, /speechbrain\/spkrec-ecapa-voxceleb/)
@@ -88,4 +91,11 @@ test('transactional promotion preserves the frozen identity threshold and truste
   assert.match(migration, /inactive_until_verified_ecapa_gte_0_8/)
   assert.match(migration, /set is_active = false/)
   assert.match(migration, /set is_active = true/)
+})
+
+test('late worker error callbacks cannot overwrite completed training jobs', () => {
+  assert.match(callback, /\.neq\('status', 'completed'\)/)
+  assert.match(callback, /currentJob\?\.status === 'completed'/)
+  assert.match(callback, /already_completed: true/)
+  assert.match(callback, /job_state_changed/)
 })
