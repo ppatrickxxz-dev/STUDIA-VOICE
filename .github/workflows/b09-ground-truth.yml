@@ -1,0 +1,271 @@
+name: B09 prospective ground-truth gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/b09-ground-truth.yml'
+      - 'benchmarks/validate_b09_ground_truth.py'
+      - 'benchmarks/validate_b09.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: pablovoice-b09-ground-truth
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  B09_PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  CLEAN_VOCAL_ASSET_ID: 2e04c01e-2986-4d71-8eb6-2097e19d0b03
+  CLEAN_VOCAL_SHA256: 071274b45b51f40bb3a23fdda839bcf95cb9641edf060b69d343b43324430969
+  MIX_START_SECONDS: '48'
+  MIX_DURATION_SECONDS: '60'
+  SYNTHETIC_INSTRUMENT_SEED: '20260831'
+
+jobs:
+  ground-truth:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire legitimate PabloVoice session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          SESSION="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
+          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$B09_PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          USER_JSON="$(curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/auth/v1/user" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+          USER_ID="$(printf '%s' "$USER_JSON" | jq -er '.id')"
+          printf 'PV_ACCESS_TOKEN=%s\nPV_USER_ID=%s\n' "$ACCESS_TOKEN" "$USER_ID" >> "$GITHUB_ENV"
+
+      - name: Build controlled mixture from frozen clean vocal and deterministic instrumental
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          mkdir -p /tmp/pv-b09-gt test-results/b09-ground-truth
+          AUTH=(-H "Authorization: Bearer $PV_ACCESS_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+
+          ROW="$(curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+            "$SUPABASE_URL/rest/v1/audio_assets?select=id,sha256,storage_bucket,storage_path,original_name&id=eq.$CLEAN_VOCAL_ASSET_ID")"
+          test "$(printf '%s' "$ROW" | jq -er 'if length == 1 then .[0].id else error("clean_vocal_missing") end')" = "$CLEAN_VOCAL_ASSET_ID"
+          test "$(printf '%s' "$ROW" | jq -er '.[0].sha256 | ascii_downcase')" = "$CLEAN_VOCAL_SHA256"
+          BUCKET="$(printf '%s' "$ROW" | jq -er '.[0].storage_bucket')"
+          PATH_URI="$(printf '%s' "$ROW" | jq -er '.[0].storage_path | @uri')"
+          curl --fail-with-body --silent --show-error -L "${AUTH[@]}" \
+            "$SUPABASE_URL/storage/v1/object/authenticated/$BUCKET/$PATH_URI" \
+            -o /tmp/pv-b09-gt/clean-vocal.m4a
+          test "$(sha256sum /tmp/pv-b09-gt/clean-vocal.m4a | awk '{print $1}')" = "$CLEAN_VOCAL_SHA256"
+
+          ffmpeg -hide_banner -loglevel error \
+            -ss "$MIX_START_SECONDS" -t "$MIX_DURATION_SECONDS" \
+            -i /tmp/pv-b09-gt/clean-vocal.m4a -vn -ac 1 -ar 48000 \
+            -af 'volume=0.45' -c:a pcm_s16le /tmp/pv-b09-gt/reference-vocal.wav
+
+          python - <<'PY'
+          import math, os, random, struct, wave
+          rate = 48000
+          duration = int(os.environ['MIX_DURATION_SECONDS'])
+          seed = int(os.environ['SYNTHETIC_INSTRUMENT_SEED'])
+          rng = random.Random(seed)
+          roots = [110.0, 130.8128, 146.8324, 98.0]
+          with wave.open('/tmp/pv-b09-gt/reference-instrumental.wav', 'wb') as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+              block = bytearray()
+              for n in range(rate * duration):
+                  t = n / rate
+                  root = roots[int(t // 4) % len(roots)]
+                  chord = (
+                      0.16 * math.sin(2 * math.pi * root * t) +
+                      0.09 * math.sin(2 * math.pi * root * 1.25 * t) +
+                      0.08 * math.sin(2 * math.pi * root * 1.5 * t) +
+                      0.06 * math.sin(2 * math.pi * root * 2.0 * t)
+                  )
+                  beat_phase = t % 0.5
+                  kick = 0.20 * math.exp(-18.0 * beat_phase) * math.sin(2 * math.pi * 58.0 * t)
+                  hat_phase = t % 0.25
+                  hat = (0.025 * math.exp(-55.0 * hat_phase) * (rng.random() * 2.0 - 1.0))
+                  bass = 0.10 * math.sin(2 * math.pi * (root / 2.0) * t)
+                  sample = max(-0.72, min(0.72, chord + kick + hat + bass))
+                  block += struct.pack('<h', int(round(sample * 32767.0)))
+                  if len(block) >= 48000 * 2:
+                      w.writeframesraw(block); block.clear()
+              if block:
+                  w.writeframesraw(block)
+          PY
+
+          ffmpeg -hide_banner -loglevel error \
+            -i /tmp/pv-b09-gt/reference-vocal.wav \
+            -i /tmp/pv-b09-gt/reference-instrumental.wav \
+            -filter_complex '[0:a][1:a]amix=inputs=2:normalize=0:duration=shortest' \
+            -ac 1 -ar 48000 -c:a pcm_s16le /tmp/pv-b09-gt/controlled-mixture.wav
+
+          VOCAL_SHA="$(sha256sum /tmp/pv-b09-gt/reference-vocal.wav | awk '{print $1}')"
+          INST_SHA="$(sha256sum /tmp/pv-b09-gt/reference-instrumental.wav | awk '{print $1}')"
+          MIX_SHA="$(sha256sum /tmp/pv-b09-gt/controlled-mixture.wav | awk '{print $1}')"
+          MIX_SIZE="$(stat -c '%s' /tmp/pv-b09-gt/controlled-mixture.wav)"
+          printf 'B09_REF_VOCAL_SHA=%s\nB09_REF_INST_SHA=%s\nB09_MIX_SHA=%s\nB09_MIX_SIZE=%s\n' "$VOCAL_SHA" "$INST_SHA" "$MIX_SHA" "$MIX_SIZE" >> "$GITHUB_ENV"
+
+          jq -n \
+            --arg protocol 'prospective_controlled_ground_truth_v1' \
+            --arg clean_vocal_asset_id "$CLEAN_VOCAL_ASSET_ID" \
+            --arg clean_vocal_sha256 "$CLEAN_VOCAL_SHA256" \
+            --arg reference_vocal_sha256 "$VOCAL_SHA" \
+            --arg reference_instrumental_sha256 "$INST_SHA" \
+            --arg mixture_sha256 "$MIX_SHA" \
+            --argjson start "$MIX_START_SECONDS" \
+            --argjson duration "$MIX_DURATION_SECONDS" \
+            --argjson seed "$SYNTHETIC_INSTRUMENT_SEED" \
+            '{protocol:$protocol,thresholds_frozen_before_execution:true,clean_vocal:{asset_id:$clean_vocal_asset_id,sha256:$clean_vocal_sha256,start_seconds:$start,duration_seconds:$duration,scale:0.45},synthetic_instrumental:{seed:$seed,sample_rate_hz:48000,channels:1,pcm:"s16le",recipe:"four-root harmonic progression + deterministic kick/hat/bass"},reference_vocal_sha256:$reference_vocal_sha256,reference_instrumental_sha256:$reference_instrumental_sha256,mixture_sha256:$mixture_sha256}' \
+            > test-results/b09-ground-truth/mixture-manifest.json
+
+      - name: Persist controlled mixture through user-owned runtime path
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET_ID="$(python -c 'import uuid; print(uuid.uuid4())')"
+          OBJECT_PATH="$PV_USER_ID/$B09_PROJECT_ID/benchmarks/b09-ground-truth/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-controlled-mixture.wav"
+          curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/storage/v1/object/audio-private/$OBJECT_PATH" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: audio/wav' \
+            -H 'x-upsert: false' \
+            --data-binary @/tmp/pv-b09-gt/controlled-mixture.wav >/dev/null
+
+          BODY="$(jq -nc \
+            --arg id "$ASSET_ID" --arg project "$B09_PROJECT_ID" --arg user "$PV_USER_ID" \
+            --arg path "$OBJECT_PATH" --arg sha "$B09_MIX_SHA" --argjson size "$B09_MIX_SIZE" \
+            --arg clean "$CLEAN_VOCAL_SHA256" --arg refv "$B09_REF_VOCAL_SHA" --arg refi "$B09_REF_INST_SHA" \
+            '{id:$id,project_id:$project,user_id:$user,kind:"source",storage_bucket:"audio-private",storage_path:$path,original_name:"b09-ground-truth-controlled-mixture.wav",mime_type:"audio/wav",size_bytes:$size,duration_seconds:60,sample_rate:48000,channels:1,bit_depth:16,sha256:$sha,metadata:{benchmark:"B09",protocol:"prospective_controlled_ground_truth_v1",controlled_mixture:true,clean_vocal_source_sha256:$clean,reference_vocal_sha256:$refv,reference_instrumental_sha256:$refi,thresholds_frozen_before_execution:true}}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/rest/v1/audio_assets" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            -H 'Prefer: return=representation' \
+            --data "$BODY")"
+          test "$(printf '%s' "$RESPONSE" | jq -er '.[0].id')" = "$ASSET_ID"
+          test "$(printf '%s' "$RESPONSE" | jq -er '.[0].sha256')" = "$B09_MIX_SHA"
+          printf 'B09_CONTROLLED_ASSET_ID=%s\n' "$ASSET_ID" >> "$GITHUB_ENV"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/b09-ground-truth/source-asset.json
+
+      - name: Dispatch real standalone stems against controlled mixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/compute-kaggle-v54" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "{\"project_id\":\"$B09_PROJECT_ID\",\"source_asset_id\":\"$B09_CONTROLLED_ASSET_ID\"}")"
+          JOB_ID="$(printf '%s' "$RESPONSE" | jq -er '.job_id')"
+          test -n "$JOB_ID"
+          printf 'B09_GT_JOB_ID=%s\n' "$JOB_ID" >> "$GITHUB_ENV"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/b09-ground-truth/dispatch.json
+
+      - name: Wait for physical provider output
+        shell: bash
+        run: |
+          set -euo pipefail
+          terminal=''
+          for attempt in $(seq 1 120); do
+            ROWS="$(curl --fail-with-body --silent --show-error \
+              "$SUPABASE_URL/rest/v1/render_jobs?id=eq.$B09_GT_JOB_ID&select=id,project_id,user_id,job_type,provider,status,progress,input_asset_ids,output_asset_ids,proof,error_code,error_message,current_stage,created_at,started_at,finished_at,updated_at" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+            ROW="$(printf '%s' "$ROWS" | jq -c '.[0] // empty')"; test -n "$ROW"
+            STATUS="$(printf '%s' "$ROW" | jq -r '.status')"
+            echo "attempt=$attempt status=$STATUS progress=$(printf '%s' "$ROW" | jq -r '.progress // 0')"
+            case "$STATUS" in
+              completed) terminal=completed; printf '%s\n' "$ROW" > test-results/b09-ground-truth/job-evidence.json; break ;;
+              error|failed|cancelled) printf '%s\n' "$ROW" > test-results/b09-ground-truth/job-evidence.json; exit 1 ;;
+            esac
+            sleep 20
+          done
+          test "$terminal" = completed
+
+      - name: Resolve exact estimated stems and measure prospective gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          JOB="$(cat test-results/b09-ground-truth/job-evidence.json)"
+          printf '%s' "$JOB" | jq -e --arg source "$B09_CONTROLLED_ASSET_ID" '
+            .job_type == "stems" and .status == "completed" and .proof.verified == true and
+            (.input_asset_ids | index($source) != null) and (.output_asset_ids | length == 2)
+          ' >/dev/null
+          ID1="$(printf '%s' "$JOB" | jq -er '.output_asset_ids[0]')"
+          ID2="$(printf '%s' "$JOB" | jq -er '.output_asset_ids[1]')"
+          ASSETS="$(curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/rest/v1/audio_assets?id=in.($ID1,$ID2)&select=id,kind,storage_bucket,storage_path,size_bytes,duration_seconds,sample_rate,channels,sha256" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+          printf '%s\n' "$ASSETS" | jq '.' > test-results/b09-ground-truth/output-assets.json
+          VOCAL_ID="$(printf '%s' "$ASSETS" | jq -er '.[] | select(.kind == "guide_vocal") | .id')"
+          INST_ID="$(printf '%s' "$ASSETS" | jq -er '.[] | select(.kind == "instrumental") | .id')"
+          VOCAL_SHA="$(printf '%s' "$ASSETS" | jq -er --arg id "$VOCAL_ID" '.[] | select(.id == $id) | .sha256')"
+          INST_SHA="$(printf '%s' "$ASSETS" | jq -er --arg id "$INST_ID" '.[] | select(.id == $id) | .sha256')"
+          download_asset() {
+            local id="$1" out="$2"
+            local row bucket path
+            row="$(printf '%s' "$ASSETS" | jq -c --arg id "$id" '.[] | select(.id == $id)')"
+            bucket="$(printf '%s' "$row" | jq -er '.storage_bucket')"
+            path="$(printf '%s' "$row" | jq -er '.storage_path | @uri')"
+            curl --fail-with-body --silent --show-error -L \
+              "$SUPABASE_URL/storage/v1/object/authenticated/$bucket/$path" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -o "$out"
+          }
+          download_asset "$VOCAL_ID" /tmp/pv-b09-gt/estimated-vocal.wav
+          download_asset "$INST_ID" /tmp/pv-b09-gt/estimated-instrumental.wav
+          test "$(sha256sum /tmp/pv-b09-gt/estimated-vocal.wav | awk '{print $1}')" = "$VOCAL_SHA"
+          test "$(sha256sum /tmp/pv-b09-gt/estimated-instrumental.wav | awk '{print $1}')" = "$INST_SHA"
+
+          python benchmarks/validate_b09_ground_truth.py \
+            --source /tmp/pv-b09-gt/controlled-mixture.wav \
+            --reference-vocal /tmp/pv-b09-gt/reference-vocal.wav \
+            --reference-instrumental /tmp/pv-b09-gt/reference-instrumental.wav \
+            --estimated-vocal /tmp/pv-b09-gt/estimated-vocal.wav \
+            --estimated-instrumental /tmp/pv-b09-gt/estimated-instrumental.wav \
+            --source-sha256 "$B09_MIX_SHA" \
+            --reference-vocal-sha256 "$B09_REF_VOCAL_SHA" \
+            --reference-instrumental-sha256 "$B09_REF_INST_SHA" \
+            --estimated-vocal-sha256 "$VOCAL_SHA" \
+            --estimated-instrumental-sha256 "$INST_SHA" \
+            --job-evidence test-results/b09-ground-truth/job-evidence.json \
+            --mixture-manifest test-results/b09-ground-truth/mixture-manifest.json \
+            --output test-results/b09-ground-truth/measurement.json
+          jq -e '.protocol == "prospective_controlled_ground_truth_v1" and .passed == true and .promotion_state == "pass"' \
+            test-results/b09-ground-truth/measurement.json >/dev/null
+          jq '.' test-results/b09-ground-truth/measurement.json
+
+      - name: Retain prospective B09 ground-truth evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b09-ground-truth-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/b09-ground-truth
+          if-no-files-found: error
+          retention-days: 30
