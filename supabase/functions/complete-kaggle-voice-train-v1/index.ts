@@ -51,6 +51,7 @@ Deno.serve(async (req: Request) => {
       return out({ ok: true })
     }
     if (action === 'error') {
+      if (job.status === 'completed') return out({ ok: true, already_completed: true, proof: job.proof })
       const message = String(body.message || 'Falha no treino do modelo vocal candidato').slice(0, 1400)
       await admin.from('render_jobs').update({ status: 'error', progress: 0, current_stage: 'error', human_message: 'Falha no treino do modelo vocal candidato', error_code: 'voice_model_training_failed', error_message: message, technical_error: message, heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString() }).eq('id', jobId)
       return out({ ok: true, job_id: jobId, status: 'error' })
@@ -126,7 +127,7 @@ Deno.serve(async (req: Request) => {
     }
     const { error: me } = await admin.from('voice_models').upsert({
       id: candidateModelId, user_id: job.user_id, name: String(parameters.candidate_model_name || 'PabloVoice Candidate'), engine: 'rvc',
-      pth_storage_path: String(parts[0].path), index_storage_path: expectedIndexPath, pth_sha256: pthSha, index_sha256: indexSha,
+      pth_storage_path: null, index_storage_path: expectedIndexPath, pth_sha256: pthSha, index_sha256: indexSha,
       status: 'ready', is_active: false, metadata,
     }, { onConflict: 'id' })
     if (me) throw me
@@ -137,8 +138,9 @@ Deno.serve(async (req: Request) => {
       const referenceId = String(expectedValidation.reference_id || '')
       const referenceAssetId = String(expectedValidation.reference_asset_id || '')
       const referenceSha = String(expectedValidation.reference_sha256 || '').toLowerCase()
-      if (!uuid(referenceId) || !uuid(referenceAssetId) || !shaOk(referenceSha)) return out({ ok: false, error: 'identity_reference_binding_missing' }, 409)
-      const { data: sourceRef, error: sre } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label').eq('id', referenceId).eq('user_id', job.user_id).eq('is_active', true).maybeSingle()
+      const sourceVoiceModelId = String(expectedValidation.source_voice_model_id || '')
+      if (!uuid(referenceId) || !uuid(referenceAssetId) || !uuid(sourceVoiceModelId) || !shaOk(referenceSha)) return out({ ok: false, error: 'identity_reference_binding_missing' }, 409)
+      const { data: sourceRef, error: sre } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label,voice_model_id').eq('id', referenceId).eq('user_id', job.user_id).eq('voice_model_id', sourceVoiceModelId).eq('is_active', true).maybeSingle()
       if (sre) throw sre
       if (!sourceRef || String(sourceRef.asset_id) !== referenceAssetId || String(sourceRef.source_sha256).toLowerCase() !== referenceSha) return out({ ok: false, error: 'identity_reference_binding_mismatch' }, 409)
       const { data: insertedRef, error: rie } = await admin.from('voice_identity_references').insert({
