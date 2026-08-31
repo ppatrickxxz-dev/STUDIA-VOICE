@@ -53,7 +53,14 @@ Deno.serve(async (req: Request) => {
     if (action === 'error') {
       if (job.status === 'completed') return out({ ok: true, already_completed: true, proof: job.proof })
       const message = String(body.message || 'Falha no treino do modelo vocal candidato').slice(0, 1400)
-      await admin.from('render_jobs').update({ status: 'error', progress: 0, current_stage: 'error', human_message: 'Falha no treino do modelo vocal candidato', error_code: 'voice_model_training_failed', error_message: message, technical_error: message, heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString() }).eq('id', jobId)
+      const { data: erroredJob, error: eue } = await admin.from('render_jobs').update({ status: 'error', progress: 0, current_stage: 'error', human_message: 'Falha no treino do modelo vocal candidato', error_code: 'voice_model_training_failed', error_message: message, technical_error: message, heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString() }).eq('id', jobId).neq('status', 'completed').select('id,status,proof').maybeSingle()
+      if (eue) throw eue
+      if (!erroredJob) {
+        const { data: currentJob, error: cje } = await admin.from('render_jobs').select('status,proof').eq('id', jobId).maybeSingle()
+        if (cje) throw cje
+        if (currentJob?.status === 'completed') return out({ ok: true, already_completed: true, proof: currentJob.proof })
+        return out({ ok: false, error: 'job_state_changed' }, 409)
+      }
       return out({ ok: true, job_id: jobId, status: 'error' })
     }
     if (action !== 'complete') return out({ ok: false, error: 'unsupported_action' }, 400)
