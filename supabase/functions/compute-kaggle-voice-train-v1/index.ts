@@ -23,6 +23,12 @@ async function sha256(value: string) {
   return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('')
 }
 function b64(value: string) { return btoa(unescape(encodeURIComponent(value))) }
+function sameIds(left: unknown, right: unknown) {
+  const normalize = (value: unknown) => Array.isArray(value)
+    ? value.map((item: any) => String(item?.id ?? item)).filter(Boolean).sort()
+    : []
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right))
+}
 async function kaggleRpc(secret: string, method: string, payload: unknown) {
   const response = await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`, {
     method: 'POST',
@@ -76,11 +82,27 @@ Deno.serve(async (req: Request) => {
       return out({ ok: true, active_job: await active(), latest_job: jobs?.[0] || null, models: models || [] })
     }
     if (action !== 'dispatch') return out({ ok: false, error: 'unsupported_action' }, 400)
-    const existing = await active()
-    if (existing) return out({ ok: true, deduplicated: true, job_id: existing.id, status: existing.status })
 
     const sourceIds = Array.isArray(body.source_asset_ids) ? [...new Set(body.source_asset_ids.map(String))] : []
     if (sourceIds.length < 2 || sourceIds.length > 4 || sourceIds.some((id: string) => !uuid(id))) return out({ ok: false, error: 'two_to_four_source_assets_required' }, 400)
+    const guideId = String(body.validation_guide_asset_id || '')
+    if (!uuid(guideId) || sourceIds.includes(guideId)) return out({ ok: false, error: 'separate_validation_guide_required' }, 400)
+    const regionStart = Number(body.validation_region_start_seconds ?? 64)
+    const regionEnd = Number(body.validation_region_end_seconds ?? 72)
+    if (!Number.isFinite(regionStart) || !Number.isFinite(regionEnd) || regionStart < 0 || regionEnd <= regionStart || regionEnd - regionStart < 4 || regionEnd - regionStart > 20) return out({ ok: false, error: 'invalid_validation_region' }, 400)
+
+    const existing = await active()
+    if (existing) {
+      const existingValidation = existing.parameters?.validation || {}
+      const identicalBinding = String(existing.project_id || '') === projectId
+        && sameIds(existing.parameters?.source_assets, sourceIds)
+        && String(existingValidation.guide_asset_id || '') === guideId
+        && Number(existingValidation.region?.start_seconds) === regionStart
+        && Number(existingValidation.region?.end_seconds) === regionEnd
+      if (identicalBinding) return out({ ok: true, deduplicated: true, job_id: existing.id, status: existing.status })
+      return out({ ok: false, error: 'voice_training_conflict', active_job_id: existing.id, active_project_id: existing.project_id }, 409)
+    }
+
     const { data: sources, error: se } = await admin.from('audio_assets').select('*').in('id', sourceIds).eq('user_id', user.id)
     if (se) throw se
     if ((sources || []).length !== sourceIds.length) return out({ ok: false, error: 'source_asset_missing_or_not_owned' }, 409)
@@ -93,18 +115,18 @@ Deno.serve(async (req: Request) => {
     const uniqueHashes = new Set(ordered.map((a: any) => String(a.sha256).toLowerCase()))
     if (uniqueHashes.size !== ordered.length) return out({ ok: false, error: 'duplicate_training_source_rejected' }, 409)
 
-    const guideId = String(body.validation_guide_asset_id || '')
-    if (!uuid(guideId) || sourceIds.includes(guideId)) return out({ ok: false, error: 'separate_validation_guide_required' }, 400)
     const { data: guide } = await admin.from('audio_assets').select('*').eq('id', guideId).eq('user_id', user.id).eq('project_id', projectId).eq('kind', 'guide_vocal').maybeSingle()
     if (!guide || !shaOk(guide.sha256)) return out({ ok: false, error: 'validation_guide_missing_or_unverified' }, 409)
-    const regionStart = Number(body.validation_region_start_seconds ?? 64)
-    const regionEnd = Number(body.validation_region_end_seconds ?? 72)
-    if (!Number.isFinite(regionStart) || !Number.isFinite(regionEnd) || regionStart < 0 || regionEnd <= regionStart || regionEnd - regionStart < 4 || regionEnd - regionStart > 20) return out({ ok: false, error: 'invalid_validation_region' }, 400)
 
-    const { data: refs, error: re } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label,voice_model_id').eq('user_id', user.id).eq('is_active', true).order('updated_at', { ascending: false }).limit(1)
+    const { data: activeModels, error: ame } = await admin.from('voice_models').select('id').eq('user_id', user.id).eq('is_active', true).eq('status', 'ready').order('updated_at', { ascending: false }).limit(2)
+    if (ame) throw ame
+    if ((activeModels || []).length !== 1 || !uuid(activeModels?.[0]?.id)) return out({ ok: false, error: 'single_active_voice_model_required' }, 409)
+    const activeModel = activeModels![0]
+    const { data: refs, error: re } = await admin.from('voice_identity_references').select('id,asset_id,source_sha256,label,voice_model_id').eq('user_id', user.id).eq('voice_model_id', activeModel.id).eq('is_active', true).order('updated_at', { ascending: false }).limit(2)
     if (re) throw re
-    const reference = refs?.[0]
-    if (!reference || !uuid(reference.id) || !uuid(reference.asset_id) || !shaOk(reference.source_sha256)) return out({ ok: false, error: 'active_identity_reference_required' }, 409)
+    if ((refs || []).length !== 1) return out({ ok: false, error: 'single_active_identity_reference_required' }, 409)
+    const reference = refs![0]
+    if (!uuid(reference.id) || !uuid(reference.asset_id) || !shaOk(reference.source_sha256)) return out({ ok: false, error: 'active_identity_reference_required' }, 409)
     const { data: referenceAsset } = await admin.from('audio_assets').select('id,sha256').eq('id', reference.asset_id).eq('user_id', user.id).maybeSingle()
     if (!referenceAsset || String(referenceAsset.sha256 || '').toLowerCase() !== String(reference.source_sha256).toLowerCase()) return out({ ok: false, error: 'identity_reference_asset_mismatch' }, 409)
 
@@ -166,6 +188,7 @@ Deno.serve(async (req: Request) => {
       region: { start_seconds: regionStart, end_seconds: regionEnd, duration_seconds: regionEnd - regionStart },
       output_asset_id: validationAssetId,
       output_path: validationPath,
+      source_voice_model_id: activeModel.id,
       reference_id: reference.id,
       reference_asset_id: reference.asset_id,
       reference_sha256: String(reference.source_sha256).toLowerCase(),
