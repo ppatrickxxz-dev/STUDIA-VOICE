@@ -1,0 +1,193 @@
+name: PabloVoice candidate voice train
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/voice-model-candidate-train.yml'
+      - 'supabase/functions/compute-kaggle-voice-train-v1/**'
+      - 'supabase/functions/kaggle-voice-train-worker-v1/**'
+      - 'supabase/functions/complete-kaggle-voice-train-v1/**'
+      - 'supabase/functions/promote-voice-candidate-v1/**'
+      - 'supabase/migrations/20260830145500_promote_verified_voice_model_candidate.sql'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: pablovoice-candidate-voice-train
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  TRAIN_SHA_1: 071274b45b51f40bb3a23fdda839bcf95cb9641edf060b69d343b43324430969
+  TRAIN_SHA_2: 6530feb9940d2aa8939d505a98e9d5b129bef9c80ede2726db709b5fac2940c6
+  VALIDATION_GUIDE_SHA: ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816
+  IDENTITY_THRESHOLD: '0.8'
+  # Supabase project is at its Edge Function count cap. These two legacy UI
+  # slots are intentionally recycled for the candidate-training runtime.
+  TRAIN_DISPATCH_FUNCTION: app-v56
+  TRAIN_PROMOTER_FUNCTION: app-v61
+
+jobs:
+  train-and-verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire legitimate PabloVoice session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          SESSION_RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          USER_TOKEN="$(printf '%s' "$SESSION_RESPONSE" | jq -er '.session.access_token')"
+          echo "::add-mask::$USER_TOKEN"
+          printf 'PV_USER_TOKEN=%s\n' "$USER_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Resolve exact private training and validation assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/voice-model-candidate-train
+          AUTH=(-H "Authorization: Bearer $PV_USER_TOKEN" -H "apikey: $SUPABASE_PUBLISHABLE_KEY")
+          resolve_one() {
+            local sha="$1" kind="$2"
+            curl --fail-with-body --silent --show-error "${AUTH[@]}" \
+              "$SUPABASE_URL/rest/v1/audio_assets?select=id,project_id,sha256,kind&sha256=eq.$sha" \
+              | jq -cer --arg sha "$sha" --arg kind "$kind" 'if length == 1 and (.[0].sha256|ascii_downcase) == $sha and .[0].kind == $kind then .[0] else error("exact_asset_resolution_failed") end'
+          }
+          A1="$(resolve_one "$TRAIN_SHA_1" take)"
+          A2="$(resolve_one "$TRAIN_SHA_2" source)"
+          GUIDE="$(resolve_one "$VALIDATION_GUIDE_SHA" guide_vocal)"
+          ID1="$(printf '%s' "$A1" | jq -er '.id')"
+          ID2="$(printf '%s' "$A2" | jq -er '.id')"
+          GUIDE_ID="$(printf '%s' "$GUIDE" | jq -er '.id')"
+          PROJECT_ID="$(printf '%s' "$GUIDE" | jq -er '.project_id')"
+          test "$ID1" != "$ID2"
+          test "$ID1" != "$GUIDE_ID"
+          test "$ID2" != "$GUIDE_ID"
+          jq -n --argjson source1 "$A1" --argjson source2 "$A2" --argjson guide "$GUIDE" '{source1:$source1,source2:$source2,guide:$guide}' \
+            > test-results/voice-model-candidate-train/resolved-assets.json
+          printf 'PV_SOURCE_1=%s\nPV_SOURCE_2=%s\nPV_GUIDE_ID=%s\nPV_PROJECT_ID=%s\n' "$ID1" "$ID2" "$GUIDE_ID" "$PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Dispatch private Kaggle T4 candidate training
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY="$(jq -nc \
+            --arg project_id "$PV_PROJECT_ID" \
+            --arg source1 "$PV_SOURCE_1" \
+            --arg source2 "$PV_SOURCE_2" \
+            --arg guide "$PV_GUIDE_ID" \
+            '{action:"dispatch",project_id:$project_id,source_asset_ids:[$source1,$source2],validation_guide_asset_id:$guide,validation_region_start_seconds:64,validation_region_end_seconds:72}')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/$TRAIN_DISPATCH_FUNCTION" \
+            -H "Authorization: Bearer $PV_USER_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/voice-model-candidate-train/dispatch.json
+          printf '%s' "$RESPONSE" | jq -e '.ok == true and (.status == "waiting_gpu" or .deduplicated == true) and (.job_id|type == "string")' >/dev/null
+          printf 'PV_TRAINING_JOB_ID=%s\n' "$(printf '%s' "$RESPONSE" | jq -er '.job_id')" >> "$GITHUB_ENV"
+
+      - name: Wait for physical training completion
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > test-results/voice-model-candidate-train/training-status.jsonl
+          fresh_oidc() {
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing" | jq -er '.value'
+          }
+          completed=false
+          for attempt in $(seq 1 300); do
+            TOKEN="$(fresh_oidc)"; echo "::add-mask::$TOKEN"
+            RESPONSE="$(curl --fail-with-body --silent --show-error \
+              -X POST "$SUPABASE_URL/functions/v1/$TRAIN_PROMOTER_FUNCTION" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              -H 'content-type: application/json' \
+              --data "{\"action\":\"status\",\"training_job_id\":\"$PV_TRAINING_JOB_ID\"}")"
+            printf '%s\n' "$RESPONSE" | jq -c '.' >> test-results/voice-model-candidate-train/training-status.jsonl
+            STATE="$(printf '%s' "$RESPONSE" | jq -er '.training.status')"
+            if [ "$STATE" = completed ]; then completed=true; printf '%s\n' "$RESPONSE" | jq '.' > test-results/voice-model-candidate-train/training-completed.json; break; fi
+            if [ "$STATE" = error ]; then printf '%s\n' "$RESPONSE" | jq '.' > test-results/voice-model-candidate-train/training-error.json; exit 1; fi
+            sleep 30
+          done
+          test "$completed" = true
+
+      - name: Wait for trusted ECAPA attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > test-results/voice-model-candidate-train/identity-status.jsonl
+          fresh_oidc() {
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing" | jq -er '.value'
+          }
+          verified=false
+          for attempt in $(seq 1 120); do
+            TOKEN="$(fresh_oidc)"; echo "::add-mask::$TOKEN"
+            RESPONSE="$(curl --fail-with-body --silent --show-error \
+              -X POST "$SUPABASE_URL/functions/v1/$TRAIN_PROMOTER_FUNCTION" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              -H 'content-type: application/json' \
+              --data "{\"action\":\"status\",\"training_job_id\":\"$PV_TRAINING_JOB_ID\"}")"
+            printf '%s\n' "$RESPONSE" | jq -c '.' >> test-results/voice-model-candidate-train/identity-status.jsonl
+            STATE="$(printf '%s' "$RESPONSE" | jq -r '.attestation.status // "pending"')"
+            if [ "$STATE" = completed ]; then
+              printf '%s\n' "$RESPONSE" | jq '.' > test-results/voice-model-candidate-train/identity-completed.json
+              printf '%s' "$RESPONSE" | jq -e --argjson threshold "$IDENTITY_THRESHOLD" '.attestation.proof.verified == true and .attestation.proof.authority == "github_repository_oidc" and .attestation.proof.passed == true and .attestation.proof.threshold == $threshold and .attestation.proof.score >= $threshold' >/dev/null
+              verified=true
+              break
+            fi
+            if [ "$STATE" = error ]; then printf '%s\n' "$RESPONSE" | jq '.' > test-results/voice-model-candidate-train/identity-error.json; exit 1; fi
+            sleep 30
+          done
+          test "$verified" = true
+
+      - name: Promote only the verified candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          echo "::add-mask::$OIDC_TOKEN"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/$TRAIN_PROMOTER_FUNCTION" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "{\"action\":\"promote\",\"training_job_id\":\"$PV_TRAINING_JOB_ID\"}")"
+          printf '%s\n' "$RESPONSE" | jq '.' > test-results/voice-model-candidate-train/promotion.json
+          printf '%s' "$RESPONSE" | jq -e --argjson threshold "$IDENTITY_THRESHOLD" '.ok == true and .promotion.is_active == true and .promotion.threshold == $threshold and .promotion.score >= $threshold' >/dev/null
+
+      - name: Retain candidate training evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-model-candidate-train-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/voice-model-candidate-train
+          if-no-files-found: error
+          retention-days: 30
