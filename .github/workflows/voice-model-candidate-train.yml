@@ -27,6 +27,10 @@ env:
   TRAIN_SHA_2: 6530feb9940d2aa8939d505a98e9d5b129bef9c80ede2726db709b5fac2940c6
   VALIDATION_GUIDE_SHA: ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816
   IDENTITY_THRESHOLD: '0.8'
+  # Supabase project is at its Edge Function count cap. These two legacy UI
+  # slots are intentionally recycled for the candidate-training runtime.
+  TRAIN_DISPATCH_FUNCTION: app-v56
+  TRAIN_PROMOTER_FUNCTION: app-v61
 
 jobs:
   train-and-verify:
@@ -93,7 +97,7 @@ jobs:
             --arg guide "$PV_GUIDE_ID" \
             '{action:"dispatch",project_id:$project_id,source_asset_ids:[$source1,$source2],validation_guide_asset_id:$guide,validation_region_start_seconds:64,validation_region_end_seconds:72}')"
           RESPONSE="$(curl --fail-with-body --silent --show-error \
-            -X POST "$SUPABASE_URL/functions/v1/compute-kaggle-voice-train-v1" \
+            -X POST "$SUPABASE_URL/functions/v1/$TRAIN_DISPATCH_FUNCTION" \
             -H "Authorization: Bearer $PV_USER_TOKEN" \
             -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
             -H 'content-type: application/json' \
@@ -116,7 +120,7 @@ jobs:
           for attempt in $(seq 1 300); do
             TOKEN="$(fresh_oidc)"; echo "::add-mask::$TOKEN"
             RESPONSE="$(curl --fail-with-body --silent --show-error \
-              -X POST "$SUPABASE_URL/functions/v1/promote-voice-candidate-v1" \
+              -X POST "$SUPABASE_URL/functions/v1/$TRAIN_PROMOTER_FUNCTION" \
               -H "Authorization: Bearer $TOKEN" \
               -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
               -H 'content-type: application/json' \
@@ -143,7 +147,7 @@ jobs:
           for attempt in $(seq 1 120); do
             TOKEN="$(fresh_oidc)"; echo "::add-mask::$TOKEN"
             RESPONSE="$(curl --fail-with-body --silent --show-error \
-              -X POST "$SUPABASE_URL/functions/v1/promote-voice-candidate-v1" \
+              -X POST "$SUPABASE_URL/functions/v1/$TRAIN_PROMOTER_FUNCTION" \
               -H "Authorization: Bearer $TOKEN" \
               -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
               -H 'content-type: application/json' \
@@ -171,7 +175,7 @@ jobs:
           OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
           echo "::add-mask::$OIDC_TOKEN"
           RESPONSE="$(curl --fail-with-body --silent --show-error \
-            -X POST "$SUPABASE_URL/functions/v1/promote-voice-candidate-v1" \
+            -X POST "$SUPABASE_URL/functions/v1/$TRAIN_PROMOTER_FUNCTION" \
             -H "Authorization: Bearer $OIDC_TOKEN" \
             -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
             -H 'content-type: application/json' \
