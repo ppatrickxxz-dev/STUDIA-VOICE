@@ -67,6 +67,12 @@ begin
 
   v_score := (v_attestation.proof->>'score')::numeric;
   v_threshold := (v_attestation.proof->>'threshold')::numeric;
+  if v_score is null
+     or v_threshold is null
+     or v_score::text in ('NaN', 'Infinity', '-Infinity')
+     or v_threshold::text in ('NaN', 'Infinity', '-Infinity') then
+    raise exception 'identity_evidence_invalid';
+  end if;
   if v_threshold <> 0.8 or v_score < v_threshold then
     raise exception 'identity_gate_not_passed';
   end if;
