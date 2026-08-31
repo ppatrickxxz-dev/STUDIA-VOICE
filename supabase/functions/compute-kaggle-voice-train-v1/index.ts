@@ -117,6 +117,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: guide } = await admin.from('audio_assets').select('*').eq('id', guideId).eq('user_id', user.id).eq('project_id', projectId).eq('kind', 'guide_vocal').maybeSingle()
     if (!guide || !shaOk(guide.sha256)) return out({ ok: false, error: 'validation_guide_missing_or_unverified' }, 409)
+    if (uniqueHashes.has(String(guide.sha256).toLowerCase())) return out({ ok: false, error: 'validation_guide_duplicates_training_source' }, 409)
 
     const { data: activeModels, error: ame } = await admin.from('voice_models').select('id').eq('user_id', user.id).eq('is_active', true).eq('status', 'ready').order('updated_at', { ascending: false }).limit(2)
     if (ame) throw ame
