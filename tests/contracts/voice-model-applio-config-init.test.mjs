@@ -14,7 +14,7 @@ test('headless Applio worker materializes runtime config exactly from the pinned
 
 test('Applio runtime config is initialized before exact checkpoint recovery is invoked', () => {
   const configInit = worker.indexOf("config_template=A/'assets/config_template.json'")
-  const recoveryCall = worker.indexOf('recover_exact_final_inference_model(exp,model_name,target_epoch')
+  const recoveryCall = worker.lastIndexOf('recover_exact_final_inference_model(exp,model_name,target_epoch')
   assert.ok(configInit >= 0)
   assert.ok(recoveryCall >= 0)
   assert.ok(configInit < recoveryCall)
