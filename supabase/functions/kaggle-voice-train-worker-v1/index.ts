@@ -248,10 +248,24 @@ try:
             target=T['outputs']['parts'][order]
             upload_signed(T['outputs']['bucket'],target['path'],target['token'],part)
             parts.append({'order':order,'path':target['path'],'sha256':sha(part),'size_bytes':part.stat().st_size})
-    upload_signed(T['outputs']['bucket'],T['outputs']['index']['path'],T['outputs']['index']['token'],idx)
-    post('progress','uploading',94,'Artefatos do modelo candidato persistidos')
+    index_parts=[]
+    index_path=None
+    index_targets=T['outputs'].get('index_parts') or []
+    if index_targets:
+        index_count=(idx.stat().st_size+part_size-1)//part_size
+        if index_count<1 or index_count>len(index_targets): raise RuntimeError('trained index exceeds reserved multipart capacity')
+        with open(idx,'rb') as src:
+            for order in range(index_count):
+                data=src.read(part_size);part=work/f'PabloVoice.index.part{order:03d}';part.write_bytes(data)
+                target=index_targets[order]
+                upload_signed(T['outputs']['bucket'],target['path'],target['token'],part)
+                index_parts.append({'order':order,'path':target['path'],'sha256':sha(part),'size_bytes':part.stat().st_size})
+    else:
+        upload_signed(T['outputs']['bucket'],T['outputs']['index']['path'],T['outputs']['index']['token'],idx)
+        index_path=T['outputs']['index']['path']
+    post('progress','uploading',94,f'Artefatos persistidos; index_bytes={idx.stat().st_size}; index_parts={len(index_parts)}')
 
-    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init-tus6m-signed-route','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
+    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_parts':index_parts,'index_path':index_path,'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init-tus6m-signed-route-index-multipart','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
     r=requests.post(T['complete_url'],headers={'content-type':'application/json','apikey':T['supabase_publishable_key']},json=payload,timeout=180)
     print('complete',r.status_code,r.text[:1600]);r.raise_for_status()
     print('PabloVoice candidate training V1 complete')

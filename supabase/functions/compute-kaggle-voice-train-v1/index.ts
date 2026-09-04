@@ -160,6 +160,13 @@ Deno.serve(async (req: Request) => {
     const indexPath = `${storageBase}/PabloVoice.index`
     const { data: indexUpload, error: ie } = await admin.storage.from('voice-models-private').createSignedUploadUrl(indexPath)
     if (ie || !indexUpload?.token) throw ie || new Error('signed_index_upload_failed')
+    const indexPartUploads: any[] = []
+    for (let order = 0; order < 8; order++) {
+      const path = `${storageBase}/index-parts/PabloVoice.index.part${String(order).padStart(3, '0')}`
+      const { data, error } = await admin.storage.from('voice-models-private').createSignedUploadUrl(path)
+      if (error || !data?.token) throw error || new Error('signed_index_part_upload_failed')
+      indexPartUploads.push({ order, path, token: data.token })
+    }
     const validationPath = `${user.id}/${projectId}/renders/${jobId}-candidate-identity-validation.flac`
     const { data: validationUpload, error: ve } = await admin.storage.from('audio-private').createSignedUploadUrl(validationPath)
     if (ve || !validationUpload?.token) throw ve || new Error('signed_validation_upload_failed')
@@ -245,7 +252,7 @@ Deno.serve(async (req: Request) => {
         region: validation.region,
         output: { asset_id: validationAssetId, bucket: 'audio-private', path: validationPath, token: validationUpload.token },
       },
-      outputs: { bucket: 'voice-models-private', parts: partUploads, index: { path: indexPath, token: indexUpload.token } },
+      outputs: { bucket: 'voice-models-private', parts: partUploads, index: { path: indexPath, token: indexUpload.token }, index_parts: indexPartUploads },
       supabase_url: url,
       supabase_publishable_key: pub,
       complete_url: `${url}/functions/v1/complete-kaggle-voice-train-v1`,
