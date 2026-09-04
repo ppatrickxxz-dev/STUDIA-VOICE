@@ -8,6 +8,7 @@ const worker = read('supabase/functions/kaggle-voice-train-worker-v1/index.ts')
 const callback = read('supabase/functions/complete-kaggle-voice-train-v1/index.ts')
 const promoter = read('supabase/functions/promote-voice-candidate-v1/index.ts')
 const migration = read('supabase/migrations/20260830145500_promote_verified_voice_model_candidate.sql')
+const workflow = read('.github/workflows/voice-model-candidate-train.yml')
 
 const APPLIO = '085197e738ce9dd4c0bae1e0a74df5de25b89444'
 const ECAPA_REVISION = 'b8937e0343bf9fc9741ab12b445b86a93a6e3e25'
@@ -27,6 +28,19 @@ test('candidate training is pinned to the canonical Applio recipe and private Ka
   assert.match(worker, /run_extract_script/)
   assert.match(worker, /run_train_script/)
   assert.match(worker, /run_infer_script/)
+})
+
+test('physical training is budgeted, progress is monotonic and only the actual final epoch can complete', () => {
+  assert.match(worker, /RUNTIME_EPOCH_BUDGET=20/)
+  assert.match(worker, /target_epoch=min\(requested_epoch,RUNTIME_EPOCH_BUDGET\)/)
+  assert.match(worker, /'epochs_requested':requested_epoch/)
+  assert.match(worker, /'epochs_completed':target_epoch/)
+  assert.match(worker, /_progress_state=/)
+  assert.match(worker, /remember=False/)
+  assert.doesNotMatch(worker, /post\('progress','heartbeat',12/)
+  assert.match(worker, /exp\.glob\(f'\{model_name\}_\{target_epoch\}e_\*s\.pth'\)/)
+  assert.match(worker, /trained inference pth missing for target epoch/)
+  assert.match(workflow, /timeout-minutes: 240/)
 })
 
 test('training sources and validation guide are artifact-bound and distinct', () => {
