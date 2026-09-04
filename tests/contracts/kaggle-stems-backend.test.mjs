@@ -62,6 +62,8 @@ test('canonical Supabase sources preserve callback-hash and proof gates', async 
   assert.match(issuer, /job_type:'stems'/);
   assert.match(completion, /proof_gate_failed/);
   assert.match(completion, /output_object_not_found/);
-  assert.match(completion, /metadata:\{engine:'Demucs',model:'htdemucs'/);
+  assert.match(completion, /const commonMetadata=\{engine:'Demucs',model:'htdemucs'/);
+  assert.match(completion, /pcm_domain:'mono_48000_f32'/);
+  assert.match(completion, /instrumental_method:instrumentalMethod/);
   assert.match(completion, /delete cleaned\.kaggle_callback_hash/);
 });

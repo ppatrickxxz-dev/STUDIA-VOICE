@@ -1,5 +1,5 @@
 const SHA256_RE = /^[a-f0-9]{64}$/i;
-const REQUIRED_INSTRUMENTAL_METHOD = 'mixture_residual_source_minus_vocals_v1';
+const REQUIRED_INSTRUMENTAL_METHOD = 'mixture_residual_pcm48_mono_source_minus_vocals_v2';
 
 export function validateKaggleStemTicket(ticket, nowSeconds = Math.floor(Date.now() / 1000)) {
   if (!ticket || typeof ticket !== 'object') throw new TypeError('Kaggle stem ticket must be an object.');
@@ -35,7 +35,7 @@ export function normalizeKaggleStemCompletion(payload) {
   if (Math.min(vocalBytes, instrumentalBytes) <= 4096) throw new Error('Stem proof gate failed: output is too small.');
   requireText(payload.demucs_version, 'demucs_version');
   if (payload.instrumental_method !== REQUIRED_INSTRUMENTAL_METHOD) {
-    throw new Error('Stem proof gate failed: mixture-consistent instrumental method is required.');
+    throw new Error('Stem proof gate failed: explicit PCM48 mixture-consistent instrumental method is required.');
   }
 
   return Object.freeze({
@@ -45,6 +45,7 @@ export function normalizeKaggleStemCompletion(payload) {
     version: payload.demucs_version,
     mode: '2stem',
     instrumentalMethod: payload.instrumental_method,
+    pcmDomain: payload.pcm_domain || 'mono_48000_f32',
     evidence: {
       sourceSha256: payload.source_sha256.toLowerCase(),
       vocalSha256: payload.vocal_sha256.toLowerCase(),
@@ -84,8 +85,9 @@ export function kaggleDemucsProvider({ issueTicket, awaitCompletion, validated =
           model: proof.model,
           modelVersion: proof.version,
           worker: 'PabloVoice_Kaggle_Pipeline_V2',
-          operation: 'htdemucs vocals + mixture-consistent residual instrumental (source - vocals)',
+          operation: 'htdemucs vocal normalized to mono/48k float + explicit PCM residual source - vocals',
           instrumentalMethod: proof.instrumentalMethod,
+          pcmDomain: proof.pcmDomain,
         },
         proof,
       };
