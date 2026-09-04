@@ -43,8 +43,22 @@ test('physical training is budgeted, progress is monotonic and only the actual f
   assert.match(worker, /remember=False/)
   assert.doesNotMatch(worker, /post\('progress','heartbeat',12/)
   assert.match(worker, /exp\.glob\(f'\{model_name\}_\{target_epoch\}e_\*s\.pth'\)/)
-  assert.match(worker, /trained inference pth missing for target epoch/)
   assert.match(workflow, /timeout-minutes: 240/)
+})
+
+test('missing native inference export may recover only from an exact final generator checkpoint', () => {
+  assert.match(worker, /exp\.glob\('G_\*\.pth'\)/)
+  assert.match(worker, /checkpoint_iteration=int\(checkpoint\.get\('iteration',-1\)\)/)
+  assert.match(worker, /checkpoint_iteration != target_epoch/)
+  assert.match(worker, /generator checkpoint iteration mismatch/)
+  assert.match(worker, /exact final generator checkpoint missing for target epoch/)
+  assert.match(worker, /extract_model\(ckpt=ckpt/)
+  assert.match(worker, /final checkpoint extraction failed/)
+  assert.match(worker, /applio_exact_final_generator_checkpoint_v1/)
+  assert.match(worker, /'checkpoint_iteration':checkpoint_iteration/)
+  assert.match(worker, /'pth_derivation':pth_derivation/)
+  assert.doesNotMatch(worker, /checkpoint_iteration\s*<=\s*target_epoch/)
+  assert.doesNotMatch(worker, /checkpoint_iteration\s*<\s*target_epoch/)
 })
 
 test('training sources and validation guide are artifact-bound and distinct', () => {
