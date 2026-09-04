@@ -4,7 +4,7 @@ from urllib.parse import urljoin,urlparse
 import requests
 
 T=json.loads(base64.b64decode(TICKET_B64).decode('utf-8'))
-RUNTIME_EPOCH_BUDGET=20
+RUNTIME_EPOCH_BUDGET=100
 TUS_CHUNK_SIZE=6*1024*1024
 _progress_lock=threading.Lock()
 _progress_state={'stage':'initializing','progress':5,'message':'Inicializando treino vocal'}
@@ -265,7 +265,7 @@ try:
         index_path=T['outputs']['index']['path']
     post('progress','uploading',94,f'Artefatos persistidos; index_bytes={idx.stat().st_size}; index_parts={len(index_parts)}')
 
-    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_parts':index_parts,'index_path':index_path,'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init-tus6m-signed-route-index-multipart','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
+    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_parts':index_parts,'index_path':index_path,'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget100-exact-checkpoint-recovery-applio-config-init-tus6m-signed-route-index-multipart','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
     r=requests.post(T['complete_url'],headers={'content-type':'application/json','apikey':T['supabase_publishable_key']},json=payload,timeout=180)
     print('complete',r.status_code,r.text[:1600]);r.raise_for_status()
     print('PabloVoice candidate training V1 complete')
