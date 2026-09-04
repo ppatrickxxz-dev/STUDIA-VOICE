@@ -5,7 +5,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
 })
 const isSha = (v) => /^[0-9a-f]{64}$/i.test(String(v || ''))
-const REQUIRED_INSTRUMENTAL_METHOD = 'mixture_residual_source_minus_vocals_v1'
+const REQUIRED_INSTRUMENTAL_METHOD = 'mixture_residual_pcm48_mono_source_minus_vocals_v2'
 async function sha256Text(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
@@ -56,15 +56,16 @@ Deno.serve(async (req) => {
     const { data:claim } = await admin.from('render_jobs').update({status:'finalizing',progress:95}).eq('id',jobId).eq('status','waiting_kaggle').select('id')
     if (!claim?.length) return json({ok:false,error:'job_already_claimed'},409)
     claimed = true
+    const commonMetadata={engine:'Demucs',model:'htdemucs',worker:'kaggle_ticketed',source_asset_id:source.id,demucs_version:demucsVersion,pcm_domain:'mono_48000_f32',instrumental_method:instrumentalMethod}
     const { data:assets, error:assetErr } = await admin.from('audio_assets').insert([
-      {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'guide_vocal',storage_bucket:'audio-private',storage_path:vocalPath,original_name:`guide-vocal-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:vocalSize,sha256:vocalSha,metadata:{engine:'Demucs',model:'htdemucs',worker:'kaggle_ticketed',source_asset_id:source.id,demucs_version:demucsVersion}},
-      {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'instrumental',storage_bucket:'audio-private',storage_path:instrumentalPath,original_name:`instrumental-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:instrumentalSize,sha256:instrumentalSha,metadata:{engine:'Demucs',model:'htdemucs',worker:'kaggle_ticketed',source_asset_id:source.id,demucs_version:demucsVersion,instrumental_method:instrumentalMethod}},
+      {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'guide_vocal',storage_bucket:'audio-private',storage_path:vocalPath,original_name:`guide-vocal-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:vocalSize,sample_rate:48000,channels:1,sha256:vocalSha,metadata:commonMetadata},
+      {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'instrumental',storage_bucket:'audio-private',storage_path:instrumentalPath,original_name:`instrumental-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:instrumentalSize,sample_rate:48000,channels:1,sha256:instrumentalSha,metadata:commonMetadata},
     ]).select('id,kind')
     if (assetErr || !assets?.length) throw new Error(`asset_insert_failed: ${assetErr?.message || 'unknown'}`)
     const vocalId = assets.find(a=>a.kind==='guide_vocal')?.id, instrumentalId = assets.find(a=>a.kind==='instrumental')?.id
     if (!vocalId || !instrumentalId) throw new Error('asset_ids_missing')
     const cleaned={...p}; delete cleaned.kaggle_callback_hash
-    const proof={verified:true,worker:'kaggle_ticketed',engine:'Demucs',model:'htdemucs',source_sha256:sourceSha,vocal_sha256:vocalSha,instrumental_sha256:instrumentalSha,source_asset_id:source.id,vocal_asset_id:vocalId,instrumental_asset_id:instrumentalId,demucs_version:demucsVersion,instrumental_method:instrumentalMethod}
+    const proof={verified:true,worker:'kaggle_ticketed',engine:'Demucs',model:'htdemucs',source_sha256:sourceSha,vocal_sha256:vocalSha,instrumental_sha256:instrumentalSha,source_asset_id:source.id,vocal_asset_id:vocalId,instrumental_asset_id:instrumentalId,demucs_version:demucsVersion,instrumental_method:instrumentalMethod,pcm_domain:'mono_48000_f32'}
     const { error:finishErr } = await admin.from('render_jobs').update({status:'completed',progress:100,engine:'kaggle_ticketed',output_asset_ids:[vocalId,instrumentalId],proof,error_message:null,finished_at:new Date().toISOString(),parameters:cleaned}).eq('id',jobId).eq('status','finalizing')
     if (finishErr) throw new Error(`job_finalize_failed: ${finishErr.message}`)
     return json({ok:true,job_id:jobId,vocal_asset_id:vocalId,instrumental_asset_id:instrumentalId,proof})
