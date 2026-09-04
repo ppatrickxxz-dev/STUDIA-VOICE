@@ -3,6 +3,7 @@ from pathlib import Path
 import requests
 
 T=json.loads(base64.b64decode(TICKET_B64).decode('utf-8'))
+RUNTIME_EPOCH_BUDGET=20
 _progress_lock=threading.Lock()
 _progress_state={'stage':'initializing','progress':5,'message':'Inicializando treino vocal'}
 
@@ -119,7 +120,10 @@ try:
     if len(features)<8: raise RuntimeError('feature extraction produced insufficient features')
     post('progress','features_ready',42,f'{len(features)} embeddings extraídos')
 
-    target_epoch=int(s['total_epoch'])
+    requested_epoch=int(s['total_epoch'])
+    if requested_epoch<1: raise RuntimeError('invalid requested epoch count')
+    target_epoch=min(requested_epoch,RUNTIME_EPOCH_BUDGET)
+    post('progress','training',46,f'Treinando {target_epoch} epochs dentro do orçamento físico do provider')
     result=run_train_script(model_name=model_name,save_every_epoch=int(s['save_every_epoch']),save_only_latest=True,save_every_weights=True,total_epoch=target_epoch,sample_rate=int(s['sample_rate']),batch_size=int(s['batch_size']),gpu=0,pretrained=True,cleanup=False,index_algorithm=s['index_algorithm'],cache_data_in_gpu=False,custom_pretrained=False,g_pretrained_path=None,d_pretrained_path=None,vocoder=s['vocoder'],checkpointing=bool(s['checkpointing']),shutdown_check=False)
     fail_if_message(result,'failed','training failed')
     pths=sorted(exp.glob(f'{model_name}_{target_epoch}e_*s.pth'),key=lambda p:p.stat().st_mtime)
@@ -155,7 +159,7 @@ try:
     upload_signed(T['outputs']['bucket'],T['outputs']['index']['path'],T['outputs']['index']['token'],idx)
     post('progress','uploading',94,'Artefatos do modelo candidato persistidos')
 
-    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_completed':target_epoch,'worker_version':'voice-train-v1','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
+    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'worker_version':'voice-train-v1-budget20','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
     r=requests.post(T['complete_url'],headers={'content-type':'application/json','apikey':T['supabase_publishable_key']},json=payload,timeout=180)
     print('complete',r.status_code,r.text[:1600]);r.raise_for_status()
     print('PabloVoice candidate training V1 complete')
