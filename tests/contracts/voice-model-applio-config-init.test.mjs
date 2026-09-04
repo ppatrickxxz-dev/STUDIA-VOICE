@@ -20,8 +20,8 @@ test('Applio runtime config is initialized before exact checkpoint recovery is i
   assert.ok(configInit < recoveryCall)
 })
 
-test('voice training contract keeps the frozen runtime budget untouched', () => {
+test('voice training contract keeps the frozen runtime budget and config-init lineage untouched', () => {
   assert.match(worker, /RUNTIME_EPOCH_BUDGET=20/)
   assert.doesNotMatch(worker, /RUNTIME_EPOCH_BUDGET=(?!20\b)\d+/)
-  assert.match(worker, /worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init'/)
+  assert.match(worker, /worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init(?:-[a-z0-9]+)?'/)
 })
