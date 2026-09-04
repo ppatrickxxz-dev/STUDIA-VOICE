@@ -5,6 +5,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
 })
 const isSha = (v) => /^[0-9a-f]{64}$/i.test(String(v || ''))
+const REQUIRED_INSTRUMENTAL_METHOD = 'mixture_residual_source_minus_vocals_v1'
 async function sha256Text(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
@@ -28,10 +29,12 @@ Deno.serve(async (req) => {
     const vocalSize = Number.isFinite(Number(body?.vocal_size_bytes)) ? Number(body.vocal_size_bytes) : null
     const instrumentalSize = Number.isFinite(Number(body?.instrumental_size_bytes)) ? Number(body.instrumental_size_bytes) : null
     const demucsVersion = String(body?.demucs_version || '').slice(0,80)
+    const instrumentalMethod = String(body?.instrumental_method || '').slice(0,120)
     if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ok:false,error:'invalid_job_id'},400)
     if (token.length < 32 || token.length > 512) return json({ok:false,error:'invalid_callback_token'},401)
     if (![sourceSha,vocalSha,instrumentalSha].every(isSha)) return json({ok:false,error:'invalid_sha256_proof'},400)
     if (vocalSha === sourceSha || instrumentalSha === sourceSha || vocalSha === instrumentalSha) return json({ok:false,error:'proof_gate_failed'},400)
+    if (instrumentalMethod !== REQUIRED_INSTRUMENTAL_METHOD) return json({ok:false,error:'instrumental_method_mismatch'},400)
 
     const { data:job } = await admin.from('render_jobs').select('*').eq('id',jobId).maybeSingle()
     if (!job) return json({ok:false,error:'job_not_found'},404)
@@ -55,13 +58,13 @@ Deno.serve(async (req) => {
     claimed = true
     const { data:assets, error:assetErr } = await admin.from('audio_assets').insert([
       {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'guide_vocal',storage_bucket:'audio-private',storage_path:vocalPath,original_name:`guide-vocal-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:vocalSize,sha256:vocalSha,metadata:{engine:'Demucs',model:'htdemucs',worker:'kaggle_ticketed',source_asset_id:source.id,demucs_version:demucsVersion}},
-      {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'instrumental',storage_bucket:'audio-private',storage_path:instrumentalPath,original_name:`instrumental-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:instrumentalSize,sha256:instrumentalSha,metadata:{engine:'Demucs',model:'htdemucs',worker:'kaggle_ticketed',source_asset_id:source.id,demucs_version:demucsVersion}},
+      {project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'instrumental',storage_bucket:'audio-private',storage_path:instrumentalPath,original_name:`instrumental-${jobId.slice(0,8)}.wav`,mime_type:'audio/wav',size_bytes:instrumentalSize,sha256:instrumentalSha,metadata:{engine:'Demucs',model:'htdemucs',worker:'kaggle_ticketed',source_asset_id:source.id,demucs_version:demucsVersion,instrumental_method:instrumentalMethod}},
     ]).select('id,kind')
     if (assetErr || !assets?.length) throw new Error(`asset_insert_failed: ${assetErr?.message || 'unknown'}`)
     const vocalId = assets.find(a=>a.kind==='guide_vocal')?.id, instrumentalId = assets.find(a=>a.kind==='instrumental')?.id
     if (!vocalId || !instrumentalId) throw new Error('asset_ids_missing')
     const cleaned={...p}; delete cleaned.kaggle_callback_hash
-    const proof={verified:true,worker:'kaggle_ticketed',engine:'Demucs',model:'htdemucs',source_sha256:sourceSha,vocal_sha256:vocalSha,instrumental_sha256:instrumentalSha,source_asset_id:source.id,vocal_asset_id:vocalId,instrumental_asset_id:instrumentalId,demucs_version:demucsVersion}
+    const proof={verified:true,worker:'kaggle_ticketed',engine:'Demucs',model:'htdemucs',source_sha256:sourceSha,vocal_sha256:vocalSha,instrumental_sha256:instrumentalSha,source_asset_id:source.id,vocal_asset_id:vocalId,instrumental_asset_id:instrumentalId,demucs_version:demucsVersion,instrumental_method:instrumentalMethod}
     const { error:finishErr } = await admin.from('render_jobs').update({status:'completed',progress:100,engine:'kaggle_ticketed',output_asset_ids:[vocalId,instrumentalId],proof,error_message:null,finished_at:new Date().toISOString(),parameters:cleaned}).eq('id',jobId).eq('status','finalizing')
     if (finishErr) throw new Error(`job_finalize_failed: ${finishErr.message}`)
     return json({ok:true,job_id:jobId,vocal_asset_id:vocalId,instrumental_asset_id:instrumentalId,proof})
