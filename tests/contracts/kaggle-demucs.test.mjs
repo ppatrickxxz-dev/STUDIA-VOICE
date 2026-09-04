@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { kaggleDemucsProvider, normalizeKaggleStemCompletion, validateKaggleStemTicket } from '../../services/providers/kaggle-demucs.mjs';
 
 const sha = (char) => char.repeat(64);
+const INSTRUMENTAL_METHOD = 'mixture_residual_source_minus_vocals_v1';
 
 function ticket() {
   return {
@@ -26,7 +27,7 @@ test('recovered Kaggle stem ticket contract accepts signed private-job shape', (
   assert.equal(validateKaggleStemTicket(ticket()), true);
 });
 
-test('Kaggle completion records Demucs provenance and independent SHA proof', () => {
+test('Kaggle completion records Demucs provenance and independent mixture-consistent SHA proof', () => {
   const proof = normalizeKaggleStemCompletion({
     source_sha256: sha('a'),
     vocal_sha256: sha('b'),
@@ -34,20 +35,22 @@ test('Kaggle completion records Demucs provenance and independent SHA proof', ()
     vocal_size_bytes: 5000,
     instrumental_size_bytes: 6000,
     demucs_version: '4.0.1',
+    instrumental_method: INSTRUMENTAL_METHOD,
   });
   assert.equal(proof.provider, 'demucs');
   assert.equal(proof.model, 'htdemucs');
+  assert.equal(proof.instrumentalMethod, INSTRUMENTAL_METHOD);
   assert.equal(proof.validatedOutput, true);
 });
 
 test('Kaggle completion rejects fake identical or tiny stems', () => {
   assert.throws(() => normalizeKaggleStemCompletion({
     source_sha256: sha('a'), vocal_sha256: sha('a'), instrumental_sha256: sha('c'),
-    vocal_size_bytes: 5000, instrumental_size_bytes: 6000, demucs_version: '4.0.1',
+    vocal_size_bytes: 5000, instrumental_size_bytes: 6000, demucs_version: '4.0.1', instrumental_method: INSTRUMENTAL_METHOD,
   }), /hashes/);
   assert.throws(() => normalizeKaggleStemCompletion({
     source_sha256: sha('a'), vocal_sha256: sha('b'), instrumental_sha256: sha('c'),
-    vocal_size_bytes: 4096, instrumental_size_bytes: 6000, demucs_version: '4.0.1',
+    vocal_size_bytes: 4096, instrumental_size_bytes: 6000, demucs_version: '4.0.1', instrumental_method: INSTRUMENTAL_METHOD,
   }), /too small/);
 });
 
