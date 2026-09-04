@@ -1,9 +1,11 @@
 Deno.serve(() => new Response(String.raw`import os,sys,subprocess,json,hashlib,tempfile,shutil,base64,traceback,threading,time,io,contextlib
 from pathlib import Path
+from urllib.parse import urljoin,urlparse
 import requests
 
 T=json.loads(base64.b64decode(TICKET_B64).decode('utf-8'))
 RUNTIME_EPOCH_BUDGET=20
+TUS_CHUNK_SIZE=6*1024*1024
 _progress_lock=threading.Lock()
 _progress_state={'stage':'initializing','progress':5,'message':'Inicializando treino vocal'}
 
@@ -59,7 +61,55 @@ def fail_if_message(result,needle,label):
     text=str(result or '')
     if needle.lower() in text.lower(): raise RuntimeError(label+': '+text)
 
+def tus_meta(value):
+    return base64.b64encode(str(value).encode('utf-8')).decode('ascii')
+
+def upload_signed_resumable(bucket,path,token,file_path,content_type='application/octet-stream'):
+    size=Path(file_path).stat().st_size
+    host=urlparse(T['supabase_url']).hostname or ''
+    if not host.endswith('.supabase.co'):
+        raise RuntimeError('Supabase resumable upload host invalid')
+    project_ref=host.split('.')[0]
+    endpoint=f'https://{project_ref}.storage.supabase.co/storage/v1/upload/resumable'
+    common={'Tus-Resumable':'1.0.0','x-signature':token,'apikey':T['supabase_publishable_key']}
+    metadata=','.join([
+        'bucketName '+tus_meta(bucket),
+        'objectName '+tus_meta(path),
+        'contentType '+tus_meta(content_type),
+        'cacheControl '+tus_meta('3600'),
+    ])
+    create_headers={**common,'Upload-Length':str(size),'Upload-Metadata':metadata}
+    r=requests.post(endpoint,headers=create_headers,timeout=60)
+    if r.status_code not in (201,204):
+        raise RuntimeError('resumable upload creation failed: '+str(r.status_code)+' '+r.text[:600])
+    location=r.headers.get('Location')
+    if not location:
+        raise RuntimeError('resumable upload location missing')
+    upload_url=location if location.startswith('http') else urljoin(endpoint+'/',location)
+    offset=0
+    with open(file_path,'rb') as f:
+        while offset<size:
+            chunk=f.read(TUS_CHUNK_SIZE)
+            if not chunk:
+                raise RuntimeError('resumable upload source ended before expected size')
+            patch_headers={**common,'Upload-Offset':str(offset),'Content-Type':'application/offset+octet-stream'}
+            r=requests.patch(upload_url,headers=patch_headers,data=chunk,timeout=180)
+            if r.status_code!=204:
+                raise RuntimeError('resumable upload chunk failed: '+str(r.status_code)+' '+r.text[:600])
+            expected_offset=offset+len(chunk)
+            try:
+                next_offset=int(r.headers.get('Upload-Offset','-1'))
+            except ValueError:
+                next_offset=-1
+            if next_offset!=expected_offset:
+                raise RuntimeError(f'resumable upload offset mismatch: expected {expected_offset}, got {next_offset}')
+            offset=next_offset
+    if offset!=size:
+        raise RuntimeError(f'resumable upload incomplete: expected {size}, got {offset}')
+
 def upload_signed(bucket,path,token,file_path,content_type='application/octet-stream'):
+    if Path(file_path).stat().st_size>TUS_CHUNK_SIZE:
+        return upload_signed_resumable(bucket,path,token,file_path,content_type)
     from supabase import create_client
     sb=create_client(T['supabase_url'],T['supabase_publishable_key'])
     with open(file_path,'rb') as f:
@@ -201,7 +251,7 @@ try:
     upload_signed(T['outputs']['bucket'],T['outputs']['index']['path'],T['outputs']['index']['token'],idx)
     post('progress','uploading',94,'Artefatos do modelo candidato persistidos')
 
-    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
+    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init-tus6m','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
     r=requests.post(T['complete_url'],headers={'content-type':'application/json','apikey':T['supabase_publishable_key']},json=payload,timeout=180)
     print('complete',r.status_code,r.text[:1600]);r.raise_for_status()
     print('PabloVoice candidate training V1 complete')
