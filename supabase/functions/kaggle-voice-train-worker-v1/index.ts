@@ -109,6 +109,12 @@ try:
     sh(['git','fetch','-q','--depth','1','origin',T['applio_commit']],cwd=A);sh(['git','checkout','-q','FETCH_HEAD'],cwd=A)
     commit=subprocess.check_output(['git','-C',str(A),'rev-parse','HEAD'],text=True).strip()
     if commit!=T['applio_commit']: raise RuntimeError('Applio commit binding mismatch')
+    config_template=A/'assets/config_template.json';config_path=A/'assets/config.json'
+    if not config_template.exists(): raise RuntimeError('Applio config template missing')
+    if not config_path.exists(): shutil.copy(config_template,config_path)
+    with open(config_path,'r',encoding='utf-8') as f:
+        runtime_config=json.load(f)
+    if 'model_author' not in runtime_config: raise RuntimeError('Applio runtime config invalid')
     sh(['bash','-lc',f"grep -Ev '^(torch|torchaudio|torchvision)==' {A}/requirements.txt > /tmp/applio-train-v1-requirements.txt"])
     sh([sys.executable,'-m','pip','install','-q','-r','/tmp/applio-train-v1-requirements.txt','supabase'])
     sys.path.insert(0,str(A));os.chdir(A)
@@ -195,7 +201,7 @@ try:
     upload_signed(T['outputs']['bucket'],T['outputs']['index']['path'],T['outputs']['index']['token'],idx)
     post('progress','uploading',94,'Artefatos do modelo candidato persistidos')
 
-    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
+    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
     r=requests.post(T['complete_url'],headers={'content-type':'application/json','apikey':T['supabase_publishable_key']},json=payload,timeout=180)
     print('complete',r.status_code,r.text[:1600]);r.raise_for_status()
     print('PabloVoice candidate training V1 complete')
