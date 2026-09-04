@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { kaggleDemucsProvider, normalizeKaggleStemCompletion, validateKaggleStemTicket } from '../../services/providers/kaggle-demucs.mjs';
 
 const sha = (char) => char.repeat(64);
-const INSTRUMENTAL_METHOD = 'mixture_residual_source_minus_vocals_v1';
+const INSTRUMENTAL_METHOD = 'mixture_residual_pcm48_mono_source_minus_vocals_v2';
 
 function ticket() {
   return {
@@ -27,7 +27,7 @@ test('recovered Kaggle stem ticket contract accepts signed private-job shape', (
   assert.equal(validateKaggleStemTicket(ticket()), true);
 });
 
-test('Kaggle completion records Demucs provenance and independent mixture-consistent SHA proof', () => {
+test('Kaggle completion records Demucs provenance and independent PCM48 mixture-consistent SHA proof', () => {
   const proof = normalizeKaggleStemCompletion({
     source_sha256: sha('a'),
     vocal_sha256: sha('b'),
@@ -36,10 +36,12 @@ test('Kaggle completion records Demucs provenance and independent mixture-consis
     instrumental_size_bytes: 6000,
     demucs_version: '4.0.1',
     instrumental_method: INSTRUMENTAL_METHOD,
+    pcm_domain: 'mono_48000_f32',
   });
   assert.equal(proof.provider, 'demucs');
   assert.equal(proof.model, 'htdemucs');
   assert.equal(proof.instrumentalMethod, INSTRUMENTAL_METHOD);
+  assert.equal(proof.pcmDomain, 'mono_48000_f32');
   assert.equal(proof.validatedOutput, true);
 });
 
