@@ -94,7 +94,20 @@ Deno.serve(async (req: Request) => {
     }
     if (sum !== pthSize) return out({ ok: false, error: 'model_part_size_sum_mismatch' }, 409)
     const expectedIndexPath = `${outputBase}/PabloVoice.index`
-    if (String(body.index_path || '') !== expectedIndexPath) return out({ ok: false, error: 'index_path_mismatch' }, 409)
+    const indexParts = Array.isArray(body.index_parts) ? body.index_parts : []
+    const multipartIndex = indexParts.length > 0
+    if (!multipartIndex && String(body.index_path || '') !== expectedIndexPath) return out({ ok: false, error: 'index_path_mismatch' }, 409)
+    if (multipartIndex) {
+      if (indexParts.length > 8) return out({ ok: false, error: 'invalid_index_part_count' }, 409)
+      let indexSum = 0
+      for (let order = 0; order < indexParts.length; order++) {
+        const part = indexParts[order]
+        const expectedPath = `${outputBase}/index-parts/PabloVoice.index.part${String(order).padStart(3, '0')}`
+        if (Number(part.order) !== order || String(part.path || '') !== expectedPath || !shaOk(part.sha256) || Number(part.size_bytes || 0) < 1 || Number(part.size_bytes || 0) > 25 * 1024 * 1024) return out({ ok: false, error: 'index_part_contract_mismatch', order }, 409)
+        indexSum += Number(part.size_bytes)
+      }
+      if (indexSum !== indexSize) return out({ ok: false, error: 'index_part_size_sum_mismatch' }, 409)
+    }
 
     const { data: partObjects, error: pe } = await admin.storage.from('voice-models-private').list(`${outputBase}/parts`, { limit: 10 })
     if (pe) throw pe
@@ -103,10 +116,20 @@ Deno.serve(async (req: Request) => {
       const object = (partObjects || []).find((entry: any) => entry.name === name)
       if (!object || Number(object.metadata?.size || 0) !== Number(part.size_bytes)) return out({ ok: false, error: 'model_part_not_persisted', path: part.path }, 409)
     }
-    const { data: rootObjects, error: re } = await admin.storage.from('voice-models-private').list(outputBase, { limit: 20 })
-    if (re) throw re
-    const indexObject = (rootObjects || []).find((entry: any) => entry.name === 'PabloVoice.index')
-    if (!indexObject || Number(indexObject.metadata?.size || 0) !== indexSize) return out({ ok: false, error: 'index_not_persisted' }, 409)
+    if (multipartIndex) {
+      const { data: indexPartObjects, error: ipe } = await admin.storage.from('voice-models-private').list(`${outputBase}/index-parts`, { limit: 20 })
+      if (ipe) throw ipe
+      for (const part of indexParts) {
+        const name = String(part.path).split('/').pop()
+        const object = (indexPartObjects || []).find((entry: any) => entry.name === name)
+        if (!object || Number(object.metadata?.size || 0) !== Number(part.size_bytes)) return out({ ok: false, error: 'index_part_not_persisted', path: part.path }, 409)
+      }
+    } else {
+      const { data: rootObjects, error: re } = await admin.storage.from('voice-models-private').list(outputBase, { limit: 20 })
+      if (re) throw re
+      const indexObject = (rootObjects || []).find((entry: any) => entry.name === 'PabloVoice.index')
+      if (!indexObject || Number(indexObject.metadata?.size || 0) !== indexSize) return out({ ok: false, error: 'index_not_persisted' }, 409)
+    }
 
     const expectedValidation = parameters.validation || {}
     const validation = body.validation || {}
@@ -128,13 +151,13 @@ Deno.serve(async (req: Request) => {
     if (!validationObject || Number(validationObject.metadata?.size || 0) !== validationSize) return out({ ok: false, error: 'validation_audio_not_persisted' }, 409)
 
     const metadata = {
-      client: 'voice-train-v1', storage_mode: 'multipart', pth_parts: parts, pth_size: pthSize, index_size: indexSize,
+      client: 'voice-train-v1', storage_mode: multipartIndex ? 'multipart-pth-index' : 'multipart', pth_parts: parts, pth_size: pthSize, index_parts: indexParts, index_size: indexSize,
       source_assets: expectedSources, applio_commit: APPLIO_COMMIT, training_settings: parameters.settings, training_job_id: jobId,
       activation_policy: 'inactive_until_verified_ecapa_gte_0_8', identity_threshold: IDENTITY_THRESHOLD, candidate: true, proof: 'sha256-full-and-parts',
     }
     const { error: me } = await admin.from('voice_models').upsert({
       id: candidateModelId, user_id: job.user_id, name: String(parameters.candidate_model_name || 'PabloVoice Candidate'), engine: 'rvc',
-      pth_storage_path: null, index_storage_path: expectedIndexPath, pth_sha256: pthSha, index_sha256: indexSha,
+      pth_storage_path: null, index_storage_path: multipartIndex ? null : expectedIndexPath, pth_sha256: pthSha, index_sha256: indexSha,
       status: 'ready', is_active: false, metadata,
     }, { onConflict: 'id' })
     if (me) throw me
