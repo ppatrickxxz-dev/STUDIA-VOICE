@@ -1,4 +1,4 @@
-Deno.serve(() => new Response(String.raw`import os,sys,subprocess,json,hashlib,tempfile,shutil,base64,traceback,threading,time
+Deno.serve(() => new Response(String.raw`import os,sys,subprocess,json,hashlib,tempfile,shutil,base64,traceback,threading,time,io,contextlib
 from pathlib import Path
 import requests
 
@@ -70,6 +70,33 @@ def probe(path):
     j=json.loads(raw);s=(j.get('streams') or [{}])[0];f=j.get('format') or {}
     return {'duration_seconds':float(f.get('duration') or 0),'sample_rate':int(s.get('sample_rate') or 0),'channels':int(s.get('channels') or 0)}
 
+def recover_exact_final_inference_model(exp,model_name,target_epoch,sample_rate,vocoder,torch):
+    generator_checkpoints=sorted(exp.glob('G_*.pth'),key=lambda p:p.stat().st_mtime)
+    if not generator_checkpoints:
+        raise RuntimeError(f'exact final generator checkpoint missing for target epoch {target_epoch}')
+    generator_checkpoint=generator_checkpoints[-1]
+    checkpoint=torch.load(generator_checkpoint,map_location='cpu',weights_only=True)
+    checkpoint_iteration=int(checkpoint.get('iteration',-1))
+    if checkpoint_iteration != target_epoch:
+        raise RuntimeError(f'generator checkpoint iteration mismatch: expected {target_epoch}, got {checkpoint_iteration}')
+    ckpt=checkpoint.get('model')
+    if not isinstance(ckpt,dict) or not ckpt:
+        raise RuntimeError('exact final generator checkpoint model state missing')
+    from rvc.train.process.extract_model import extract_model
+    from rvc.train.utils import HParams
+    with open(exp/'config.json','r',encoding='utf-8') as f:
+        hps=HParams(**json.load(f))
+    recovered=exp/f'{model_name}_{target_epoch}e_-1s.pth'
+    capture=io.StringIO()
+    with contextlib.redirect_stdout(capture):
+        extract_model(ckpt=ckpt,sr=sample_rate,name=model_name,model_path=str(recovered),epoch=target_epoch,step=-1,hps=hps,vocoder=vocoder,pitch_guidance=True,version='v2')
+    extraction_log=capture.getvalue()
+    if extraction_log: print(extraction_log[-4000:])
+    if not recovered.exists() or recovered.stat().st_size<1_000_000:
+        detail=extraction_log[-1200:].replace('\n',' ')
+        raise RuntimeError('final checkpoint extraction failed'+((' :: '+detail) if detail else ''))
+    return recovered,checkpoint_iteration
+
 threading.Thread(target=heartbeat,daemon=True).start()
 work=Path(tempfile.mkdtemp(prefix='pablovoice-train-v1-',dir='/tmp'))
 A=Path('/tmp/ApplioVoiceTrainV1')
@@ -130,9 +157,16 @@ try:
     fail_if_message(result,'failed','training failed')
     pths=sorted(exp.glob(f'{model_name}_{target_epoch}e_*s.pth'),key=lambda p:p.stat().st_mtime)
     idx=exp/f'{model_name}.index'
-    if not pths: raise RuntimeError(f'trained inference pth missing for target epoch {target_epoch}')
+    checkpoint_iteration=target_epoch
+    pth_derivation='applio_native_inference_export_v1'
+    if pths:
+        pth=pths[-1]
+    else:
+        pth,checkpoint_iteration=recover_exact_final_inference_model(exp,model_name,target_epoch,int(s['sample_rate']),s['vocoder'],torch)
+        pth_derivation='applio_exact_final_generator_checkpoint_v1'
+    if checkpoint_iteration != target_epoch:
+        raise RuntimeError(f'final checkpoint epoch proof mismatch: expected {target_epoch}, got {checkpoint_iteration}')
     if not idx.exists() or idx.stat().st_size<1000: raise RuntimeError('trained index missing')
-    pth=pths[-1]
     pth_sha=sha(pth);idx_sha=sha(idx)
     post('progress','trained',80,f'Modelo candidato treinado em {target_epoch} epochs; gerando prova de identidade')
 
@@ -161,7 +195,7 @@ try:
     upload_signed(T['outputs']['bucket'],T['outputs']['index']['path'],T['outputs']['index']['token'],idx)
     post('progress','uploading',94,'Artefatos do modelo candidato persistidos')
 
-    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'worker_version':'voice-train-v1-budget20-final-checkpoint','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
+    payload={'job_id':T['job_id'],'callback_token':T['callback_token'],'action':'complete','candidate_model_id':T['candidate_model_id'],'applio_commit':commit,'sources':source_proof,'pth_sha256':pth_sha,'index_sha256':idx_sha,'pth_size_bytes':pth.stat().st_size,'index_size_bytes':idx.stat().st_size,'pth_parts':parts,'index_path':T['outputs']['index']['path'],'epochs_requested':requested_epoch,'epochs_completed':target_epoch,'checkpoint_every_epoch':checkpoint_every,'checkpoint_iteration':checkpoint_iteration,'pth_derivation':pth_derivation,'worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery','validation':{'asset_id':validation['output']['asset_id'],'sha256':vsha,'size_bytes':flac.stat().st_size,'duration_seconds':vinfo['duration_seconds'],'sample_rate':vinfo['sample_rate'],'channels':vinfo['channels'],'storage_bucket':validation['output']['bucket'],'storage_path':validation['output']['path'],'guide_asset_id':validation['guide_asset_id'],'guide_sha256':validation['guide_sha256'],'region':validation['region']}}
     r=requests.post(T['complete_url'],headers={'content-type':'application/json','apikey':T['supabase_publishable_key']},json=payload,timeout=180)
     print('complete',r.status_code,r.text[:1600]);r.raise_for_status()
     print('PabloVoice candidate training V1 complete')
