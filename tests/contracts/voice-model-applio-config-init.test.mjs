@@ -12,15 +12,15 @@ test('headless Applio worker materializes runtime config exactly from the pinned
   assert.match(worker, /if 'model_author' not in runtime_config: raise RuntimeError\('Applio runtime config invalid'\)/)
 })
 
-test('Applio runtime config is initialized before exact checkpoint recovery can call extract_model', () => {
+test('Applio runtime config is initialized before exact checkpoint recovery is invoked', () => {
   const configInit = worker.indexOf("config_template=A/'assets/config_template.json'")
-  const extractCall = worker.indexOf('extract_model(ckpt=ckpt')
+  const recoveryCall = worker.indexOf('recover_exact_final_inference_model(exp,model_name,target_epoch')
   assert.ok(configInit >= 0)
-  assert.ok(extractCall >= 0)
-  assert.ok(configInit < extractCall)
+  assert.ok(recoveryCall >= 0)
+  assert.ok(configInit < recoveryCall)
 })
 
-test('voice training contract keeps frozen runtime budget and identity threshold untouched', () => {
+test('voice training contract keeps the frozen runtime budget untouched', () => {
   assert.match(worker, /RUNTIME_EPOCH_BUDGET=20/)
   assert.doesNotMatch(worker, /RUNTIME_EPOCH_BUDGET=(?!20\b)\d+/)
   assert.match(worker, /worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init'/)
