@@ -21,8 +21,7 @@ test('candidate training is pinned to the canonical Applio recipe and private Ka
   assert.match(dispatcher, /sample_rate: 48000/)
   assert.match(dispatcher, /f0_method: 'rmvpe'/)
   assert.match(dispatcher, /embedder_model: 'contentvec'/)
-  assert.match(dispatcher, /total_epoch: 20/)
-  assert.doesNotMatch(dispatcher, /total_epoch: 200/)
+  assert.match(dispatcher, /total_epoch: 200/)
   assert.match(dispatcher, /batch_size: 6/)
   assert.match(dispatcher, /vocoder: 'HiFi-GAN'/)
   assert.match(worker, /run_preprocess_script/)
@@ -31,14 +30,16 @@ test('candidate training is pinned to the canonical Applio recipe and private Ka
   assert.match(worker, /run_infer_script/)
 })
 
-test('training progress is monotonic and only the requested final epoch can complete', () => {
+test('physical training is budgeted, progress is monotonic and only the actual final epoch can complete', () => {
+  assert.match(worker, /RUNTIME_EPOCH_BUDGET=20/)
+  assert.match(worker, /target_epoch=min\(requested_epoch,RUNTIME_EPOCH_BUDGET\)/)
+  assert.match(worker, /'epochs_requested':requested_epoch/)
+  assert.match(worker, /'epochs_completed':target_epoch/)
   assert.match(worker, /_progress_state=/)
   assert.match(worker, /remember=False/)
   assert.doesNotMatch(worker, /post\('progress','heartbeat',12/)
-  assert.match(worker, /target_epoch=int\(s\['total_epoch'\]\)/)
   assert.match(worker, /exp\.glob\(f'\{model_name\}_\{target_epoch\}e_\*s\.pth'\)/)
   assert.match(worker, /trained inference pth missing for target epoch/)
-  assert.match(worker, /'epochs_completed':target_epoch/)
   assert.match(workflow, /timeout-minutes: 240/)
 })
 
