@@ -35,5 +35,5 @@ test('existing four-part artifact contract stays unchanged and only transport ro
   assert.match(worker, /if count<1 or count>len\(T\['outputs'\]\['parts'\]\):/)
   assert.match(worker, /if Path\(file_path\)\.stat\(\)\.st_size>TUS_CHUNK_SIZE:/)
   assert.match(worker, /upload_to_signed_url\(path=path,token=token,file=f/)
-  assert.match(worker, /worker_version':'voice-train-v1-budget20-exact-checkpoint-recovery-applio-config-init-tus6m-signed-route(?:-index-multipart)?'/)
+  assert.match(worker, /worker_version':'voice-train-v1-budget100-exact-checkpoint-recovery-applio-config-init-tus6m-signed-route(?:-index-multipart)?'/)
 })

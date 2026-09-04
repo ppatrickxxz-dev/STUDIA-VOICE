@@ -31,7 +31,7 @@ test('candidate training is pinned to the canonical Applio recipe and private Ka
 })
 
 test('physical training is budgeted, progress is monotonic and only the actual final epoch can complete', () => {
-  assert.match(worker, /RUNTIME_EPOCH_BUDGET=20/)
+  assert.match(worker, /RUNTIME_EPOCH_BUDGET=100/)
   assert.match(worker, /target_epoch=min\(requested_epoch,RUNTIME_EPOCH_BUDGET\)/)
   assert.match(worker, /requested_checkpoint_every=max\(1,int\(s\['save_every_epoch'\]\)\)/)
   assert.match(worker, /checkpoint_every=min\(requested_checkpoint_every,target_epoch\)/)
@@ -145,6 +145,6 @@ test('large RVC indexes are persisted as bounded multipart objects without chang
   assert.match(callback, /index_part_not_persisted/)
   assert.match(callback, /index_storage_path: multipartIndex \? null : expectedIndexPath/)
   assert.match(dispatcher, /total_epoch: 200/)
-  assert.match(worker, /RUNTIME_EPOCH_BUDGET=20/)
+  assert.match(worker, /RUNTIME_EPOCH_BUDGET=100/)
   assert.match(callback, /IDENTITY_THRESHOLD = 0\.8/)
 })
