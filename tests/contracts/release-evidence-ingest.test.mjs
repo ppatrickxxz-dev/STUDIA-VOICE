@@ -52,6 +52,12 @@ test('asset persistence is idempotent and records runtime-addressable provenance
   assert.match(fn, /binary_transport_session_id/)
   assert.match(fn, /source_commit_sha/)
   assert.match(fn, /benchmark_role/)
+  assert.match(fn, /existing_asset_storage_mismatch/)
+  assert.match(fn, /existing_asset_provenance_untrusted/)
+  assert.match(fn, /\.download\(spec\.storage_path\)/)
+  assert.match(fn, /existing_asset_object_unavailable/)
+  assert.match(fn, /existing_asset_object_size_mismatch/)
+  assert.match(fn, /existing_asset_object_sha256_mismatch/)
 })
 
 test('frozen provider input remains bound to canonical source and deterministic derivation', () => {
@@ -67,4 +73,6 @@ test('workflow requests OIDC and asserts both exact hashes and byte sizes', () =
   assert.match(workflow, /13909412/)
   assert.match(workflow, /15335120/)
   assert.match(workflow, /diagnose-once-v56/)
+  assert.doesNotMatch(workflow, /python - <<'PY' <<<\"\$response\"/)
+  assert.equal((workflow.match(/python -c 'import json, sys/g) || []).length, 2)
 })

@@ -143,6 +143,29 @@ Deno.serve(async (request: Request) => {
     if (existingAssets?.[0]) {
       const asset = existingAssets[0]
       if (Number(asset.size_bytes) !== spec.expected_size) return json({ ok: false, error: 'existing_asset_size_mismatch' }, 409)
+      if (asset.storage_bucket !== STORAGE_BUCKET || asset.storage_path !== spec.storage_path) {
+        return json({ ok: false, error: 'existing_asset_storage_mismatch' }, 409)
+      }
+      const metadata = asset.metadata && typeof asset.metadata === 'object' ? asset.metadata as Record<string, unknown> : {}
+      if (
+        metadata.runtime_addressable !== true ||
+        metadata.verified_sha256 !== true ||
+        metadata.benchmark_role !== spec.role ||
+        metadata.ingested_by !== 'release_evidence_ingest_v1'
+      ) return json({ ok: false, error: 'existing_asset_provenance_untrusted' }, 409)
+
+      const { data: storedObject, error: downloadError } = await admin.storage
+        .from(STORAGE_BUCKET)
+        .download(spec.storage_path)
+      if (downloadError || !storedObject) return json({ ok: false, error: 'existing_asset_object_unavailable' }, 409)
+      const storedBytes = new Uint8Array(await storedObject.arrayBuffer())
+      if (storedBytes.byteLength !== spec.expected_size) {
+        return json({ ok: false, error: 'existing_asset_object_size_mismatch' }, 409)
+      }
+      const storedSha256 = await sha256Hex(storedBytes)
+      if (storedSha256 !== expectedSha256) {
+        return json({ ok: false, error: 'existing_asset_object_sha256_mismatch' }, 409)
+      }
       return json({ ok: true, idempotent: true, asset })
     }
 

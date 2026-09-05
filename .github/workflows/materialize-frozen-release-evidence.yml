@@ -41,14 +41,12 @@ jobs:
             --data "$body" \
             'https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/diagnose-once-v56')"
           echo "$response" | python -m json.tool
-          python - <<'PY' <<<"$response"
-          import json, sys
-          result = json.load(sys.stdin)
-          assert result.get('ok') is True, result
-          asset = result.get('asset') or {}
-          assert asset.get('sha256') == '852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83', result
-          assert int(asset.get('size_bytes') or 0) == 13909412, result
-          PY
+          python -c 'import json, sys
+result = json.load(sys.stdin)
+assert result.get("ok") is True, result
+asset = result.get("asset") or {}
+assert asset.get("sha256") == "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83", result
+assert int(asset.get("size_bytes") or 0) == 13909412, result' <<<"$response"
 
       - name: Materialize frozen provider input
         env:
@@ -63,11 +61,9 @@ jobs:
             --data "$body" \
             'https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/diagnose-once-v56')"
           echo "$response" | python -m json.tool
-          python - <<'PY' <<<"$response"
-          import json, sys
-          result = json.load(sys.stdin)
-          assert result.get('ok') is True, result
-          asset = result.get('asset') or {}
-          assert asset.get('sha256') == '85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95', result
-          assert int(asset.get('size_bytes') or 0) == 15335120, result
-          PY
+          python -c 'import json, sys
+result = json.load(sys.stdin)
+assert result.get("ok") is True, result
+asset = result.get("asset") or {}
+assert asset.get("sha256") == "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95", result
+assert int(asset.get("size_bytes") or 0) == 15335120, result' <<<"$response"
