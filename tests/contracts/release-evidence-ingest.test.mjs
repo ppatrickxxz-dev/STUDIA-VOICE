@@ -74,5 +74,6 @@ test('workflow requests OIDC and asserts both exact hashes and byte sizes', () =
   assert.match(workflow, /15335120/)
   assert.match(workflow, /diagnose-once-v56/)
   assert.doesNotMatch(workflow, /python - <<'PY' <<<\"\$response\"/)
-  assert.equal((workflow.match(/python -c 'import json, sys/g) || []).length, 2)
+  assert.equal((workflow.match(/python -c 'import json,sys; result=/g) || []).length, 2)
+  assert.doesNotMatch(workflow, /^result=/m)
 })
