@@ -67,6 +67,8 @@ test('frozen provider input remains bound to canonical source and deterministic 
 
 test('workflow requests OIDC and asserts both exact hashes and byte sizes', () => {
   assert.match(workflow, /id-token:\s*write/)
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/)
+  assert.match(workflow, /paths:\s*\n\s+- \.github\/workflows\/materialize-frozen-release-evidence\.yml\s*\n\s+- supabase\/functions\/diagnose-once-v56\/index\.ts/)
   assert.match(workflow, /audience=pablovoice-signing/)
   assert.match(workflow, new RegExp(SOURCE_SHA))
   assert.match(workflow, new RegExp(PROVIDER_SHA))
