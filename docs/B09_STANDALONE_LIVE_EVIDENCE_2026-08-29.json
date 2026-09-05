@@ -66,7 +66,7 @@
   },
   "remaining_blocker": {
     "kind": "frozen_acoustic_reference_not_runtime_addressable",
-    "vocal_provider_input_sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+    "vocal_provider_input_sha256": "5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439",
     "b09_promotion_allowed": false
   },
   "audio_committed_to_public_repo": false
