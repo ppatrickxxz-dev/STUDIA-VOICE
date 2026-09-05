@@ -3,7 +3,7 @@ export const B04_FROZEN = Object.freeze({
   guideAssetId: '549ff71f-7cce-414d-a77d-7021a7fc208e',
   guideSha256: 'ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816',
   frozenSourceSha256: 'ff57cb304fbe72783b78ab5f43137cd3daba2736e76135d86beb0e1f8f0e6e2d',
-  identityReferenceSha256: '85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95',
+  identityReferenceSha256: '5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439',
   voiceModelId: '5c0976b2-bd2c-44d7-8720-a2dc013fd4b5',
   modelPthSha256: '58f0354124a4a18a0a5bd1f8c74bd95b6147713dcb23b98d9060a5bc63bda56a',
   modelIndexSha256: '814feab12db225c2e1e0a43a661238dc587a7d1554343ca7223103be16fd930f',

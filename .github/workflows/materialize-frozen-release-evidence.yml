@@ -55,11 +55,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body='{"action":"materialize","expected_sha256":"85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95"}'
+          body='{"action":"materialize","expected_sha256":"5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439"}'
           response="$(curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
             -H 'content-type: application/json' \
             --data "$body" \
             'https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/diagnose-once-v56')"
           echo "$response" | python -m json.tool
-          python -c 'import json,sys; result=json.load(sys.stdin); asset=result.get("asset") or {}; assert result.get("ok") is True, result; assert asset.get("sha256") == "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95", result; assert int(asset.get("size_bytes") or 0) == 15335120, result' <<<"$response"
+          python -c 'import json,sys; result=json.load(sys.stdin); asset=result.get("asset") or {}; assert result.get("ok") is True, result; assert asset.get("sha256") == "5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439", result; assert int(asset.get("size_bytes") or 0) == 15335120, result' <<<"$response"

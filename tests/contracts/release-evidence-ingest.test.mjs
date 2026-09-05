@@ -11,7 +11,7 @@ const fn = fs.readFileSync(fnPath, 'utf8')
 const workflow = fs.readFileSync(workflowPath, 'utf8')
 
 const SOURCE_SHA = '852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83'
-const PROVIDER_SHA = '85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95'
+const PROVIDER_SHA = '5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439'
 
 test('release evidence ingest is GitHub OIDC fail-closed on main and exact workflow', () => {
   assert.match(fn, /OIDC_AUDIENCE\s*=\s*'pablovoice-signing'/)
