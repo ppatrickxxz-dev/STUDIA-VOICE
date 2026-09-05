@@ -1,0 +1,136 @@
+name: PabloVoice Supabase Runtime Reconcile
+
+on:
+  push:
+    branches:
+      - main
+      - fix/runtime-operationalization-v1
+    paths:
+      - '.runtime-reconcile-trigger'
+      - '.github/workflows/supabase-runtime-reconcile.yml'
+      - 'config/runtime-functions.json'
+      - 'supabase/functions/compute-kaggle-voice-train-v1/**'
+      - 'supabase/functions/kaggle-voice-train-worker-v1/**'
+      - 'supabase/functions/complete-kaggle-voice-train-v1/**'
+      - 'supabase/functions/promote-voice-candidate-v1/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_REF: yokmhqoncdwvxmzzybqa
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require production Supabase credential
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo 'SUPABASE_ACCESS_TOKEN is required'; exit 1; }
+          echo '::add-mask::'$SUPABASE_ACCESS_TOKEN
+
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.98.2
+
+      - name: Snapshot runtime before reconciliation
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/runtime-reconcile
+          supabase functions list --project-ref "$PROJECT_REF" --output json > test-results/runtime-reconcile/functions-before.json
+
+      - name: Physically delete retired endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          retired=(
+            ui-source-ingest
+            password-setup-once
+            dispatch-once-v56
+            monitor-once-v56
+            diagnose-once-v56
+            validate-audio-access-v58
+            repair-audio-mime-v58
+            repair-master-m4a-v58
+            repair-audio-mime-v59
+            repair-audio-mime-v60
+            dispatch-once-v59
+            test-p1-v60-once
+            test-p1-v61-once
+            test-recording-v63-once
+            test-studio-v60-once
+            test-voice-v70-once
+            diagnose-voice-v70-once
+            diagnose-voice-v71-once
+            test-voice-v71-once
+            test-voice-v71-identity-once
+            test-voice-v71-smooth-once
+          )
+          cp test-results/runtime-reconcile/functions-before.json /tmp/functions.json
+          for slug in "${retired[@]}"; do
+            if jq -e --arg slug "$slug" 'any(.[]; (.slug // .name) == $slug)' /tmp/functions.json >/dev/null; then
+              echo "Deleting retired function: $slug"
+              supabase functions delete "$slug" --project-ref "$PROJECT_REF"
+            fi
+          done
+
+      - name: Deploy canonical RVC functions from repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions deploy compute-kaggle-voice-train-v1 --project-ref "$PROJECT_REF" --use-api
+          supabase functions deploy kaggle-voice-train-worker-v1 --project-ref "$PROJECT_REF" --use-api --no-verify-jwt
+          supabase functions deploy complete-kaggle-voice-train-v1 --project-ref "$PROJECT_REF" --use-api --no-verify-jwt
+          supabase functions deploy promote-voice-candidate-v1 --project-ref "$PROJECT_REF" --use-api --no-verify-jwt
+
+      - name: Verify canonical runtime exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions list --project-ref "$PROJECT_REF" --output json > test-results/runtime-reconcile/functions-after-canonical.json
+          for slug in compute-kaggle-voice-train-v1 kaggle-voice-train-worker-v1 complete-kaggle-voice-train-v1 promote-voice-candidate-v1; do
+            jq -e --arg slug "$slug" 'any(.[]; (.slug // .name) == $slug and .status == "ACTIVE")' test-results/runtime-reconcile/functions-after-canonical.json >/dev/null
+          done
+          for slug in ui-source-ingest password-setup-once dispatch-once-v56 monitor-once-v56 diagnose-once-v56 validate-audio-access-v58 repair-audio-mime-v58 repair-master-m4a-v58 repair-audio-mime-v59 repair-audio-mime-v60 dispatch-once-v59 test-p1-v60-once test-p1-v61-once test-recording-v63-once test-studio-v60-once test-voice-v70-once diagnose-voice-v70-once diagnose-voice-v71-once test-voice-v71-once test-voice-v71-identity-once test-voice-v71-smooth-once; do
+            if jq -e --arg slug "$slug" 'any(.[]; (.slug // .name) == $slug)' test-results/runtime-reconcile/functions-after-canonical.json >/dev/null; then
+              echo "Retired endpoint still exists: $slug" >&2
+              exit 1
+            fi
+          done
+
+      - name: Remove recycled RVC aliases after main cutover
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions list --project-ref "$PROJECT_REF" --output json > /tmp/functions-main.json
+          for slug in app-v56 app-v58 app-v60 app-v61; do
+            if jq -e --arg slug "$slug" 'any(.[]; (.slug // .name) == $slug)' /tmp/functions-main.json >/dev/null; then
+              echo "Deleting recycled alias after canonical cutover: $slug"
+              supabase functions delete "$slug" --project-ref "$PROJECT_REF"
+            fi
+          done
+          supabase functions list --project-ref "$PROJECT_REF" --output json > test-results/runtime-reconcile/functions-after-cutover.json
+          for slug in app-v56 app-v58 app-v60 app-v61; do
+            if jq -e --arg slug "$slug" 'any(.[]; (.slug // .name) == $slug)' test-results/runtime-reconcile/functions-after-cutover.json >/dev/null; then
+              echo "Legacy alias still exists: $slug" >&2
+              exit 1
+            fi
+          done
+
+      - name: Retain runtime reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-runtime-reconcile-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/runtime-reconcile
+          if-no-files-found: warn
+          retention-days: 30
