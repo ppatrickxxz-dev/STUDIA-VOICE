@@ -14,7 +14,6 @@ const runtime = {
 
 export function installSongCreationStudio() {
   if (runtime.observer) return () => runtime.observer.disconnect();
-  installStyle();
   runtime.observer = new MutationObserver(() => injectSongCreator());
   runtime.observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('submit', handleSubmit);
@@ -200,7 +199,7 @@ function arrangementKind(id) {
   if (id === 'intro') return 'intro';
   if (id === 'outro') return 'outro';
   if (/verso/.test(id)) return 'verse';
-  if (/pre/.test(id)) return 'pre_chorus';
+  if (/pre/.test(id)) return 'prechorus';
   if (/refr/.test(id)) return 'chorus';
   if (/ponte_rap/.test(id)) return 'rap';
   if (/ponte/.test(id)) return 'bridge';
@@ -265,14 +264,6 @@ function consumeOpenStudioRequest() {
   try { shouldOpen = sessionStorage.getItem(OPEN_STUDIO_KEY) === '1'; sessionStorage.removeItem(OPEN_STUDIO_KEY); } catch {}
   if (!shouldOpen) return;
   setTimeout(() => document.querySelector('[data-route="studio"]')?.click(), 0);
-}
-
-function installStyle() {
-  if (document.querySelector('#pv-song-creator-style')) return;
-  const style = document.createElement('style');
-  style.id = 'pv-song-creator-style';
-  style.textContent = `.pv-song-creator{margin-top:18px}.pv-song-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.pv-song-creator label{display:grid;gap:6px;font-size:.82rem}.pv-song-wide{width:100%}.pv-song-result{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}.pv-song-audios{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.pv-song-audios label{padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.025)}.pv-song-audios audio{width:100%;margin-top:8px}.pv-song-audios small{opacity:.7;margin-top:5px}@media(max-width:760px){.pv-song-fields{grid-template-columns:1fr 1fr}.pv-song-audios{grid-template-columns:1fr}}`;
-  document.head.appendChild(style);
 }
 
 function revokeUrls() { for (const url of runtime.urls) URL.revokeObjectURL(url); runtime.urls = []; }
