@@ -62,6 +62,24 @@ test('trusted completion cannot choose its own threshold, engine, pass state, ar
   assert.match(runtime, /if \(ue\) return out\(\{ ok: false, error: 'job_finalization_failed' \}, 500\)/);
 });
 
+test('stale trusted claims are requeued before a new worker claims work', () => {
+  assert.match(runtime, /CLAIM_STALE_AFTER_MS = 30 \* 60 \* 1000/);
+  assert.match(runtime, /\.eq\('status', 'processing'\)[\s\S]*?\.eq\('current_stage', 'trusted_worker_claimed'\)[\s\S]*?\.lt\('heartbeat_at', staleBefore\)/);
+  assert.match(runtime, /status: 'waiting_trusted_worker'[\s\S]*?parameters: retryParameters/);
+  assert.match(runtime, /trusted_run_id: _trustedRunId/);
+});
+
+test('job proof finalizes before the secondary analysis archive', () => {
+  const finalizeAt = runtime.indexOf(".update({ status: 'completed'");
+  const archiveAt = runtime.indexOf(".from('analyses').upsert", finalizeAt);
+  assert.ok(finalizeAt > 0);
+  assert.ok(archiveAt > finalizeAt);
+  assert.match(runtime, /analysis_archived: !ae/);
+  assert.match(runtime, /warning: 'analysis_archive_failed'/);
+  assert.match(runtime, /onConflict: 'asset_id,analysis_type,engine_version'/);
+  assert.match(runtime, /job\.proof \|\| analyses\?\.\[0\]\?\.result \|\| null/);
+});
+
 test('GitHub OIDC verification pins repository, main ref, production environment and signed token', () => {
   assert.match(runtime, /https:\/\/token\.actions\.githubusercontent\.com/);
   assert.match(runtime, /pablovoice-signing/);
