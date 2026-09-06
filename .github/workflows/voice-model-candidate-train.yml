@@ -27,10 +27,8 @@ env:
   TRAIN_SHA_2: 6530feb9940d2aa8939d505a98e9d5b129bef9c80ede2726db709b5fac2940c6
   VALIDATION_GUIDE_SHA: ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816
   IDENTITY_THRESHOLD: '0.8'
-  # Supabase project is at its Edge Function count cap. These two legacy UI
-  # slots are intentionally recycled for the candidate-training runtime.
-  TRAIN_DISPATCH_FUNCTION: app-v56
-  TRAIN_PROMOTER_FUNCTION: app-v61
+  TRAIN_DISPATCH_FUNCTION: compute-kaggle-voice-train-v1
+  TRAIN_PROMOTER_FUNCTION: promote-voice-candidate-v1
 
 jobs:
   train-and-verify:
