@@ -4,6 +4,7 @@ const THRESHOLD = 0.8
 const MODEL = 'speechbrain/spkrec-ecapa-voxceleb'
 const MODEL_REVISION = 'b8937e0343bf9fc9741ab12b445b86a93a6e3e25'
 const ENGINE_VERSION = 'speechbrain-1.1.0'
+const CLAIM_STALE_AFTER_MS = 30 * 60 * 1000
 const OIDC_ISSUER = 'https://token.actions.githubusercontent.com'
 const OIDC_AUDIENCE = 'pablovoice-signing'
 const OIDC_REPOSITORY = 'ppatrickxxz-dev/STUDIA-VOICE'
@@ -87,6 +88,33 @@ Deno.serve(async (req: Request) => {
       const claims = await verifyGithubOidc(bearer)
       const runId = String(claims.run_id || '')
       if (!runId) return out({ ok: false, error: 'oidc_run_id_missing' }, 403)
+      const staleBefore = new Date(Date.now() - CLAIM_STALE_AFTER_MS).toISOString()
+      const { data: staleJobs, error: se } = await admin.from('render_jobs')
+        .select('id,parameters')
+        .eq('job_type', 'speaker_identity_attestation')
+        .eq('status', 'processing')
+        .eq('current_stage', 'trusted_worker_claimed')
+        .lt('heartbeat_at', staleBefore)
+        .order('heartbeat_at', { ascending: true })
+        .limit(10)
+      if (se) throw se
+      for (const stale of staleJobs || []) {
+        const {
+          trusted_run_id: _trustedRunId,
+          trusted_run_attempt: _trustedRunAttempt,
+          trusted_repository: _trustedRepository,
+          ...retryParameters
+        } = stale.parameters || {}
+        const { error: re } = await admin.from('render_jobs').update({
+          status: 'waiting_trusted_worker',
+          progress: 5,
+          current_stage: 'waiting_trusted_worker',
+          human_message: 'Reagendando validação confiável de identidade vocal',
+          heartbeat_at: new Date().toISOString(),
+          parameters: retryParameters,
+        }).eq('id', stale.id).eq('status', 'processing').eq('current_stage', 'trusted_worker_claimed')
+        if (re) throw re
+      }
       const { data: jobs, error: je } = await admin.from('render_jobs')
         .select('*')
         .eq('job_type', 'speaker_identity_attestation')
@@ -184,11 +212,22 @@ Deno.serve(async (req: Request) => {
         device: String(body.device || 'cpu'),
         raw_embedding_exposed: false,
       }
-      const { error: ae } = await admin.from('analyses').insert({ id: crypto.randomUUID(), project_id: job.project_id, asset_id: p.candidate_asset_id, user_id: job.user_id, analysis_type: 'speaker_identity_attestation_v1', engine: MODEL, engine_version: ENGINE_VERSION, result: proof })
-      if (ae) throw ae
-      const { error: ue } = await admin.from('render_jobs').update({ status: 'completed', progress: 100, current_stage: 'completed', human_message: passed ? 'Identidade vocal preservada' : 'Identidade vocal não comprovada', heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString(), proof, error_message: null, error_code: null, technical_error: null }).eq('id', id)
+      const { data: finalized, error: ue } = await admin.from('render_jobs').update({ status: 'completed', progress: 100, current_stage: 'completed', human_message: passed ? 'Identidade vocal preservada' : 'Identidade vocal não comprovada', heartbeat_at: new Date().toISOString(), finished_at: new Date().toISOString(), proof, error_message: null, error_code: null, technical_error: null })
+        .eq('id', id).eq('status', 'processing').eq('current_stage', 'trusted_worker_claimed').select('id').maybeSingle()
       if (ue) return out({ ok: false, error: 'job_finalization_failed' }, 500)
-      return out({ ok: true, job_id: id, proof: { ...proof, score: Number(score.toFixed(6)) } })
+      if (!finalized) {
+        const { data: current } = await admin.from('render_jobs').select('status,proof').eq('id', id).maybeSingle()
+        if (current?.status === 'completed') return out({ ok: true, already_completed: true, proof: current.proof })
+        return out({ ok: false, error: 'job_not_claimed_or_already_finalized' }, 409)
+      }
+      const { error: ae } = await admin.from('analyses').upsert({ project_id: job.project_id, asset_id: p.candidate_asset_id, user_id: job.user_id, analysis_type: 'speaker_identity_attestation_v1', engine: MODEL, engine_version: ENGINE_VERSION, result: proof }, { onConflict: 'asset_id,analysis_type,engine_version' })
+      return out({
+        ok: true,
+        job_id: id,
+        proof: { ...proof, score: Number(score.toFixed(6)) },
+        analysis_archived: !ae,
+        ...(ae ? { warning: 'analysis_archive_failed' } : {}),
+      })
     }
 
     if (!bearer) return out({ ok: false, error: 'auth_required' }, 401)
@@ -206,7 +245,7 @@ Deno.serve(async (req: Request) => {
       if (!job) return out({ ok: true, job: null, attestation: null })
       const { data: analyses, error: ae } = await admin.from('analyses').select('result,created_at').eq('user_id', user.id).eq('project_id', projectId).eq('analysis_type', 'speaker_identity_attestation_v1').order('created_at', { ascending: false }).limit(1)
       if (ae) throw ae
-      return out({ ok: true, job, attestation: analyses?.[0]?.result || null })
+      return out({ ok: true, job, attestation: job.proof || analyses?.[0]?.result || null })
     }
 
     if (action !== 'dispatch') return out({ ok: false, error: 'unsupported_action' }, 400)
