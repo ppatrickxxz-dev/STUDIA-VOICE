@@ -261,9 +261,18 @@ function reloadIntoStudio() {
 
 function consumeOpenStudioRequest() {
   let shouldOpen = false;
-  try { shouldOpen = sessionStorage.getItem(OPEN_STUDIO_KEY) === '1'; sessionStorage.removeItem(OPEN_STUDIO_KEY); } catch {}
+  try { shouldOpen = sessionStorage.getItem(OPEN_STUDIO_KEY) === '1'; } catch {}
   if (!shouldOpen) return;
-  setTimeout(() => document.querySelector('[data-route="studio"]')?.click(), 0);
+
+  const openWhenReady = () => {
+    if (document.documentElement.dataset.pvReady !== 'true') {
+      requestAnimationFrame(openWhenReady);
+      return;
+    }
+    try { sessionStorage.removeItem(OPEN_STUDIO_KEY); } catch {}
+    document.querySelector('[data-route="studio"]')?.click();
+  };
+  requestAnimationFrame(openWhenReady);
 }
 
 function revokeUrls() { for (const url of runtime.urls) URL.revokeObjectURL(url); runtime.urls = []; }
