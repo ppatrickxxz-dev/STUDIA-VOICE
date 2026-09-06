@@ -7,7 +7,7 @@ SMOKES = ROOT / "results" / "b04-rvc-v71-smokes.json"
 
 EXPECTED = {
     "guide_sha256": "ac5a5e63f5f263f8a083ad7942229cb5cd546f627033a1de61148e355ef40816",
-    "identity_sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+    "identity_sha256": "5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439",
     "pth_sha256": "58f0354124a4a18a0a5bd1f8c74bd95b6147713dcb23b98d9060a5bc63bda56a",
     "index_sha256": "814feab12db225c2e1e0a43a661238dc587a7d1554343ca7223103be16fd930f",
     "compute_sha256": "2969d50b9404b8d5b64eab631d1211d4dec698a3edb86a6ee3956c08db9aeca4",

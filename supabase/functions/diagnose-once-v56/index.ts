@@ -32,7 +32,7 @@ const SPECS: Record<string, {
     role: 'canonical_source',
     storage_path: `${USER_ID}/${PROJECT_ID}/benchmarks/frozen/voz.wav`,
   },
-  '85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95': {
+  '5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439': {
     original_name: 'vocal_provider_input.wav',
     expected_size: 15_335_120,
     sample_rate: 44_100,

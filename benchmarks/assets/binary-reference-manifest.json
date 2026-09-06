@@ -36,7 +36,7 @@
       "asset_id": null,
       "runtime_addressable": false,
       "derived_from_sha256": "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83",
-      "sha256": "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",
+      "sha256": "5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439",
       "size_bytes": 15335120,
       "codec": "pcm_s16le",
       "sample_rate_hz": 44100,
@@ -100,6 +100,6 @@
     "mix_reference_frozen": true,
     "instrumental_reference_frozen": true,
     "acoustic_benchmark_runnable": false,
-    "reason": "Frozen vocal_provider_input SHA-256 85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95 is not currently registered as a runtime-addressable private audio asset. Ingest the exact frozen bytes, verify the SHA-256, then record its asset_id before executing acoustic benchmarks."
+    "reason": "Frozen vocal_provider_input SHA-256 5d02cef6ddb423f95485f2f202dba0c1634ab7a001307743f631f5078a2f1439 is not currently registered as a runtime-addressable private audio asset. Ingest the exact frozen bytes, verify the SHA-256, then record its asset_id before executing acoustic benchmarks."
   }
 }
