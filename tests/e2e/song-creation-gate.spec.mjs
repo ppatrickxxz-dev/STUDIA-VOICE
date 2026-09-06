@@ -78,6 +78,7 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide and expor
 
   await page.locator('[data-song-open-studio]').click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('tab', { name: 'Mixer' }).click();
   await expect(page.getByText('Instrumental · Take 1').first()).toBeVisible();
   await expect(page.getByText('Guia melódica · Take 1').first()).toBeVisible();
 
