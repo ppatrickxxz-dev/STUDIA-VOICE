@@ -10,6 +10,7 @@ const SECTION_ALIASES = Object.freeze({
   'pre refrao': 'pre_chorus',
   prerefrao: 'pre_chorus',
   prechorus: 'pre_chorus',
+  'pre chorus': 'pre_chorus',
   refrao: 'chorus',
   chorus: 'chorus',
   ponte: 'bridge',
@@ -93,6 +94,7 @@ export function upsertConfirmedSection(map, {
     timingStatus: 'confirmed',
     confidence,
   });
+  if (!section) throw new TypeError('Seção musical inválida após normalização.');
   const duplicateIndex = clean.sections.findIndex((item) => item.kind === normalizedKind && Math.abs(item.startSeconds - section.startSeconds) <= 0.25);
   if (duplicateIndex >= 0) clean.sections[duplicateIndex] = section;
   else clean.sections.push(section);
