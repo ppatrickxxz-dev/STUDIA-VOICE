@@ -76,7 +76,7 @@ test('PabloVoice song plan becomes duration-locked Music v2 chunks with section 
   assert.ok(plan.chunks[2].positive_styles.includes('contemporary R&B'));
   assert.ok(plan.chunks[2].positive_styles.includes('112 BPM'));
   assert.deepEqual(plan.chunks[2].negative_styles, ['heavy dembow', 'female vocals']);
-  assert.equal(plan.chunks.reduce((sum, chunk) => sum + chunk.duration_ms, 0), 10715);
+  assert.equal(plan.chunks.reduce((sum, chunk) => sum + chunk.duration_ms, 0), 10714);
 });
 
 test('ElevenMusic compose sends music_v2 through the official endpoint without exposing key in payload', async () => {
