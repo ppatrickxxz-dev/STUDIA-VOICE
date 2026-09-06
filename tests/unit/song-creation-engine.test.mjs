@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSongCreationPlan, renderSongCreation, SONG_CREATION_SCHEMA, describeSongPlan } from '../../packages/app/song-creation-engine.mjs';
+import { createArrangementMap, normalizeSectionKind, upsertConfirmedSection } from '../../packages/core/src/section-map.mjs';
 
 test('plans a structured song with editable guide timing', () => {
   const plan = createSongCreationPlan({ brief: 'R&B pop íntimo', lyrics: 'Eu chego perto\nVocê não foge\nHoje é só nós\nAmanhã a gente vê', genre: 'rnb', bpm: 112, durationSeconds: 60, key: 'A' });
@@ -15,6 +16,21 @@ test('plans a structured song with editable guide timing', () => {
   assert.equal(plan.guideLines[0].text, 'Eu chego perto');
   assert.ok(plan.sections.every((section, index, list) => index === 0 || section.startBeat === list[index - 1].endBeat));
   assert.match(describeSongPlan(plan), /112 BPM/);
+});
+
+test('canonical pre-chorus kind survives section-map normalization and insertion', () => {
+  assert.equal(normalizeSectionKind('pre_chorus'), 'pre_chorus');
+  const map = upsertConfirmedSection(createArrangementMap(1), {
+    kind: 'pre_chorus',
+    startSeconds: 8,
+    endSeconds: 16,
+    source: 'song_creation_runtime_v1',
+    confidence: 1,
+  });
+  assert.equal(map.sections.length, 1);
+  assert.equal(map.sections[0].kind, 'pre_chorus');
+  assert.equal(map.sections[0].startSeconds, 8);
+  assert.equal(map.sections[0].endSeconds, 16);
 });
 
 test('renders non-empty WAV stems with bounded duration', () => {
