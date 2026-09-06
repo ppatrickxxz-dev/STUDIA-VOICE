@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { BENCHMARK_TEST_IDS, PROVIDERS, assertProviderMatrix } from '../../packages/providers/src/registry.mjs';
-import { ElevenMusicClient, buildInpaintingPlan } from '../../services/providers/elevenmusic.mjs';
+import { ElevenMusicClient, buildInpaintingPlan, buildPabloMusicV2Plan } from '../../services/providers/elevenmusic.mjs';
 import { createSunoManualRun, sunoSupportsOfficialAutomation } from '../../services/providers/suno-interactive.mjs';
 
 test('provider registry covers B01-B12 exactly for every provider', () => {
@@ -43,6 +43,40 @@ test('ElevenMusic inpainting plan keeps all unedited ranges as audio references'
     },
     { song_id: 'song_123', range: { start_ms: 5000, end_ms: 10000 } },
   ]);
+});
+
+test('PabloVoice song plan becomes duration-locked Music v2 chunks with section lyrics', () => {
+  const plan = buildPabloMusicV2Plan({
+    plan: {
+      brief: 'Pop R&B noturno, synths suaves e grave redondo',
+      genre: 'rnb',
+      mood: 'íntimo, elegante',
+      bpm: 112,
+      key: 'A',
+      mode: 'minor',
+      sections: [
+        { id: 'intro', label: 'Intro', startBeat: 0, endBeat: 4, startSeconds: 0, endSeconds: 2.143, energy: 0.28 },
+        { id: 'verso_1', label: 'Verso 1', startBeat: 4, endBeat: 12, startSeconds: 2.143, endSeconds: 6.429, energy: 0.52 },
+        { id: 'refrão', label: 'Refrão', startBeat: 12, endBeat: 20, startSeconds: 6.429, endSeconds: 10.714, energy: 0.9 },
+      ],
+      guideLines: [
+        { text: 'Quando a cidade apaga eu vejo você', startBeat: 4 },
+        { text: 'Chega mais perto, deixa acontecer', startBeat: 8 },
+        { text: 'Amanhã a gente vê', startBeat: 13 },
+      ],
+    },
+    negativeStyles: ['heavy dembow', 'female vocals'],
+  });
+
+  assert.equal(plan.chunks.length, 3);
+  assert.equal(plan.chunks[0].text, '[Intro instrumental]');
+  assert.match(plan.chunks[1].text, /Quando a cidade apaga/);
+  assert.match(plan.chunks[2].text, /Amanhã a gente vê/);
+  assert.equal(plan.chunks[2].context_adherence, 'high');
+  assert.ok(plan.chunks[2].positive_styles.includes('contemporary R&B'));
+  assert.ok(plan.chunks[2].positive_styles.includes('112 BPM'));
+  assert.deepEqual(plan.chunks[2].negative_styles, ['heavy dembow', 'female vocals']);
+  assert.equal(plan.chunks.reduce((sum, chunk) => sum + chunk.duration_ms, 0), 10715);
 });
 
 test('ElevenMusic compose sends music_v2 through the official endpoint without exposing key in payload', async () => {
