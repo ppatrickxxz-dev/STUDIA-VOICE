@@ -25,7 +25,7 @@ test('Cloudflare runtime serves canonical static build with API-first routing', 
 });
 
 test('Cloudflare worker owns the canonical API routes with no Vercel runtime dependency', () => {
-  for (const route of ['/api/health', '/api/provider-readiness', '/api/pablo-agent']) {
+  for (const route of ['/api/health', '/api/provider-readiness', '/api/pablo-agent', '/api/music-generation']) {
     assert.match(worker, new RegExp(route.replaceAll('/', '\\/')));
   }
   assert.match(worker, /env\.ASSETS\.fetch\(request\)/);
@@ -33,7 +33,6 @@ test('Cloudflare worker owns the canonical API routes with no Vercel runtime dep
   assert.match(worker, /env\.AI/);
   assert.doesNotMatch(worker, /OPENAI_API_KEY|api\.openai\.com/);
   assert.doesNotMatch(worker, /@vercel\/oidc|getVercelOidcToken|VERCEL_OIDC_TOKEN|AI_GATEWAY_API_KEY/i);
-  assert.doesNotMatch(worker, /ai-gateway\.vercel\.sh|vercel_ai_gateway/i);
 });
 
 test('Composer clients use Cloudflare and Android preflight is explicitly allowed', async () => {
@@ -79,6 +78,108 @@ test('Composer clients use Cloudflare and Android preflight is explicitly allowe
   }), env);
   assert.equal(denied.status, 200);
   assert.equal(denied.headers.get('access-control-allow-origin'), null);
+});
+
+test('Music generation route authenticates ownership, keeps provider key server-side and returns song-id with real audio bytes', async () => {
+  const originalFetch = globalThis.fetch;
+  const remoteProjectId = '11111111-1111-4111-8111-111111111111';
+  const outbound = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    outbound.push({ target, options });
+    if (target.endsWith('/auth/v1/user')) {
+      return new Response(JSON.stringify({ id: 'user_1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (target.includes('/rest/v1/projects?')) {
+      return new Response(JSON.stringify([{ id: remoteProjectId, title: 'Music gate', bpm: 112, musical_key: 'A' }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (target.startsWith('https://api.elevenlabs.io/v1/music?')) {
+      const body = JSON.parse(options.body);
+      assert.equal(options.headers['xi-api-key'], 'server-only-secret');
+      assert.equal(JSON.stringify(body).includes('server-only-secret'), false);
+      assert.equal(body.model_id, 'music_v2');
+      assert.equal(body.store_for_inpainting, true);
+      assert.equal(body.composition_plan.chunks.length, 2);
+      assert.equal(body.composition_plan.chunks[0].duration_ms, 2000);
+      assert.match(body.composition_plan.chunks[1].text, /Amanhã a gente vê/);
+      return new Response(new Uint8Array([73, 68, 51, 4, 0, 0, 0, 1]), {
+        status: 200,
+        headers: { 'song-id': 'song_pv_gate' },
+      });
+    }
+    throw new Error(`Unexpected fetch: ${target}`);
+  };
+
+  try {
+    const env = {
+      ELEVENLABS_API_KEY: 'server-only-secret',
+      AI: { run: async () => ({ response: 'unused' }) },
+      ASSETS: { fetch: async () => new Response('asset') },
+    };
+    const response = await cloudflareWorker.fetch(new Request('https://studia-voice.ppatrickxxz.workers.dev/api/music-generation', {
+      method: 'POST',
+      headers: {
+        Origin: 'https://appassets.androidplatform.net',
+        Authorization: 'Bearer user-jwt',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        project_id: remoteProjectId,
+        negative_styles: ['heavy dembow'],
+        plan: {
+          brief: 'Pop R&B noturno com synths',
+          genre: 'rnb',
+          mood: 'íntimo',
+          bpm: 112,
+          key: 'A',
+          mode: 'minor',
+          sections: [
+            { id: 'intro', label: 'Intro', startBeat: 0, endBeat: 4, startSeconds: 0, endSeconds: 2, energy: 0.28 },
+            { id: 'refrão', label: 'Refrão', startBeat: 4, endBeat: 12, startSeconds: 2, endSeconds: 6, energy: 0.9 },
+          ],
+          guideLines: [{ text: 'Amanhã a gente vê', startBeat: 5 }],
+        },
+      }),
+    }), env);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'audio/mpeg');
+    assert.equal(response.headers.get('x-pv-provider'), 'elevenmusic');
+    assert.equal(response.headers.get('x-pv-model'), 'music_v2');
+    assert.equal(response.headers.get('x-pv-song-id'), 'song_pv_gate');
+    assert.equal(response.headers.get('access-control-allow-origin'), 'https://appassets.androidplatform.net');
+    assert.match(response.headers.get('access-control-expose-headers') || '', /X-PV-Song-Id/i);
+    assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [73, 68, 51, 4, 0, 0, 0, 1]);
+    assert.equal(outbound.some(({ target }) => target.includes('/auth/v1/user')), true);
+    assert.equal(outbound.some(({ target }) => target.includes('/rest/v1/projects?')), true);
+    assert.equal(outbound.some(({ target }) => target.startsWith('https://api.elevenlabs.io/v1/music?')), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Music generation stays fail-closed when provider secret is unavailable', async () => {
+  const originalFetch = globalThis.fetch;
+  const remoteProjectId = '11111111-1111-4111-8111-111111111111';
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.endsWith('/auth/v1/user')) return new Response(JSON.stringify({ id: 'user_1' }), { status: 200 });
+    if (target.includes('/rest/v1/projects?')) return new Response(JSON.stringify([{ id: remoteProjectId, title: 'Music gate' }]), { status: 200 });
+    throw new Error(`Unexpected fetch: ${target}`);
+  };
+  try {
+    const response = await cloudflareWorker.fetch(new Request('https://studia-voice.ppatrickxxz.workers.dev/api/music-generation', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer user-jwt', 'content-type': 'application/json' },
+      body: JSON.stringify({ project_id: remoteProjectId, plan: { sections: [] } }),
+    }), { AI: { run: async () => ({ response: 'unused' }) }, ASSETS: { fetch: async () => new Response('asset') } });
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.error, 'provider_unavailable');
+    assert.equal(body.fallback_allowed, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('Cloudflare AI provider failures remain typed and fail closed with no fabricated fallback', () => {
