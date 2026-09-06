@@ -59,6 +59,7 @@ try {
   const { installPabloSectionMixABAdapter } = await import('./pablo-section-mix-ab-adapter.mjs');
   const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
   const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
+  const { installSongCreationStudio } = await import('./song-creation-studio.mjs');
   const { installAcousticEvidenceStatusUI } = await import('./acoustic-evidence-status-ui.mjs');
   const { installVoiceIdentityReferenceUI } = await import('./voice-identity-reference-ui.mjs');
   const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
@@ -92,6 +93,7 @@ try {
   installPabloSectionMixABAdapter();
   installBreathReviewUI();
   installAdvancedAIStudio();
+  installSongCreationStudio();
   installAcousticEvidenceStatusUI();
   installVoiceIdentityReferenceUI();
   installRuntimeCapabilityStatus();
