@@ -55,9 +55,11 @@ test('release vocal input is immutable and the rejected re-freeze cannot return'
     assert.equal(source.includes(FROZEN_PROVIDER_SHA), true, `${path} lost frozen provider SHA`);
   }
   const manifest = JSON.parse(read('benchmarks/assets/binary-reference-manifest.json'));
-  assert.equal(manifest.shared_vocal.provider_input.sha256, FROZEN_PROVIDER_SHA);
-  assert.equal(manifest.shared_vocal.provider_input.derived_from_sha256, CANONICAL_SOURCE_SHA);
-  assert.equal(Number(manifest.shared_vocal.provider_input.size_bytes), FROZEN_PROVIDER_SIZE);
+  const providerInput = manifest?.assets?.vocal_provider_input;
+  assert.ok(providerInput, 'binary manifest lost assets.vocal_provider_input');
+  assert.equal(providerInput.sha256, FROZEN_PROVIDER_SHA);
+  assert.equal(providerInput.derived_from_sha256, CANONICAL_SOURCE_SHA);
+  assert.equal(Number(providerInput.size_bytes), FROZEN_PROVIDER_SIZE);
 });
 
 test('current user-facing Edge Function sources are reconstructible from Git', () => {
