@@ -102,7 +102,17 @@ export function musicalExecutionFingerprint(project = {}, plan = {}) {
   } else if (executor === 'music_generation') {
     state = {
       arrangementMap: project.arrangementMap || null,
-      tracks: (project.tracks || []).map(({ id, assetId, duration, offset, trimStart, trimEnd }) => ({ id, assetId, duration, offset, trimStart, trimEnd })),
+      tracks: (project.tracks || []).map(({ id, assetId, duration, offset, trimStart, trimEnd, providerSongId }) => ({ id, assetId, duration, offset, trimStart, trimEnd, providerSongId: providerSongId || null })),
+      songCreation: {
+        latestTakeId: project.songCreation?.latestTakeId || null,
+        takes: (project.songCreation?.takes || []).map(({ id, providerSongId, referenceTrackId, durationSeconds, derivedFromTakeId }) => ({
+          id,
+          providerSongId: providerSongId || null,
+          referenceTrackId: referenceTrackId || null,
+          durationSeconds: Number(durationSeconds) || null,
+          derivedFromTakeId: derivedFromTakeId || null,
+        })),
+      },
     };
   } else if (executor === 'version_history') {
     state = (project.revisions || []).map(({ id, at, label }) => ({ id, at, label }));
@@ -141,7 +151,7 @@ export function humanizeMusicalReviewError(reason = '') {
   const messages = {
     project_required: 'Crie ou abra um projeto primeiro.',
     project_changed: 'O projeto ativo mudou desde a análise. Faça o pedido novamente para eu recalcular com o estado atual.',
-    musical_state_drift: 'O instrumento ou beat mudou desde a análise. Recalculei como necessário e não apliquei um plano antigo.',
+    musical_state_drift: 'O estado musical mudou desde a análise. Não apliquei um plano antigo; faça o pedido novamente sobre a versão atual.',
     music_intelligence_unavailable: 'A inteligência musical local não está disponível nesta versão.',
     musical_intent_plan_unavailable: 'Esse pedido não terminou em um plano instrumental aplicável.',
     musical_execution_compile_failed: 'Não consegui compilar esse pedido para um executor seguro.',
