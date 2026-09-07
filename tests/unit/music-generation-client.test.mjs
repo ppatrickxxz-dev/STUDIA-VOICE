@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MusicGenerationClient, resolveMusicGenerationUrl } from '../../packages/app/music-generation-client.mjs';
 
-test('music generation URL follows the same Cloudflare runtime as the Composer agent', () => {
+test('music generation URL follows preview runtime and uses canonical runtime from local Creator', () => {
   assert.equal(
     resolveMusicGenerationUrl('https://preview-studia-voice.ppatrickxxz.workers.dev/api/pablo-agent'),
     'https://preview-studia-voice.ppatrickxxz.workers.dev/api/music-generation',
   );
-  assert.equal(resolveMusicGenerationUrl(''), '');
+  assert.equal(
+    resolveMusicGenerationUrl(''),
+    'https://studia-voice.ppatrickxxz.workers.dev/api/music-generation',
+  );
 });
 
 test('high-quality generation links project, authenticates and returns provider audio metadata', async () => {
