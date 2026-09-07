@@ -3,7 +3,7 @@ import { resolveNativeMusicResult, waitForNativeMusic } from './native-music-res
 
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
-const DISPATCH_ENDPOINT = `${PROJECT_URL}/functions/v1/compute-kaggle-music`;
+const DISPATCH_ENDPOINT = `${PROJECT_URL}/functions/v1/compute-kaggle-v58`;
 export const NATIVE_MUSIC_GENERATION_SCHEMA = 'pablovoice_native_music_generation_v1';
 
 function headers(token) {
