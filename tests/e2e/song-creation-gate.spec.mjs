@@ -29,6 +29,8 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide, PMI evid
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
   await form.locator('input[name="brief"]').fill('Pop R&B noturno, synths suaves, grave redondo e refrão aberto');
+  const advanced = form.locator('.pv-creator-advanced');
+  if (await advanced.count()) await advanced.locator('summary').click();
   await form.locator('select[name="genre"]').selectOption('rnb');
   await form.locator('input[name="bpm"]').fill('112');
   await form.locator('select[name="duration"]').selectOption('60');
