@@ -95,17 +95,13 @@ function compileBeat(route, project) {
   }
 
   const deltas = route.payload?.deltas || {};
-  const amount = clamp(Math.max(positive(deltas.humanize), positive(deltas.syncopation) * 0.75), 0, 0.65);
-  const handled = [];
-  if (amount > 0) {
-    if (positive(deltas.humanize) > 0) handled.push('humanize');
-    if (positive(deltas.syncopation) > 0) handled.push('syncopation');
-  }
+  const humanize = positive(deltas.humanize);
+  const handled = humanize > 0 ? ['humanize'] : [];
   const unhandled = Object.entries(deltas)
     .filter(([key, value]) => Number(value) !== 0 && !handled.includes(key))
     .map(([key]) => key);
 
-  if (amount === 0) {
+  if (humanize === 0) {
     return blocked(route, 'beat_local_delta_unavailable', {
       executor: 'beat_lab',
       fallback: route.fallback || ['music_generation'],
@@ -116,7 +112,7 @@ function compileBeat(route, project) {
   return ready(route, {
     executor: 'beat_lab',
     action: 'humanize',
-    args: { amount },
+    args: { amount: clamp(humanize, 0, 0.65) },
     partial: unhandled.length > 0,
     unhandledDeltas: unhandled,
     fallback: unhandled.length ? (route.fallback || ['music_generation']) : [],
