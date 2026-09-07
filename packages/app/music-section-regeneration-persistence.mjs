@@ -1,6 +1,7 @@
-import { createId, createTrack, snapshotProject } from './core/src/project.mjs';
 import { saveAudioAsset, saveProject } from './storage.mjs';
 import { MUSIC_SECTION_REGEN_SCHEMA } from './music-section-regeneration.mjs';
+
+let projectCorePromise = null;
 
 export async function persistSectionRegeneration(project, plan, result, {
   saveAudio = saveAudioAsset,
@@ -10,6 +11,7 @@ export async function persistSectionRegeneration(project, plan, result, {
   if (!plan?.ok || !plan?.section?.id) throw new TypeError('Plano de regeneração por seção inválido.');
   if (!result?.ok || !(result.blob instanceof Blob) || result.blob.size <= 0) throw new TypeError('Áudio regenerado inválido.');
 
+  const { createId, createTrack, snapshotProject } = await loadProjectCore();
   const sourceTake = (project.songCreation?.takes || []).find((take) => take.id === plan.sourceTakeId);
   if (!sourceTake) throw new Error('Take de origem não encontrado. Nenhuma versão foi salva.');
 
@@ -95,4 +97,25 @@ export async function persistSectionRegeneration(project, plan, result, {
     takeNumber,
     assetId,
   });
+}
+
+async function loadProjectCore() {
+  if (!projectCorePromise) {
+    projectCorePromise = (async () => {
+      for (const specifier of ['./core/src/project.mjs', '../core/src/project.mjs']) {
+        try {
+          const module = await import(specifier);
+          if (
+            typeof module.createId === 'function'
+            && typeof module.createTrack === 'function'
+            && typeof module.snapshotProject === 'function'
+          ) return module;
+        } catch {
+          // The packaged app and source-level tests expose Project Core at different relative paths.
+        }
+      }
+      throw new Error('project_core_unavailable');
+    })();
+  }
+  return projectCorePromise;
 }
