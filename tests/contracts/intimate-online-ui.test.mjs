@@ -67,3 +67,12 @@ test('Provider names remain implementation metadata, not intimate product UI lab
   const ui = await read('packages/app/pablovoice-intimate-ui.mjs');
   assert.doesNotMatch(ui, /ElevenLabs|Eleven Music|Music v2|\bSuno\b/i);
 });
+
+test('Section editing observers are idempotent and do not self-trigger by replacing readiness on every sync', async () => {
+  const ui = await read('packages/app/music-section-regeneration-ui.mjs');
+  assert.match(ui, /let readiness = list\.querySelector\('\[data-music-regen-readiness\]'\)/);
+  assert.match(ui, /if \(!readiness\)/);
+  assert.match(ui, /node\.textContent !== text/);
+  assert.doesNotMatch(ui, /querySelector\('\[data-music-regen-readiness\]'\)\?\.remove\(\)/);
+  assert.match(ui, /modal !== document\.querySelector\('\[data-section-map-modal\]'\)/);
+});
