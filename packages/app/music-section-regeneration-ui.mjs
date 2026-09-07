@@ -1,12 +1,11 @@
-import { MusicGenerationClient } from './music-generation-client.mjs';
 import { latestInpaintableSongTake, resolveSectionRegeneration } from './music-section-regeneration.mjs';
 import { persistSectionRegeneration } from './music-section-regeneration-persistence.mjs';
+import { executeSectionRegenerationRuntime } from './section-regeneration-runtime.mjs';
 import { activeProjectSessionId, getProject, listProjects } from './storage.mjs';
 
 const OPEN_STUDIO_KEY = 'pablovoice.songCreation.openStudio';
 const runtime = {
   observer: null,
-  client: null,
   project: null,
   selectedSectionId: null,
   busy: false,
@@ -66,10 +65,7 @@ async function syncSectionActions() {
     list.prepend(readiness);
   }
   readiness.classList.toggle('ready', Boolean(sourceTake));
-  setText(
-    readiness.querySelector('strong'),
-    sourceTake ? '〰 Edição por seção pronta' : 'Edição por seção',
-  );
+  setText(readiness.querySelector('strong'), sourceTake ? '〰 Edição por seção pronta' : 'Edição por seção');
   setText(
     readiness.querySelector('span'),
     sourceTake
@@ -122,7 +118,7 @@ function renderRegenerationPanel(plan) {
   const seconds = Math.max(0, (plan.section.endMs - plan.section.startMs) / 1000);
   panel.innerHTML = `
     <div class="pv-music-regen-head">
-      <div><small>〰 WAVE · EDIÇÃO SELETIVA</small><h3>Refazer só ${escapeHtml(plan.section.label)}</h3><p>${formatMs(plan.section.startMs)} → ${formatMs(plan.section.endMs)} · ${seconds.toFixed(1)}s. O restante da música é referenciado pelo take original.</p></div>
+      <div><small>〰 WAVE · EDIÇÃO SELETIVA</small><h3>Refazer só ${escapeHtml(plan.section.label)}</h3><p>${formatMs(plan.section.startMs)} → ${formatMs(plan.section.endMs)} · ${seconds.toFixed(1)}s. O restante da música permanece no take de origem.</p></div>
       <button class="pv-btn" type="button" data-music-regen-close>Cancelar</button>
     </div>
     <form data-music-regen-form class="pv-music-regen-form">
@@ -169,12 +165,12 @@ async function onSubmit(event) {
     });
     if (!plan.ok) throw new Error(humanPlanError(plan.error));
 
-    setText(status, `Refazendo apenas ${plan.section.label}; restante referenciado pelo take anterior…`);
-    const result = await client().regenerateSection({
-      localProject: project,
-      sourceSongId: plan.sourceSongId,
-      durationMs: plan.durationMs,
-      section: plan.section,
+    setText(status, `Refazendo apenas ${plan.section.label}; o restante fica preservado…`);
+    const result = await executeSectionRegenerationRuntime(project, plan, {
+      onProgress: (current) => {
+        const progress = Math.max(0, Math.min(100, Number(current?.progress) || 0));
+        setText(status, `${current?.human_message || 'Processando a seção'}${progress ? ` · ${progress}%` : ''}`);
+      },
     });
     if (!result?.ok) throw new Error(humanRuntimeError(result));
 
@@ -202,11 +198,6 @@ document.addEventListener('click', (event) => {
   document.querySelector('[data-music-regen-panel]')?.remove();
 }, true);
 
-function client() {
-  if (!runtime.client) runtime.client = new MusicGenerationClient();
-  return runtime.client;
-}
-
 async function currentProject() {
   const id = activeProjectSessionId();
   if (id) {
@@ -225,10 +216,11 @@ function humanPlanError(error) {
 
 function humanRuntimeError(result = {}) {
   if (result.error === 'auth_required') return 'Reconheça este aparelho para usar a edição conectada. O take atual foi preservado.';
-  if (result.error === 'provider_unavailable') return 'A produção conectada não está disponível agora. O take atual foi preservado.';
+  if (result.error === 'provider_unavailable' || result.error === 'music_job_timeout') return 'A produção conectada não está disponível agora. O take atual foi preservado.';
   if (result.error === 'provider_rate_limited') return 'A produção conectada atingiu o limite temporário. Tente novamente depois; nada foi substituído.';
   if (result.error === 'provider_auth_failed') return 'A credencial da produção conectada precisa ser corrigida no backend. Nada foi substituído.';
-  if (result.error === 'invalid_inpainting_plan') return 'O intervalo selecionado não pôde ser enviado com segurança para edição.';
+  if (result.error === 'invalid_inpainting_plan' || result.error === 'invalid_repaint_range') return 'O intervalo selecionado não pôde ser enviado com segurança para edição.';
+  if (/repaint_.*preservation|outside/i.test(String(result.error || ''))) return 'A nova seção não preservou o restante com segurança, então ela foi rejeitada. O take anterior continua intacto.';
   return `A edição não concluiu (${result.error || 'erro remoto'}). O take anterior continua intacto.`;
 }
 
