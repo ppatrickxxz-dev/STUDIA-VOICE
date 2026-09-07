@@ -48,15 +48,40 @@ test('INTIMATE ONLINE UI GATE: canonical Pablo is alive, companions work and net
   await expect(form.locator('.pv-local-fallback-card')).toBeHidden();
   await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
   await expect(form.locator('.pv-intimate-advanced')).not.toHaveAttribute('open', '');
+  await expect(form.getByText('Rascunho local', { exact: true })).toBeHidden();
+  await expect(form.getByText('Alta qualidade · IA', { exact: true })).toBeHidden();
+
   await form.locator('input[name="brief"]').fill('R&B 2000s sensual, menos batestaca, baixo mais solto e refrão abrindo');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('refrão localizado');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('baixo');
+
+  // Production detail stays progressive, but supports a full 3:20 song instead
+  // of exposing draft/demo language as the product architecture.
+  await form.locator('.pv-intimate-advanced > summary').click();
+  await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20 · completa');
+  await expect(form.locator('select[name="duration"] option[value="60"]')).toHaveText('1:00 · curta');
+  await expect(form.locator('select[name="duration"] option[value="120"]')).toHaveText('2:00 · média');
   await shot(page, 'creator-online-desktop');
 
   // Instrumental is a creative goal, not a separate app/mode architecture.
   await form.locator('[data-pv-kind="instrumental"]').click();
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
-  await expect(form.locator('[data-song-create-hq]')).toContainText('Produzir instrumental');
+  const connectedButton = form.locator('[data-song-create-hq]');
+  await expect(connectedButton).toContainText('Produzir instrumental');
+
+  // Busy state may never fall back to the old technical HQ wording or look idle.
+  await connectedButton.evaluate((button) => {
+    button.disabled = true;
+    button.textContent = 'Gerando demo HQ…';
+  });
+  await expect(connectedButton).toHaveClass(/busy/);
+  await expect(connectedButton).toHaveText('● Produzindo instrumental…');
+  await connectedButton.evaluate((button) => {
+    button.disabled = false;
+    button.textContent = '✦ Criar demo HQ';
+  });
+  await expect(connectedButton).not.toHaveClass(/busy/);
+  await expect(connectedButton).toContainText('Produzir instrumental');
 
   // Network loss changes the same Creator to the local engine automatically.
   await context.setOffline(true);
