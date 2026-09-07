@@ -110,7 +110,17 @@ function decorateHome() {
 
 function decorateCreator() {
   const creator = document.querySelector('#pv-song-creator');
-  if (!creator || creator.dataset.canon === 'true') return;
+  if (!creator) return;
+
+  // Music creation is the primary action of Compor. Keep it immediately after
+  // the lyric/analysis grid instead of allowing provider/activation panels to
+  // push the Creator below secondary tools.
+  const lyricsGrid = document.querySelector('#lyrics')?.closest('.pv-grid');
+  if (lyricsGrid && creator.previousElementSibling !== lyricsGrid) {
+    lyricsGrid.insertAdjacentElement('afterend', creator);
+  }
+
+  if (creator.dataset.canon === 'true') return;
   creator.dataset.canon = 'true';
   creator.classList.add('pv-canon-creator');
   const head = document.createElement('div');
