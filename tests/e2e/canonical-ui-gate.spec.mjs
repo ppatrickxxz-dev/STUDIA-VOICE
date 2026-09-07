@@ -19,6 +19,7 @@ test('CANONICAL UI GATE: PabloVoice stays canonical and creator-first', async ({
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
 
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('html')).toHaveAttribute('data-pv-ui-canon', 'retro-tape-onyx-galaxy-v1');
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-ux', 'creator-first-v2');
@@ -66,13 +67,14 @@ test('CANONICAL UI GATE: PabloVoice stays canonical and creator-first', async ({
   await expect(creator.locator('#pv-ai-composer')).toHaveCount(1);
   await expect(page.locator('#pv-remote-pairing')).toHaveCount(1);
   await expect(page.locator('#pv-remote-pairing')).toBeHidden();
+  await screenshot(page, 'creator-clean-desktop');
 
   // Activation is demand-driven: asking for full production reveals it, but it
   // does not occupy the creation flow before the user requests an online action.
   await creator.locator('[data-song-create-hq]').click();
   await expect(page.locator('#pv-remote-pairing')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Ativar criação completa' })).toBeVisible();
-  await screenshot(page, 'creator-desktop');
+  await screenshot(page, 'creator-activation-desktop');
 
   const visibleText = await page.locator('body').innerText();
   expect(visibleText).not.toMatch(/ElevenLabs|Eleven Music|Music v2|\bSuno\b/i);
@@ -83,6 +85,14 @@ test('CANONICAL UI GATE: PabloVoice stays canonical and creator-first', async ({
   await expectImageLoaded(page.locator('.pv-canon-pablo').first());
   const mobileNavDirection = await page.locator('.pv-nav').evaluate((nav) => getComputedStyle(nav).flexDirection);
   expect(mobileNavDirection).not.toBe('column');
+
+  // Mobile keeps the musical action card ahead of the large Pablo card.
+  const mobileOrder = await page.evaluate(() => {
+    const primary = document.querySelector('.pv-product-home-primary')?.getBoundingClientRect();
+    const pabloCard = document.querySelector('.pv-home-grid > .companion-card')?.getBoundingClientRect();
+    return primary && pabloCard ? primary.top < pabloCard.top : false;
+  });
+  expect(mobileOrder).toBe(true);
   await screenshot(page, 'home-mobile');
 
   const unexpected = errors.filter((message) =>
