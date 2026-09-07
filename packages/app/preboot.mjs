@@ -37,6 +37,7 @@ try {
   installAudioPlaybackRecovery();
   await import('./app.js');
   const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
+  const { installPabloMusicalPlanUI } = await import('./pablo-musical-plan-ui.mjs');
   const { installPabloSectionHereAdapter } = await import('./pablo-section-here-adapter.mjs');
   const { installPabloSectionAuditionAdapter } = await import('./pablo-section-audition-adapter.mjs');
   const { installPabloSectionVocalGainAdapter } = await import('./pablo-section-vocal-gain-adapter.mjs');
@@ -72,6 +73,7 @@ try {
   const { installSectionMapUI } = await import('./section-map-ui.mjs');
   const { installMusicSectionRegenerationUI } = await import('./music-section-regeneration-ui.mjs');
   installPabloConversationUI();
+  installPabloMusicalPlanUI();
   installPabloSectionHereAdapter();
   installPabloSectionAuditionAdapter();
   installPabloSectionVocalGainAdapter();
