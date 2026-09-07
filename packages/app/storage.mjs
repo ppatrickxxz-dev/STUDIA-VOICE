@@ -1,10 +1,10 @@
-import { migrateProject } from './core/src/project.mjs';
 import { sortProjectsByContext } from './project-context.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
 const DB_VERSION = 3;
 const ACTIVE_PROJECT_SESSION_KEY = 'pablovoice.activeProjectId';
 let openPromise;
+let projectCorePromise;
 
 export function openDatabase() {
   if (openPromise) return openPromise;
@@ -37,7 +37,7 @@ export function activeProjectSessionId() {
 export { sortProjectsByContext } from './project-context.mjs';
 
 export async function saveProject(project) {
-  const clean = migrateProject(project);
+  const clean = await migrateProjectRuntime(project);
   await put('projects', clean);
   return clean;
 }
@@ -45,7 +45,7 @@ export async function saveProject(project) {
 export async function getProject(id) {
   const raw = await get('projects', id);
   if (!raw) return null;
-  const project = migrateProject(raw);
+  const project = await migrateProjectRuntime(raw);
   if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
   if (raw.settings) project.legacySettings = raw.settings;
   return project;
@@ -54,12 +54,12 @@ export async function getProject(id) {
 export async function listProjects() {
   const values = await all('projects');
   const activeId = activeProjectSessionId();
-  const projects = values.map((raw) => {
-    const project = migrateProject(raw);
+  const projects = await Promise.all(values.map(async (raw) => {
+    const project = await migrateProjectRuntime(raw);
     if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
     if (raw.settings) project.legacySettings = raw.settings;
     return project;
-  });
+  }));
   return sortProjectsByContext(projects, activeId);
 }
 
@@ -99,6 +99,28 @@ export async function getSetting(key, fallback = null) {
 
 export async function deleteSetting(key) {
   await remove('settings', key);
+}
+
+async function migrateProjectRuntime(project) {
+  const { migrateProject } = await loadProjectCore();
+  return migrateProject(project);
+}
+
+async function loadProjectCore() {
+  if (!projectCorePromise) {
+    projectCorePromise = (async () => {
+      for (const specifier of ['./core/src/project.mjs', '../core/src/project.mjs']) {
+        try {
+          const module = await import(specifier);
+          if (typeof module.migrateProject === 'function') return module;
+        } catch {
+          // The packaged app and source-level tests expose Project Core at different relative paths.
+        }
+      }
+      throw new Error('project_core_unavailable');
+    })();
+  }
+  return projectCorePromise;
 }
 
 async function put(store, value) {
