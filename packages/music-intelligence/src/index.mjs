@@ -27,8 +27,8 @@ export {
   startCompositionSession,
   critiqueDraft,
   isMusicCreationRequest,
-  respondToMusicCreation,
 } from './session-engine.mjs';
+export { respondToMusicCreation } from './conversation-router.mjs';
 export {
   MUSICAL_INTENT_SCHEMA,
   interpretMusicalIntent,
