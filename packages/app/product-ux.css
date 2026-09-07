@@ -76,6 +76,8 @@ html[data-pv-product-ux="creator-first-v2"] .pv-product-diagnostics-hidden { dis
 }
 
 @media (max-width: 760px) {
+  .pv-product-home-primary { order: -2; }
+  .pv-home-grid > .companion-card { order: -1; }
   .pv-context-companion { max-width: none; grid-template-columns: 82px 1fr; margin-top: 14px; }
   .pv-product-companions .pv-canon-companion-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 5px; }
   .pv-product-companions .pv-canon-companion-grid > div { min-width: 145px; scroll-snap-align: start; }
@@ -98,7 +100,7 @@ html[data-pv-product-ux="creator-first-v2"] .pv-product-diagnostics-hidden { dis
   .pv-product-companions { margin-top: 10px; }
   .pv-product-companions .pv-card-head p { max-width: 250px; }
   .pv-product-main-prompt .pv-field { min-height: 50px; }
-  .pv-creator-advanced > summary { align-items: flex-start; flex-direction: column; justify-content: center; gap: 2px; }
+  .pv-creator-advanced > summary { position: relative; align-items: flex-start; flex-direction: column; justify-content: center; gap: 2px; }
   .pv-creator-advanced > summary::after { position: absolute; right: 14px; }
   .pv-creator-pablo-assistant > summary { grid-template-columns: auto 1fr auto; }
 }
