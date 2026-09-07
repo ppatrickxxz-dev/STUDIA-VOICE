@@ -29,12 +29,14 @@ test('CANONICAL UI GATE: PabloVoice stays canonical and creator-first', async ({
   await expect(pablo).toHaveAttribute('src', '/site/assets/pablo_fullbody.webp');
   await expectImageLoaded(pablo);
 
-  const board = page.locator('[data-canon-companions] img');
+  const shelf = page.locator('[data-canon-companions]');
+  const board = shelf.locator('img');
   await expect(board).toHaveAttribute('src', '/site/assets/companions_board.webp');
   await expectImageLoaded(board, { visible: false });
-  for (const name of companionNames) await expect(page.getByText(name, { exact: true })).toBeVisible();
+  const companionGrid = shelf.locator('.pv-canon-companion-grid');
+  for (const name of companionNames) await expect(companionGrid.getByText(name, { exact: true })).toBeVisible();
   await expect(page.getByText('Ferramentas desta versão')).toBeHidden();
-  await expect(page.getByText('Star Spark', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('[data-product-context-companion]').getByText('Star Spark', { exact: true })).toBeVisible();
 
   const desktopNavDirection = await page.locator('.pv-nav').evaluate((nav) => getComputedStyle(nav).flexDirection);
   expect(desktopNavDirection).toBe('column');
