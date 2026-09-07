@@ -1,5 +1,5 @@
 import { healthPayload } from '../services/api/health.mjs';
-import { ElevenMusicClient, buildPabloMusicV2Plan } from '../services/providers/elevenmusic.mjs';
+import { ElevenMusicClient, buildInpaintingPlan, buildPabloMusicV2Plan } from '../services/providers/elevenmusic.mjs';
 
 const SUPABASE_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
@@ -297,6 +297,61 @@ async function musicGeneration(request, env) {
     return json({ ok: false, error: 'invalid_music_plan', request_id: id, detail: String(error?.message || '').slice(0, 240) }, 400, cors);
   }
 
+  return executeMusicPlan({ request, env, cors, id, compositionPlan, route: 'music_generation' });
+}
+
+async function musicRegeneration(request, env) {
+  const cors = corsHeaders(request);
+  const configured = Boolean(env.ELEVENLABS_API_KEY);
+
+  if (request.method === 'GET') {
+    return json({
+      ok: true,
+      service: 'pablovoice-music-regeneration',
+      configured,
+      provider: MUSIC_PROVIDER,
+      model: MUSIC_MODEL,
+      credential_exposed: false,
+      auth_for_generation: 'required',
+      requires_song_id: true,
+      preserves_unselected_ranges: true,
+    }, 200, cors);
+  }
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405, cors);
+
+  const id = requestId();
+  const jwt = bearer(request);
+  const user = await authenticatedUser(jwt).catch(() => null);
+  if (!user) return json({ ok: false, error: 'auth_required', request_id: id }, 401, cors);
+
+  const body = await request.json().catch(() => ({}));
+  const project = await ownedProject(jwt, String(body.project_id || '')).catch(() => null);
+  if (!project) return json({ ok: false, error: 'project_not_found', request_id: id }, 404, cors);
+  if (!configured) return json({ ok: false, error: 'provider_unavailable', request_id: id, fallback_allowed: false }, 503, cors);
+
+  const section = body.section || {};
+  let compositionPlan;
+  try {
+    compositionPlan = buildInpaintingPlan({
+      songId: String(body.source_song_id || '').trim(),
+      durationMs: Number(body.duration_ms),
+      replacements: [{
+        startMs: Number(section.start_ms),
+        endMs: Number(section.end_ms),
+        text: String(section.text || '').trim().slice(0, 12000),
+        positiveStyles: Array.isArray(section.positive_styles) ? section.positive_styles.slice(0, 12) : [],
+        negativeStyles: Array.isArray(section.negative_styles) ? section.negative_styles.slice(0, 12) : [],
+        contextAdherence: section.context_adherence === 'low' ? 'low' : section.context_adherence === 'medium' ? 'medium' : 'high',
+      }],
+    });
+  } catch (error) {
+    return json({ ok: false, error: 'invalid_inpainting_plan', request_id: id, detail: String(error?.message || '').slice(0, 240) }, 400, cors);
+  }
+
+  return executeMusicPlan({ request, env, cors, id, compositionPlan, route: 'music_regeneration' });
+}
+
+async function executeMusicPlan({ request, env, cors, id, compositionPlan, route }) {
   const started = Date.now();
   try {
     const client = new ElevenMusicClient({ apiKey: env.ELEVENLABS_API_KEY, fetchImpl: fetch });
@@ -309,7 +364,7 @@ async function musicGeneration(request, env) {
       throw new Error('provider_empty_audio');
     }
     const latencyMs = Date.now() - started;
-    safeLog({ request_id: id, route: 'music_generation', provider: MUSIC_PROVIDER, model: MUSIC_MODEL, status: 200, latency_ms: latencyMs, song_id_present: Boolean(result.songId) });
+    safeLog({ request_id: id, route, provider: MUSIC_PROVIDER, model: MUSIC_MODEL, status: 200, latency_ms: latencyMs, song_id_present: Boolean(result.songId) });
     return new Response(result.audio, {
       status: 200,
       headers: {
@@ -326,7 +381,7 @@ async function musicGeneration(request, env) {
   } catch (error) {
     const latencyMs = Date.now() - started;
     const classified = elevenMusicError(error);
-    safeLog({ request_id: id, route: 'music_generation', provider: MUSIC_PROVIDER, model: MUSIC_MODEL, status: 'error', latency_ms: latencyMs, error_type: classified.error });
+    safeLog({ request_id: id, route, provider: MUSIC_PROVIDER, model: MUSIC_MODEL, status: 'error', latency_ms: latencyMs, error_type: classified.error });
     return json({ ok: false, error: classified.error, request_id: id, latency_ms: latencyMs, fallback_allowed: false }, classified.httpStatus, cors);
   }
 }
@@ -356,6 +411,10 @@ export default {
 
     if (url.pathname === '/api/music-generation') {
       return musicGeneration(request, env);
+    }
+
+    if (url.pathname === '/api/music-regeneration') {
+      return musicRegeneration(request, env);
     }
 
     if (url.pathname.startsWith('/api/')) {
