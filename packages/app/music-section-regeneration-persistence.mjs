@@ -18,15 +18,16 @@ export async function persistSectionRegeneration(project, plan, result, {
   const assetId = createId('asset');
   const safeLabel = String(plan.section.label || 'Seção').trim().slice(0, 80) || 'Seção';
   const extension = String(result.type || '').includes('mpeg') ? 'mp3' : 'audio';
+  const productLabel = `Versão conectada · ${safeLabel} v${takeNumber}`;
   await saveAudio({
     id: assetId,
     blob: result.blob,
-    name: `Demo IA HQ · ${safeLabel} v${takeNumber}.${extension}`,
+    name: `${productLabel}.${extension}`,
     type: result.type || 'audio/mpeg',
   });
 
   const track = createTrack({
-    name: `Demo IA HQ · ${safeLabel} v${takeNumber}`,
+    name: productLabel,
     assetId,
     type: result.type || 'audio/mpeg',
     duration: Number(sourceTake.durationSeconds) || Number(plan.durationMs) / 1000,
