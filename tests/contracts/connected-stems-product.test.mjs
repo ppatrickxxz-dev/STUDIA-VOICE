@@ -39,7 +39,8 @@ test('Studio rail exposes stems without turning route validation into acoustic p
   assert.match(stems, /b09AcousticValidated:\s*false/);
   assert.match(stems, /acousticPromotion:\s*false/);
   assert.match(stems, /requiresUserComparisonBeforePromotion:\s*true/);
-  assert.doesNotMatch(stems, />[^<]*candidate[^<]*</i);
+  assert.doesNotMatch(stems, /Separar voz \+ instrumental · candidate/i);
+  assert.match(stems, /Separar Vocal \+ Instrumental/);
 });
 
 test('stems follows online-first policy and requests contextual auth instead of silently degrading', async () => {
