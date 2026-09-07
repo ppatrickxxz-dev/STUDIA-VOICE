@@ -208,15 +208,15 @@ export async function runStemsSeparation() {
 
 function status(text, kind = '') {
   const element = document.querySelector('#pv-stems-canary-status');
-  if (element) {
-    element.textContent = text;
-    element.dataset.kind = kind;
-  }
+  if (!element) return;
+  if (element.textContent !== text) element.textContent = text;
+  if (element.dataset.kind !== kind) element.dataset.kind = kind;
 }
 
 function buttonDisabled(value) {
   const button = document.querySelector('#pv-stems-canary-run');
-  if (button) button.disabled = value;
+  const disabled = Boolean(value);
+  if (button && button.disabled !== disabled) button.disabled = disabled;
 }
 
 function ensureUi() {
@@ -234,8 +234,10 @@ function ensureUi() {
   }
   const button = wrap.querySelector('#pv-stems-canary-run');
   if (button && !running) {
-    button.disabled = navigator.onLine === false;
-    button.textContent = navigator.onLine === false ? 'Stems · precisa de conexão' : 'Separar Vocal + Instrumental';
+    const disabled = navigator.onLine === false;
+    const label = disabled ? 'Stems · precisa de conexão' : 'Separar Vocal + Instrumental';
+    if (button.disabled !== disabled) button.disabled = disabled;
+    if (button.textContent !== label) button.textContent = label;
   }
   if (navigator.onLine === false && !running) {
     status('Sem rede: stems ficam indisponíveis; edição e geração local continuam preservadas.', 'warn');
