@@ -1,0 +1,59 @@
+.pv-song-creator {
+  margin-top: 18px;
+}
+
+.pv-song-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pv-song-creator label {
+  display: grid;
+  gap: 6px;
+  font-size: .82rem;
+}
+
+.pv-song-wide {
+  width: 100%;
+}
+
+.pv-song-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.pv-song-audios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.pv-song-audios label {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.pv-song-audios audio {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.pv-song-audios small {
+  opacity: .7;
+  margin-top: 5px;
+}
+
+@media (max-width: 760px) {
+  .pv-song-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pv-song-audios {
+    grid-template-columns: 1fr;
+  }
+}
