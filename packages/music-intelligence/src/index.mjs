@@ -29,8 +29,17 @@ export {
   isMusicCreationRequest,
   respondToMusicCreation,
 } from './session-engine.mjs';
+export {
+  MUSICAL_INTENT_SCHEMA,
+  interpretMusicalIntent,
+} from './musical-intent.mjs';
+export {
+  MUSIC_SPEC_V2_SCHEMA,
+  upgradeSongPlanToMusicSpec,
+  musicSpecProviderContext,
+} from './music-spec-v2.mjs';
 
-export const PMI_MUSIC_VERSION = '1.0.0';
+export const PMI_MUSIC_VERSION = '1.1.0';
 export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'concept_engine',
   'composition_session',
@@ -41,4 +50,6 @@ export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'composer_generator_adapter',
   'pending_draft_revision',
   'conversational_entrypoint',
+  'musical_intent_translator',
+  'music_spec_v2',
 ]);
