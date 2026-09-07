@@ -138,3 +138,79 @@ export function buildInpaintingPlan({ songId, durationMs, replacements }) {
   if (cursor < durationMs) chunks.push({ song_id: songId, range: { start_ms: cursor, end_ms: durationMs } });
   return { chunks };
 }
+
+export function buildPabloMusicV2Plan({ plan, negativeStyles = [] } = {}) {
+  if (!plan || !Array.isArray(plan.sections) || plan.sections.length === 0) {
+    throw new Error('A PabloVoice song plan with sections is required');
+  }
+  const guideLines = Array.isArray(plan.guideLines) ? plan.guideLines : [];
+  const globalStyles = compactStyles([
+    plan.brief,
+    genreStyle(plan.genre),
+    plan.mood,
+    Number.isFinite(Number(plan.bpm)) ? `${Math.round(Number(plan.bpm))} BPM` : '',
+    plan.key ? `${plan.key} ${plan.mode === 'major' ? 'major' : 'minor'}` : '',
+  ]);
+  const negatives = compactStyles(negativeStyles);
+
+  const chunks = plan.sections.map((section) => {
+    const startBeat = Number(section.startBeat);
+    const endBeat = Number(section.endBeat);
+    const startSeconds = Number(section.startSeconds);
+    const endSeconds = Number(section.endSeconds);
+    if (![startBeat, endBeat, startSeconds, endSeconds].every(Number.isFinite) || endBeat <= startBeat || endSeconds <= startSeconds) {
+      throw new Error(`Invalid PabloVoice section timing: ${String(section.id || section.label || 'unknown')}`);
+    }
+    const lines = guideLines
+      .filter((line) => Number(line.startBeat) >= startBeat && Number(line.startBeat) < endBeat)
+      .map((line) => String(line.text || '').trim())
+      .filter(Boolean);
+    const label = String(section.label || section.id || 'Section').trim().slice(0, 80) || 'Section';
+    const energy = Number(section.energy);
+    const localStyles = compactStyles([
+      ...globalStyles,
+      Number.isFinite(energy) ? energyStyle(energy) : '',
+    ]);
+    return {
+      text: lines.length ? `[${label}]\n${lines.join('\n')}` : `[${label} instrumental]`,
+      duration_ms: Math.max(1000, Math.round((endSeconds - startSeconds) * 1000)),
+      positive_styles: localStyles,
+      negative_styles: negatives,
+      context_adherence: 'high',
+    };
+  });
+
+  return { chunks };
+}
+
+function compactStyles(values) {
+  const seen = new Set();
+  const output = [];
+  for (const value of values.flat ? values.flat() : values) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(text);
+    if (output.length >= 12) break;
+  }
+  return output;
+}
+
+function genreStyle(value = '') {
+  const genre = String(value || '').toLowerCase();
+  if (genre === 'rnb') return 'contemporary R&B';
+  if (genre === 'funk') return 'Brazilian funk groove';
+  if (genre === 'mpb') return 'Brazilian MPB';
+  if (genre === 'rap') return 'hip-hop / rap';
+  if (genre === 'dance') return 'dance-pop electronic';
+  return genre || 'pop';
+}
+
+function energyStyle(value) {
+  if (value >= 0.85) return 'high energy, full arrangement';
+  if (value >= 0.62) return 'rising energy, fuller arrangement';
+  if (value <= 0.35) return 'sparse, restrained arrangement';
+  return 'moderate energy, controlled arrangement';
+}

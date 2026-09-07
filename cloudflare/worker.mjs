@@ -1,9 +1,13 @@
 import { healthPayload } from '../services/api/health.mjs';
+import { ElevenMusicClient, buildPabloMusicV2Plan } from '../services/providers/elevenmusic.mjs';
 
 const SUPABASE_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const PROVIDER = 'cloudflare_workers_ai';
+const MUSIC_PROVIDER = 'elevenmusic';
+const MUSIC_MODEL = 'music_v2';
+const MUSIC_OUTPUT_FORMAT = 'mp3_48000_192';
 const SONG_COMMANDS = new Set(['generate', 'continue_section', 'rewrite', 'adapt_genre']);
 const PROVIDER_TIMEOUT_MS = 20_000;
 const CANONICAL_RUNTIME_ORIGIN = 'https://studia-voice.ppatrickxxz.workers.dev';
@@ -18,6 +22,7 @@ function corsHeaders(request) {
     'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-allow-headers': 'Authorization, Content-Type, apikey',
+    'access-control-expose-headers': 'X-PV-Song-Id, X-PV-Provider, X-PV-Model, X-PV-Request-Id',
     'access-control-max-age': '600',
     vary: 'Origin',
   };
@@ -96,6 +101,16 @@ function workersAiError(error) {
   if (status === 429 || /rate.?limit|quota|neuron/.test(message)) return { error: 'provider_rate_limited', httpStatus: 429, retryAfterMs: 1000 };
   if (status === 401 || status === 403 || /unauthori[sz]ed|forbidden/.test(message)) return { error: 'provider_auth_failed', httpStatus: 502, retryAfterMs: 0 };
   return { error: 'provider_unavailable', httpStatus: 502, retryAfterMs: 0 };
+}
+
+function elevenMusicError(error) {
+  const message = String(error?.message || '');
+  const statusMatch = message.match(/ElevenMusic request failed \((\d{3})\)/);
+  const status = Number(statusMatch?.[1] || 0);
+  if (status === 429) return { error: 'provider_rate_limited', httpStatus: 429 };
+  if (status === 401 || status === 403) return { error: 'provider_auth_failed', httpStatus: 502 };
+  if (status >= 400 && status < 500) return { error: 'provider_request_rejected', httpStatus: 502 };
+  return { error: 'provider_unavailable', httpStatus: 502 };
 }
 
 function providerReadiness(env) {
@@ -241,6 +256,81 @@ async function pabloAgent(request, env) {
   }
 }
 
+async function musicGeneration(request, env) {
+  const cors = corsHeaders(request);
+  const configured = Boolean(env.ELEVENLABS_API_KEY);
+
+  if (request.method === 'GET') {
+    return json({
+      ok: true,
+      service: 'pablovoice-music-generation',
+      configured,
+      provider: MUSIC_PROVIDER,
+      model: MUSIC_MODEL,
+      output_format: MUSIC_OUTPUT_FORMAT,
+      credential_exposed: false,
+      auth_for_generation: 'required',
+      section_locked_plan: true,
+      inpainting_source_id: true,
+    }, 200, cors);
+  }
+
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405, cors);
+
+  const id = requestId();
+  const jwt = bearer(request);
+  const user = await authenticatedUser(jwt).catch(() => null);
+  if (!user) return json({ ok: false, error: 'auth_required', request_id: id }, 401, cors);
+
+  const body = await request.json().catch(() => ({}));
+  const project = await ownedProject(jwt, String(body.project_id || '')).catch(() => null);
+  if (!project) return json({ ok: false, error: 'project_not_found', request_id: id }, 404, cors);
+  if (!configured) return json({ ok: false, error: 'provider_unavailable', request_id: id, fallback_allowed: false }, 503, cors);
+
+  let compositionPlan;
+  try {
+    compositionPlan = buildPabloMusicV2Plan({
+      plan: body.plan,
+      negativeStyles: Array.isArray(body.negative_styles) ? body.negative_styles.slice(0, 12) : [],
+    });
+  } catch (error) {
+    return json({ ok: false, error: 'invalid_music_plan', request_id: id, detail: String(error?.message || '').slice(0, 240) }, 400, cors);
+  }
+
+  const started = Date.now();
+  try {
+    const client = new ElevenMusicClient({ apiKey: env.ELEVENLABS_API_KEY, fetchImpl: fetch });
+    const result = await client.compose({
+      compositionPlan,
+      storeForInpainting: true,
+      outputFormat: MUSIC_OUTPUT_FORMAT,
+    });
+    if (!(result.audio instanceof Uint8Array) || result.audio.byteLength === 0) {
+      throw new Error('provider_empty_audio');
+    }
+    const latencyMs = Date.now() - started;
+    safeLog({ request_id: id, route: 'music_generation', provider: MUSIC_PROVIDER, model: MUSIC_MODEL, status: 200, latency_ms: latencyMs, song_id_present: Boolean(result.songId) });
+    return new Response(result.audio, {
+      status: 200,
+      headers: {
+        'content-type': 'audio/mpeg',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'x-pv-provider': MUSIC_PROVIDER,
+        'x-pv-model': MUSIC_MODEL,
+        'x-pv-request-id': id,
+        ...(result.songId ? { 'x-pv-song-id': result.songId } : {}),
+        ...cors,
+      },
+    });
+  } catch (error) {
+    const latencyMs = Date.now() - started;
+    const classified = elevenMusicError(error);
+    safeLog({ request_id: id, route: 'music_generation', provider: MUSIC_PROVIDER, model: MUSIC_MODEL, status: 'error', latency_ms: latencyMs, error_type: classified.error });
+    return json({ ok: false, error: classified.error, request_id: id, latency_ms: latencyMs, fallback_allowed: false }, classified.httpStatus, cors);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -262,6 +352,10 @@ export default {
 
     if (url.pathname === '/api/pablo-agent') {
       return pabloAgent(request, env);
+    }
+
+    if (url.pathname === '/api/music-generation') {
+      return musicGeneration(request, env);
     }
 
     if (url.pathname.startsWith('/api/')) {
