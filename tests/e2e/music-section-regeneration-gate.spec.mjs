@@ -45,7 +45,7 @@ async function openSectionMap(page) {
   await expect(page.locator('[data-section-map-modal]')).toBeVisible();
 }
 
-test('MUSIC SECTION REGEN UI GATE: local takes show no fake action; HQ song-id enables exact-section panel', async ({ page }) => {
+test('MUSIC SECTION EDIT UI GATE: local takes show no fake action; connected continuity enables exact-section panel', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
@@ -58,13 +58,15 @@ test('MUSIC SECTION REGEN UI GATE: local takes show no fake action; HQ song-id e
 
   await seedSectionsAndTake(page, { withSongId: false });
   await openSectionMap(page);
-  await expect(page.locator('[data-music-regen-readiness]')).toContainText('Crie uma demo HQ');
+  await expect(page.locator('[data-music-regen-readiness]')).toHaveCount(1);
+  await expect(page.locator('[data-music-regen-readiness]')).toContainText('Produza uma versão conectada');
   await expect(page.locator('[data-music-section-regen]')).toHaveCount(0);
   await page.locator('[data-section-map-close]').click();
 
   await seedSectionsAndTake(page, { withSongId: true });
   await page.locator('[data-section-map-open]').click();
-  await expect(page.locator('[data-music-regen-readiness]')).toContainText('Edição musical seletiva pronta');
+  await expect(page.locator('[data-music-regen-readiness]')).toHaveCount(1);
+  await expect(page.locator('[data-music-regen-readiness]')).toContainText('Edição por seção pronta');
   await expect(page.locator('[data-music-section-regen]')).toHaveCount(3);
 
   const chorusRow = page.locator('[data-section-row]').filter({ hasText: 'Refrão' });
@@ -73,7 +75,7 @@ test('MUSIC SECTION REGEN UI GATE: local takes show no fake action; HQ song-id e
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('Refazer só Refrão');
   await expect(panel).toContainText('0:20 → 0:40');
-  await expect(panel).toContainText('restante da música');
+  await expect(panel).toContainText('resto da música');
   await expect(panel.locator('input[name="direction"]')).toBeVisible();
   await expect(panel.locator('textarea[name="lyrics"]')).toHaveAttribute('placeholder', /Deixe vazio para manter/);
   await expect(panel.locator('[data-music-regen-submit]')).toBeVisible();
