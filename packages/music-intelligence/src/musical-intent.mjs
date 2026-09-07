@@ -79,7 +79,7 @@ export function interpretMusicalIntent(message = '', context = {}) {
     evidence.push('open_chorus');
   }
 
-  if (/\b(sem|menos)\s+(barulho|barulhento|embolado|cheio demais)\b/i.test(source)) {
+  if (/\b(sem|menos)\s+(?:ficar\s+|deixar\s+)?(barulho|barulhento|embolado|cheio demais)\b/i.test(source)) {
     addDelta(deltas, 'density', -0.14);
     addDelta(deltas, 'clarity', 0.16);
     add(styleNegative, 'overcrowded arrangement');
