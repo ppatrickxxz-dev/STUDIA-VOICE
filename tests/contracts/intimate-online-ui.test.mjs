@@ -5,10 +5,12 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-test('Intimate Recorder canon keeps Pablo, all companions and six living states', async () => {
-  const [ui, css, canon] = await Promise.all([
+test('Intimate Recorder canon keeps Pablo, all companions and living state system', async () => {
+  const [ui, life, css, lifeCss, canon] = await Promise.all([
     read('packages/app/pablovoice-intimate-ui.mjs'),
+    read('packages/app/pablo-life-ui.mjs'),
     read('packages/app/pablovoice-intimate-ui.css'),
+    read('packages/app/pablo-life-ui.css'),
     read('docs/UI_CANON_LOCK.md'),
   ]);
 
@@ -21,8 +23,14 @@ test('Intimate Recorder canon keeps Pablo, all companions and six living states'
   for (const state of ['idle', 'listening', 'thinking', 'recording', 'happy', 'dancing']) {
     assert.match(ui, new RegExp(`['\"]${state}['\"]`));
   }
+  for (const mode of ['vibe', 'focus', 'inspiration', 'moment']) assert.match(life, new RegExp(`id: ['\"]${mode}['\"]`));
+  for (const action of ['listening', 'thinking', 'creating', 'analyzing', 'guiding', 'processing', 'approving', 'celebrating']) {
+    assert.match(life, new RegExp(`${action}:`));
+  }
   assert.match(css, /pv-pocket-recorder/);
   assert.match(css, /pv-crystal-token/);
+  assert.match(lifeCss, /pv-pocket-mode-strip/);
+  assert.match(lifeCss, /data-pv-action-state/);
   assert.match(canon, /black, graphite, gunmetal, smoke glass, silver\/chrome and clear crystal/i);
   assert.match(canon, /violet\/purple is no longer the primary product color/i);
 });
