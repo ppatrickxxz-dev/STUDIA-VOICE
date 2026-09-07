@@ -1,6 +1,7 @@
 import { createId, createTrack, snapshotProject } from './core/src/project.mjs';
 import { upsertConfirmedSection } from './core/src/section-map.mjs';
 import { MusicGenerationClient } from './music-generation-client.mjs';
+import { buildSongCreationIntelligence, resolveSongCreationLyrics } from './song-creation-intelligence.mjs';
 import { activeProjectSessionId, getProject, listProjects, rememberActiveProject, saveAudioAsset, saveProject } from './storage.mjs';
 import { createSongCreationPlan, describeSongPlan, renderSongCreation, SONG_CREATION_SCHEMA } from './song-creation-engine.mjs';
 
@@ -42,7 +43,7 @@ function injectSongCreator() {
   panel.className = 'pv-card chrome pv-song-creator';
   panel.innerHTML = `
     <div class="pv-card-head">
-      <div><h3>Criar música</h3><p>Da letra para um take real: rascunho local editável ou demo IA de alta qualidade, sempre preservando versões.</p></div>
+      <div><h3>Criar música</h3><p>Comece pela letra ou direto pelo instrumental. Cada geração vira um novo take editável, sem apagar o que já existe.</p></div>
       <span class="pv-tag ok">CREATOR</span>
     </div>
     <form data-song-create-form class="pv-panel-grid">
@@ -84,6 +85,10 @@ function injectSongCreator() {
       <label class="pv-song-wide">Evitar na geração IA
         <input class="pv-field" name="negative" maxlength="700" placeholder="Ex.: dembow pesado, trap, voz feminina, drop EDM">
       </label>
+      <label class="pv-song-start-mode">
+        <input type="checkbox" name="instrumentalFirst">
+        <span><strong>Começar pelo instrumental</strong><small>Ignora a letra apenas nesta geração, mas mantém o texto salvo no projeto. Se ainda não houver letra, este modo é ativado automaticamente.</small></span>
+      </label>
       <div class="pv-song-mode-grid">
         <div class="pv-song-mode-card">
           <strong>Rascunho local</strong>
@@ -96,7 +101,7 @@ function injectSongCreator() {
           <button class="pv-btn primary" type="button" data-song-create-hq>✦ Criar demo HQ</button>
         </div>
       </div>
-      <div class="pv-note" id="pv-song-create-status">Nada substitui automaticamente seus takes. Cada criação entra como uma nova versão do projeto.</div>
+      <div class="pv-note" id="pv-song-create-status">A PMI organiza conceito e crítica criativa junto do take. Nada substitui automaticamente suas versões.</div>
     </form>
     <div id="pv-song-create-result"></div>`;
   anchor.insertAdjacentElement('afterend', panel);
@@ -118,20 +123,35 @@ async function runCreation(form, mode) {
   const lyrics = String(document.querySelector('#lyrics')?.value || '').trim();
   const brief = String(form.elements.brief?.value || '').trim();
   if (!brief) return setText(status, 'Diga que tipo de música você quer criar.');
-  if (!lyrics) return setText(status, 'Escreva ou gere a letra primeiro; ela guia a melodia e o mapa de seções.');
+
+  const lyricMode = resolveSongCreationLyrics({
+    lyrics,
+    instrumentalFirst: Boolean(form.elements.instrumentalFirst?.checked),
+  });
+  const genre = form.elements.genre?.value;
+  const mood = form.elements.mood?.value;
 
   runtime.busy = true;
   setCreationButtons(localButton, highQualityButton, true, mode);
-  setText(status, 'Montando estrutura, harmonia, groove, baixo e melodia…');
+  setText(status, lyricMode.creationMode === 'instrumental_first'
+    ? 'PMI organizando a direção e montando o instrumental primeiro…'
+    : 'PMI organizando conceito, letra, estrutura e direção musical…');
   await nextPaint();
   try {
     const project = await resolveActiveProject();
     if (!project) throw new Error('Crie ou abra um projeto antes de gerar a música.');
+    const intelligence = buildSongCreationIntelligence({
+      brief,
+      genre,
+      mood,
+      lyrics: lyricMode.planLyrics,
+      creationMode: lyricMode.creationMode,
+    });
     const plan = createSongCreationPlan({
       brief,
-      lyrics,
-      genre: form.elements.genre?.value,
-      mood: form.elements.mood?.value,
+      lyrics: lyricMode.planLyrics,
+      genre,
+      mood,
       bpm: Number(form.elements.bpm?.value),
       durationSeconds: Number(form.elements.duration?.value),
       key: form.elements.key?.value || null,
@@ -139,7 +159,9 @@ async function runCreation(form, mode) {
 
     let saved;
     if (mode === 'hq') {
-      setText(status, 'Conectando ao motor musical de alta qualidade…');
+      setText(status, lyricMode.creationMode === 'instrumental_first'
+        ? 'Conectando ao motor HQ para criar uma base sem letra…'
+        : 'Conectando ao motor musical de alta qualidade…');
       const highQuality = await highQualityClient().generate({
         localProject: project,
         plan,
@@ -149,22 +171,22 @@ async function runCreation(form, mode) {
       setText(status, 'Criando guia melódica separada e salvando a nova versão…');
       await nextPaint();
       const guideAudio = renderSongCreation(plan).guide;
-      saved = await persistHighQualitySongTake(project, plan, highQuality, guideAudio, lyrics);
-      runtime.result = { ...saved, plan, mode: 'hq', previews: [
-        { label: 'Demo IA HQ', blob: highQuality.blob, note: 'Mix de referência de alta qualidade. Pode conter voz gerada; não é rotulada como instrumental isolado.' },
-        { label: 'Guia melódica', blob: guideAudio.blob, note: 'Melodia sintetizada separada para cantar por cima ou substituir pela sua voz.' },
+      saved = await persistHighQualitySongTake(project, plan, highQuality, guideAudio, lyricMode.projectLyrics, intelligence);
+      runtime.result = { ...saved, plan, intelligence, instrumentalFirst: lyricMode.creationMode === 'instrumental_first', mode: 'hq', previews: [
+        { label: lyricMode.creationMode === 'instrumental_first' ? 'Demo IA HQ · base' : 'Demo IA HQ', blob: highQuality.blob, note: lyricMode.creationMode === 'instrumental_first' ? 'Geração HQ orientada como base instrumental; a letra do projeto foi preservada fora deste render.' : 'Mix de referência de alta qualidade. Pode conter voz gerada; não é rotulada como instrumental isolado.' },
+        { label: 'Guia melódica', blob: guideAudio.blob, note: lyricMode.creationMode === 'instrumental_first' ? 'Melodia sintetizada livre para experimentar voz e letra depois.' : 'Melodia sintetizada separada para cantar por cima ou substituir pela sua voz.' },
       ] };
       setText(status, `Pronto. Demo HQ e guia foram salvas como Take ${saved.takeNumber}, sem apagar versões anteriores.`);
     } else {
       setText(status, `Renderizando ${Math.round(plan.durationSeconds)}s de áudio no aparelho…`);
       await nextPaint();
       const audio = renderSongCreation(plan);
-      setText(status, 'Salvando instrumental, guia e mapa de seções no projeto…');
+      setText(status, 'Salvando instrumental, guia, PMI e mapa de seções no projeto…');
       await nextPaint();
-      saved = await persistLocalSongTake(project, plan, audio, lyrics);
-      runtime.result = { ...saved, plan, mode: 'local', previews: [
+      saved = await persistLocalSongTake(project, plan, audio, lyricMode.projectLyrics, intelligence);
+      runtime.result = { ...saved, plan, intelligence, instrumentalFirst: lyricMode.creationMode === 'instrumental_first', mode: 'local', previews: [
         { label: 'Instrumental', blob: audio.instrumental.blob, note: 'Instrumental local editável.' },
-        { label: 'Guia melódica', blob: audio.guide.blob, note: 'Melodia sintetizada para cantar por cima, gravar ou substituir depois.' },
+        { label: 'Guia melódica', blob: audio.guide.blob, note: lyricMode.creationMode === 'instrumental_first' ? 'Melodia sintetizada livre para desenvolver letra e interpretação depois.' : 'Melodia sintetizada para cantar por cima, gravar ou substituir depois.' },
       ] };
       setText(status, `Pronto. ${saved.instrumentalTrack.name} e ${saved.guideTrack.name} foram salvas no projeto.`);
     }
@@ -181,7 +203,7 @@ async function runCreation(form, mode) {
   }
 }
 
-async function persistLocalSongTake(project, plan, audio, lyrics) {
+async function persistLocalSongTake(project, plan, audio, lyrics, intelligence) {
   const takeId = createId('songtake');
   const takeNumber = nextTakeNumber(project);
   const instrumentalAssetId = createId('asset');
@@ -203,6 +225,7 @@ async function persistLocalSongTake(project, plan, audio, lyrics) {
       instrumentalTrackId: instrumentalTrack.id,
       guideTrackId: guideTrack.id,
       guideType: 'synth_melody',
+      intelligence,
       render: { provider: 'local_dsp', sampleRate: audio.sampleRate, format: 'audio/wav' },
     },
   });
@@ -210,7 +233,7 @@ async function persistLocalSongTake(project, plan, audio, lyrics) {
   return { projectId: project.id, takeId, takeNumber, instrumentalTrack, guideTrack };
 }
 
-async function persistHighQualitySongTake(project, plan, highQuality, guideAudio, lyrics) {
+async function persistHighQualitySongTake(project, plan, highQuality, guideAudio, lyrics, intelligence) {
   const takeId = createId('songtake');
   const takeNumber = nextTakeNumber(project);
   const referenceAssetId = createId('asset');
@@ -243,6 +266,7 @@ async function persistHighQualitySongTake(project, plan, highQuality, guideAudio
       guideType: 'synth_melody',
       providerSongId: highQuality.songId,
       remoteProjectId: highQuality.remoteProjectId,
+      intelligence,
       render: {
         provider: highQuality.provider,
         model: highQuality.model,
@@ -337,9 +361,25 @@ function renderResult(result) {
   const providerNote = result.mode === 'hq' && result.providerSongId ? `<p class="pv-note">ID de continuidade salvo para futuras regenerações por seção.</p>` : '';
   host.innerHTML = `<div class="pv-song-result">
     <div class="pv-card-head"><div><h3>Take ${result.takeNumber}</h3><p>${escapeHtml(describeSongPlan(result.plan))}</p></div><span class="pv-tag ok">${badge}</span></div>
+    ${renderIntelligence(result.intelligence)}
     <div class="pv-song-audios">${cards}</div>
     ${providerNote}
     <div class="pv-actions"><button class="pv-btn primary" type="button" data-song-open-studio>◉ Abrir no Studio</button><button class="pv-btn" type="button" data-song-create-again>＋ Criar outro take</button></div>
+  </div>`;
+}
+
+function renderIntelligence(intelligence) {
+  const concept = intelligence?.concept;
+  if (!concept) return '';
+  const mode = intelligence.creationMode === 'instrumental_first' ? 'Instrumental primeiro' : 'Letra guiando a música';
+  const critique = intelligence.lyricCritique;
+  const metrics = critique?.dimensions
+    ? `<div class="pv-song-pmi-metrics"><span>Métrica ${Math.round(Number(critique.dimensions.meter) || 0)}</span><span>Rima ${Math.round(Number(critique.dimensions.rhyme) || 0)}</span><span>Cantabilidade ${Math.round(Number(critique.dimensions.singability) || 0)}</span></div>`
+    : '<div class="pv-song-pmi-metrics"><span>Letra pode entrar depois</span></div>';
+  return `<div class="pv-song-pmi-card">
+    <div><strong>PMI · ${escapeHtml(mode)}</strong><span>${escapeHtml((concept.emotions || []).slice(0, 3).join(' · '))}</span></div>
+    <p><b>Tensão:</b> ${escapeHtml(concept.tension)} <b>→ Payoff:</b> ${escapeHtml(concept.payoff)}</p>
+    ${metrics}
   </div>`;
 }
 
