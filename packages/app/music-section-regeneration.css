@@ -1,0 +1,133 @@
+.pv-music-regen-readiness {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 13px;
+  background: rgba(255,255,255,.025);
+}
+
+.pv-music-regen-readiness.ready {
+  border-color: rgba(152,95,255,.34);
+  background: linear-gradient(135deg, rgba(127,76,255,.10), rgba(50,196,255,.04));
+}
+
+.pv-music-regen-readiness strong {
+  font-size: .82rem;
+}
+
+.pv-music-regen-readiness span {
+  font-size: .75rem;
+  line-height: 1.45;
+  opacity: .72;
+}
+
+.pv-music-regen-button {
+  border-color: rgba(161,99,255,.34) !important;
+}
+
+.pv-music-regen-panel {
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid rgba(164,97,255,.38);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(91,52,177,.17), rgba(8,18,33,.94) 58%, rgba(24,112,144,.08));
+  box-shadow: 0 18px 54px rgba(0,0,0,.22);
+}
+
+.pv-music-regen-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.pv-music-regen-head small {
+  color: rgba(178,132,255,.9);
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+
+.pv-music-regen-head h3 {
+  margin: 3px 0 5px;
+}
+
+.pv-music-regen-head p {
+  margin: 0;
+  max-width: 720px;
+  font-size: .8rem;
+  line-height: 1.5;
+  opacity: .75;
+}
+
+.pv-music-regen-form {
+  display: grid;
+  gap: 11px;
+}
+
+.pv-music-regen-form label {
+  display: grid;
+  gap: 6px;
+  font-size: .8rem;
+}
+
+.pv-music-regen-form textarea {
+  resize: vertical;
+  min-height: 78px;
+}
+
+.pv-music-regen-safety {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 11px 12px;
+  border: 1px solid rgba(75,215,173,.18);
+  border-radius: 13px;
+  background: rgba(75,215,173,.035);
+}
+
+.pv-music-regen-safety b {
+  color: rgba(111,236,197,.9);
+  font-size: .76rem;
+}
+
+.pv-music-regen-safety span {
+  font-size: .74rem;
+  line-height: 1.5;
+  opacity: .74;
+}
+
+.pv-music-regen-safety code {
+  font-size: .72rem;
+}
+
+.pv-music-regen-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.pv-music-regen-actions > span {
+  flex: 1 1 260px;
+  font-size: .76rem;
+  opacity: .72;
+}
+
+@media (max-width: 680px) {
+  .pv-music-regen-head {
+    flex-direction: column;
+  }
+
+  .pv-music-regen-safety {
+    grid-template-columns: 1fr;
+  }
+
+  .pv-music-regen-actions .pv-btn {
+    width: 100%;
+  }
+}

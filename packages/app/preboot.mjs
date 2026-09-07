@@ -70,6 +70,7 @@ try {
   const { installSampler } = await import('./sampler-ui.mjs');
   const { installBeatLab } = await import('./beat-lab-ui.mjs');
   const { installSectionMapUI } = await import('./section-map-ui.mjs');
+  const { installMusicSectionRegenerationUI } = await import('./music-section-regeneration-ui.mjs');
   installPabloConversationUI();
   installPabloSectionHereAdapter();
   installPabloSectionAuditionAdapter();
@@ -104,6 +105,7 @@ try {
   installSampler();
   installBeatLab();
   installSectionMapUI();
+  installMusicSectionRegenerationUI();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {

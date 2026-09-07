@@ -8,6 +8,7 @@ on:
       - 'packages/app/**'
       - 'services/api/**'
       - 'tests/contracts/cloudflare-runtime.test.mjs'
+      - 'tests/contracts/cloudflare-music-regeneration.test.mjs'
       - '.github/workflows/cloudflare-runtime-gate.yml'
       - '.github/workflows/composer-provider-canary.yml'
   workflow_dispatch:
@@ -34,7 +35,7 @@ jobs:
       - name: Build canonical Web
         run: npm run build:web
       - name: Verify Cloudflare runtime contract
-        run: node --test tests/contracts/cloudflare-runtime.test.mjs
+        run: node --test tests/contracts/cloudflare-runtime.test.mjs tests/contracts/cloudflare-music-regeneration.test.mjs
       - name: Bundle Worker and Static Assets without deployment
         run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
 
@@ -109,7 +110,11 @@ jobs:
           fetch_200 '/api/music-generation' "$tmp/music.json" "$tmp/music.headers"
           jq -e '.ok == true and .service == "pablovoice-music-generation" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .section_locked_plan == true and .inpainting_source_id == true' "$tmp/music.json" >/dev/null
           music_configured="$(jq -r '.configured' "$tmp/music.json")"
-          printf 'Music v2 route: published\nMusic v2 provider configured on preview: %s\n' "$music_configured" >> "$GITHUB_STEP_SUMMARY"
+
+          fetch_200 '/api/music-regeneration' "$tmp/regen.json" "$tmp/regen.headers"
+          jq -e '.ok == true and .service == "pablovoice-music-regeneration" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .requires_song_id == true and .preserves_unselected_ranges == true' "$tmp/regen.json" >/dev/null
+          regen_configured="$(jq -r '.configured' "$tmp/regen.json")"
+          printf 'Music v2 route: published\nMusic v2 provider configured on preview: %s\nSelective regeneration route: published\nSelective provider configured on preview: %s\n' "$music_configured" "$regen_configured" >> "$GITHUB_STEP_SUMMARY"
 
           code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
@@ -118,5 +123,9 @@ jobs:
           code="$(curl --silent --show-error -o "$tmp/music-unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/music-generation" -H 'content-type: application/json' --data '{"project_id":"00000000-0000-0000-0000-000000000000","plan":{"sections":[{"id":"intro"}]}}')"
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/music-unauth.json" >/dev/null
+
+          code="$(curl --silent --show-error -o "$tmp/regen-unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/music-regeneration" -H 'content-type: application/json' --data '{"project_id":"00000000-0000-0000-0000-000000000000","source_song_id":"probe","duration_ms":10000,"section":{"start_ms":1000,"end_ms":2000,"text":"probe"}}')"
+          test "$code" = '401'
+          jq -e '.ok == false and .error == "auth_required"' "$tmp/regen-unauth.json" >/dev/null
 
           printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"
