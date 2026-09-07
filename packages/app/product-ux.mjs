@@ -14,6 +14,14 @@ let pendingNewSong = false;
 let pendingOnlineAction = null;
 let onlineUnlocked = false;
 
+function setText(node, value) {
+  if (node && node.textContent !== String(value)) node.textContent = String(value);
+}
+
+function setHtml(node, value) {
+  if (node && node.innerHTML !== String(value)) node.innerHTML = String(value);
+}
+
 export function installProductUX() {
   if (observer) return () => observer.disconnect();
   document.documentElement.dataset.pvProductUx = UX_VERSION;
@@ -43,7 +51,7 @@ function queueDecorate() {
 
 function decorate() {
   const route = activeRoute();
-  document.documentElement.dataset.pvActiveRoute = route;
+  if (document.documentElement.dataset.pvActiveRoute !== route) document.documentElement.dataset.pvActiveRoute = route;
   decorateHome(route);
   decorateCompose(route);
   decorateStudio(route);
@@ -64,19 +72,13 @@ function decorateHome(route) {
 
   const primaryCard = document.querySelector('.pv-home-grid > .pv-card.chrome');
   primaryCard?.classList.add('pv-product-home-primary');
-  const headTitle = primaryCard?.querySelector('.pv-card-head h2');
-  if (headTitle) headTitle.textContent = document.querySelector('.pv-project-now') ? 'Continue sua música' : 'Comece uma música';
-  const localTag = primaryCard?.querySelector('.pv-card-head .pv-tag');
-  if (localTag) localTag.textContent = 'SALVO';
+  setText(primaryCard?.querySelector('.pv-card-head h2'), document.querySelector('.pv-project-now') ? 'Continue sua música' : 'Comece uma música');
+  setText(primaryCard?.querySelector('.pv-card-head .pv-tag'), 'SALVO');
 
-  const newProject = document.querySelector('.pv-home-grid [data-action="new-project"] span');
-  if (newProject) newProject.innerHTML = 'Nova música<small>comece do zero</small>';
-  const importAudio = document.querySelector('.pv-home-grid [data-action="import"] span');
-  if (importAudio) importAudio.innerHTML = 'Importar áudio<small>traga uma base, demo ou vocal</small>';
-  const record = document.querySelector('.pv-home-grid [data-action="record"] span');
-  if (record) record.innerHTML = 'Gravar minha voz<small>capture uma ideia ou take</small>';
-  const projects = document.querySelector('.pv-home-grid [data-route="projects"] span');
-  if (projects) projects.innerHTML = 'Continuar projeto<small>volte aos seus takes e versões</small>';
+  setHtml(document.querySelector('.pv-home-grid [data-action="new-project"] span'), 'Nova música<small>comece do zero</small>');
+  setHtml(document.querySelector('.pv-home-grid [data-action="import"] span'), 'Importar áudio<small>traga uma base, demo ou vocal</small>');
+  setHtml(document.querySelector('.pv-home-grid [data-action="record"] span'), 'Gravar minha voz<small>capture uma ideia ou take</small>');
+  setHtml(document.querySelector('.pv-home-grid [data-route="projects"] span'), 'Continuar projeto<small>volte aos seus takes e versões</small>');
 
   compactCompanionShelf();
 }
@@ -102,12 +104,9 @@ function decorateCompose(route) {
   const hero = document.querySelector('.pv-hero.compact');
   if (hero && !hero.dataset.productCopy) {
     hero.dataset.productCopy = 'true';
-    const kicker = hero.querySelector('.pv-kicker');
-    const title = hero.querySelector('.pv-title');
-    const lead = hero.querySelector('.pv-lead');
-    if (kicker) kicker.textContent = 'Criar · letra e música';
-    if (title) title.innerHTML = 'Transforme uma <em>ideia em música.</em>';
-    if (lead) lead.textContent = 'Escreva, peça ajuda ao Pablo, crie uma ideia rápida ou produza uma versão completa — tudo no mesmo projeto.';
+    setText(hero.querySelector('.pv-kicker'), 'Criar · letra e música');
+    setHtml(hero.querySelector('.pv-title'), 'Transforme uma <em>ideia em música.</em>');
+    setText(hero.querySelector('.pv-lead'), 'Escreva, peça ajuda ao Pablo, crie uma ideia rápida ou produza uma versão completa — tudo no mesmo projeto.');
   }
 
   const creator = document.querySelector('#pv-song-creator');
@@ -125,7 +124,8 @@ function simplifyCreatorForm(creator) {
   if (brief) {
     brief.classList.add('pv-product-main-prompt');
     const input = brief.querySelector('input');
-    if (input) input.placeholder = 'Ex.: pop R&B sensual, noite, synths, grave redondo, refrão grande…';
+    const placeholder = 'Ex.: pop R&B sensual, noite, synths, grave redondo, refrão grande…';
+    if (input && input.placeholder !== placeholder) input.placeholder = placeholder;
   }
 
   let details = form.querySelector('.pv-creator-advanced');
@@ -147,26 +147,22 @@ function simplifyCreatorForm(creator) {
 
   const cards = [...form.querySelectorAll('.pv-song-mode-card')];
   if (cards[0]) {
-    const strong = cards[0].querySelector('strong');
-    const copy = cards[0].querySelector('span');
+    setText(cards[0].querySelector('strong'), '⚡ Ideia rápida');
+    setText(cards[0].querySelector('span'), 'Ouça estrutura, instrumental e guia imediatamente. Funciona no aparelho e vira take editável.');
     const button = cards[0].querySelector('[data-song-create-button]');
-    if (strong) strong.textContent = '⚡ Ideia rápida';
-    if (copy) copy.textContent = 'Ouça estrutura, instrumental e guia imediatamente. Funciona no aparelho e vira take editável.';
-    if (button && !button.classList.contains('busy')) button.textContent = '♫ Ouvir ideia';
+    if (button && !button.classList.contains('busy')) setText(button, '♫ Ouvir ideia');
   }
   if (cards[1]) {
-    const strong = cards[1].querySelector('strong');
-    const copy = cards[1].querySelector('span');
+    setText(cards[1].querySelector('strong'), '✦ Produzir música');
+    setText(cards[1].querySelector('span'), 'Crie uma versão musical completa, salve como novo take e continue editando depois.');
     const button = cards[1].querySelector('[data-song-create-hq]');
-    if (strong) strong.textContent = '✦ Produzir música';
-    if (copy) copy.textContent = 'Crie uma versão musical completa, salve como novo take e continue editando depois.';
-    if (button && !button.classList.contains('busy')) button.textContent = '✦ Produzir música';
+    if (button && !button.classList.contains('busy')) setText(button, '✦ Produzir música');
   }
 
   const status = form.querySelector('#pv-song-create-status');
   if (status && !status.dataset.productCopy) {
     status.dataset.productCopy = 'true';
-    status.textContent = 'Pablo organiza conceito, letra e estrutura junto do take. Nada substitui suas versões automaticamente.';
+    setText(status, 'Pablo organiza conceito, letra e estrutura junto do take. Nada substitui suas versões automaticamente.');
   }
 }
 
@@ -179,23 +175,19 @@ function integrateComposer(creator) {
     details = document.createElement('details');
     details.className = 'pv-creator-pablo-assistant';
     details.innerHTML = '<summary><span class="pv-product-pablo-dot">✦</span><div><strong>Pablo, me ajuda com a letra</strong><small>continuar, reescrever ou adaptar sem sair da criação</small></div><b>›</b></summary><div class="pv-product-composer-slot"></div>';
-    const result = creator.querySelector('#pv-song-create-result');
-    result?.insertAdjacentElement('beforebegin', details);
+    creator.querySelector('#pv-song-create-result')?.insertAdjacentElement('beforebegin', details);
   }
-  const slot = details.querySelector('.pv-product-composer-slot');
-  slot?.appendChild(composer);
+  details.querySelector('.pv-product-composer-slot')?.appendChild(composer);
   composer.classList.add('pv-product-composer-inline');
 
-  const heading = composer.querySelector('h3');
-  const paragraph = composer.querySelector('.pv-card-head p');
-  const tag = composer.querySelector('.pv-card-head .pv-tag');
-  if (heading) heading.textContent = 'Pablo · letra e direção';
-  if (paragraph) paragraph.textContent = 'Peça uma mudança, revise o resultado e só aplique se gostar.';
-  if (tag) tag.textContent = 'REVISAR';
+  setText(composer.querySelector('h3'), 'Pablo · letra e direção');
+  setText(composer.querySelector('.pv-card-head p'), 'Peça uma mudança, revise o resultado e só aplique se gostar.');
+  setText(composer.querySelector('.pv-card-head .pv-tag'), 'REVISAR');
 
-  const options = composer.querySelectorAll('select[name="command"] option');
   const labels = ['Criar trecho', 'Continuar daqui', 'Reescrever sem perder minha voz', 'Levar para outro estilo'];
-  options.forEach((option, index) => { if (labels[index]) option.textContent = labels[index]; });
+  composer.querySelectorAll('select[name="command"] option').forEach((option, index) => {
+    if (labels[index]) setText(option, labels[index]);
+  });
 }
 
 function decoratePairing() {
@@ -203,22 +195,16 @@ function decoratePairing() {
   if (!pairing) return;
   pairing.classList.add('pv-online-demand');
   const creator = document.querySelector('#pv-song-creator');
-  if (creator && !pairing.closest('#pv-song-creator')) {
-    const result = creator.querySelector('#pv-song-create-result');
-    result?.insertAdjacentElement('beforebegin', pairing);
-  }
-  const title = pairing.querySelector('h3');
-  const copy = pairing.querySelector('.pv-card-head p');
-  if (title) title.textContent = 'Ativar criação completa';
-  if (copy) copy.textContent = 'Só aparece quando você pede uma função online. Ative uma vez neste aparelho.';
-  if (!pairing.dataset.userVisible) pairing.hidden = true;
+  if (creator && !pairing.closest('#pv-song-creator')) creator.querySelector('#pv-song-create-result')?.insertAdjacentElement('beforebegin', pairing);
+  setText(pairing.querySelector('h3'), 'Ativar criação completa');
+  setText(pairing.querySelector('.pv-card-head p'), 'Só aparece quando você pede uma função online. Ative uma vez neste aparelho.');
+  if (!pairing.dataset.userVisible && !pairing.hidden) pairing.hidden = true;
 }
 
 function showOnlineActivation(pairing, reason = 'Produzir música') {
-  pairing.hidden = false;
+  if (pairing.hidden) pairing.hidden = false;
   pairing.dataset.userVisible = 'true';
-  const status = pairing.querySelector('[data-remote-pair-status]');
-  if (status) status.textContent = `${reason} usa recursos online. Cole seu código uma vez; depois o PabloVoice reconhece este aparelho.`;
+  setText(pairing.querySelector('[data-remote-pair-status]'), `${reason} usa recursos online. Cole seu código uma vez; depois o PabloVoice reconhece este aparelho.`);
   pairing.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setTimeout(() => pairing.querySelector('input[name="code"]')?.focus(), 220);
 }
@@ -226,8 +212,7 @@ function showOnlineActivation(pairing, reason = 'Produzir música') {
 function decorateStudio(route) {
   if (route !== 'studio') return;
   document.querySelector('main')?.classList.add('pv-product-studio');
-  const transport = document.querySelector('.pv-transport-card');
-  transport?.classList.add('pv-product-transport');
+  document.querySelector('.pv-transport-card')?.classList.add('pv-product-transport');
 
   if (!document.querySelector('.pv-studio-flow-strip')) {
     const actions = document.querySelector('.pv-studio-actions');
@@ -245,16 +230,12 @@ function decoratePabloRoute(route) {
   const capability = [...document.querySelectorAll('.pv-card')].find((card) => card.querySelector('h3')?.textContent?.trim() === 'Capacidades');
   capability?.classList.add('pv-product-diagnostics-hidden');
   const hero = document.querySelector('.pv-canon-pablo-route');
-  const kicker = hero?.querySelector('.pv-kicker');
-  const lead = hero?.querySelector('.pv-lead');
-  if (kicker) kicker.textContent = 'Pablo IA · contexto do projeto';
-  if (lead) lead.textContent = 'Pablo lê o que está no projeto, explica o que percebe e sugere próximos passos sem fingir que fez algo que não fez.';
+  setText(hero?.querySelector('.pv-kicker'), 'Pablo IA · contexto do projeto');
+  setText(hero?.querySelector('.pv-lead'), 'Pablo lê o que está no projeto, explica o que percebe e sugere próximos passos sem fingir que fez algo que não fez.');
 }
 
 function decorateContextCompanion(route) {
-  const hero = route === 'home'
-    ? document.querySelector('.pv-canon-home-hero')
-    : document.querySelector('.pv-hero.compact');
+  const hero = route === 'home' ? document.querySelector('.pv-canon-home-hero') : document.querySelector('.pv-hero.compact');
   if (!hero) return;
 
   let context = ROUTE_CONTEXT[route] || ROUTE_CONTEXT.home;
@@ -272,13 +253,15 @@ function decorateContextCompanion(route) {
     badge.className = 'pv-context-companion';
     hero.appendChild(badge);
   }
-  badge.innerHTML = `<span>${context.companion}</span><b>${context.title}</b><small>${context.copy}</small><em>${context.role}</em>`;
+  const contextKey = `${route}|${context.companion}|${context.title}|${context.copy}|${context.role}`;
+  if (badge.dataset.contextKey !== contextKey) {
+    badge.dataset.contextKey = contextKey;
+    badge.innerHTML = `<span>${context.companion}</span><b>${context.title}</b><small>${context.copy}</small><em>${context.role}</em>`;
+  }
 
   document.querySelectorAll('.pv-canon-pablo-copy').forEach((copy) => {
-    const title = copy.querySelector('strong');
-    const text = copy.querySelector(':scope > span');
-    if (title) title.textContent = context.title;
-    if (text) text.textContent = context.copy;
+    setText(copy.querySelector('strong'), context.title);
+    setText(copy.querySelector(':scope > span'), context.copy);
   });
 }
 
@@ -312,14 +295,13 @@ function handleEarlyClick(event) {
 }
 
 function handleEarlySubmit(event) {
-  if (event.target.matches('[data-ai-compose-form]')) {
-    const pairing = document.querySelector('#pv-remote-pairing');
-    if (pairing && !onlineUnlocked) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      pendingOnlineAction = { kind: 'submit', selector: '[data-ai-compose-form]' };
-      showOnlineActivation(pairing, 'Pedir ajuda ao Pablo');
-    }
+  if (!event.target.matches('[data-ai-compose-form]')) return;
+  const pairing = document.querySelector('#pv-remote-pairing');
+  if (pairing && !onlineUnlocked) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    pendingOnlineAction = { kind: 'submit', selector: '[data-ai-compose-form]' };
+    showOnlineActivation(pairing, 'Pedir ajuda ao Pablo');
   }
 }
 
