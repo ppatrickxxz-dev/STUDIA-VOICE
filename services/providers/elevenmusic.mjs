@@ -202,7 +202,9 @@ export function productionBriefStyles(value = '') {
 
   // Music generators respond more consistently when a long description is
   // compiled into short production directions instead of one prose paragraph.
-  // Keep the user's own wording and ordering; only segment and deduplicate it.
+  // Keep the user's wording and ordering, but deduplicate before applying the
+  // six-direction budget so a repeated identity clause never pushes out a real
+  // instrument, groove, bass or arrangement direction.
   const clauses = source
     .split(/[,;|]+|\.(?=\s|$)/)
     .map((part) => part.trim())
@@ -210,6 +212,15 @@ export function productionBriefStyles(value = '') {
     .map((part) => part.slice(0, 150));
 
   const selected = [];
+  const seen = new Set();
+  const add = (value) => {
+    const text = String(value || '').trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || selected.length >= 6) return false;
+    seen.add(key);
+    selected.push(text);
+    return true;
+  };
   const categories = [
     /groove|rhythm|ritmo|batida|drum|bateria|percuss|kick|snare|caixa|swing|syncop|sincop|clave|dembow/i,
     /bass|baixo|sub|grave/i,
@@ -217,16 +228,15 @@ export function productionBriefStyles(value = '') {
     /chorus|refr[aã]o|hook|verse|verso|bridge|ponte|intro|outro|post|motif|motivo|arranj|build|cresce|abre/i,
   ];
 
-  if (clauses[0]) selected.push(clauses[0]);
+  add(clauses[0]);
   for (const category of categories) {
-    const match = clauses.find((clause) => category.test(clause));
-    if (match) selected.push(match);
+    add(clauses.find((clause) => category.test(clause)));
   }
   for (const clause of clauses) {
     if (selected.length >= 6) break;
-    selected.push(clause);
+    add(clause);
   }
-  return compactStyles(selected).slice(0, 6);
+  return selected;
 }
 
 export function isInstrumentalPlan(plan = {}, guideLines = []) {
