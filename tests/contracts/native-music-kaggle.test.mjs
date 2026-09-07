@@ -7,8 +7,8 @@ const MODEL = 'acestep-v15-turbo';
 
 async function source(path) { return readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); }
 
-test('native music dispatcher reuses private ticketed Kaggle runtime without exposing privileged credentials', async () => {
-  const text = await source('supabase/functions/compute-kaggle-music/index.ts');
+test('native music dispatcher reuses private ticketed Kaggle v58 slot without exposing privileged credentials', async () => {
+  const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
   assert.match(text, /job_type:'music_generation'/);
   assert.match(text, /engine:'ace_step_1_5_turbo'/);
   assert.match(text, /provider:'kaggle'/);
@@ -18,6 +18,8 @@ test('native music dispatcher reuses private ticketed Kaggle runtime without exp
   assert.match(text, /createSignedUploadUrl/);
   assert.match(text, /kaggle_callback_hash/);
   assert.match(text, /admin_get_compute_connection/);
+  assert.match(text, /kaggle-worker-source-v58/);
+  assert.match(text, /complete-kaggle-pipeline-job-v58/);
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
   assert.doesNotMatch(text, /ticket=.*conn\.secret/);
@@ -26,7 +28,7 @@ test('native music dispatcher reuses private ticketed Kaggle runtime without exp
 });
 
 test('native music worker pins ACE-Step source identity and returns only signed output plus callback proof', async () => {
-  const text = await source('supabase/functions/kaggle-music-worker/index.ts');
+  const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
   assert.match(text, /git','-C',str\(repo\),'fetch','--depth','1','origin',ACE_REVISION/);
@@ -43,7 +45,7 @@ test('native music worker pins ACE-Step source identity and returns only signed 
 });
 
 test('native music callback verifies identity, callback, storage and hash before asset persistence', async () => {
-  const text = await source('supabase/functions/complete-kaggle-music-job/index.ts');
+  const text = await source('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /job\.job_type!=='music_generation'/);
   assert.match(text, /sha256Text\(token\)/);
   assert.match(text, /callback_token_expired/);
@@ -67,6 +69,7 @@ test('browser runtime can only address owned RLS job/asset rows and verifies dow
   assert.match(resultRuntime, /asset\.storage_bucket !== 'audio-private'/);
   assert.match(resultRuntime, /music_sha256_mismatch/);
   assert.match(resultRuntime, /music_size_mismatch/);
+  assert.match(client, /compute-kaggle-v58/);
   assert.match(client, /ensureRemoteProject/);
   assert.match(client, /ensureSession/);
   assert.match(client, /fallback_allowed: false/);
