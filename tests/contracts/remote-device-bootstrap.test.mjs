@@ -15,13 +15,17 @@ test('remote auth exposes one-time bootstrap pairing without client secrets', ()
   assert.doesNotMatch(authSource, /OPENAI_API_KEY|GROQ_API_KEY|AI_GATEWAY_API_KEY/);
 });
 
-test('activation UI is installed by preboot and remains one-time and secret-free', () => {
+test('activation UI is installed by preboot, demand-driven, one-time and secret-free', () => {
   assert.match(prebootSource, /installRemoteAuthUI/);
-  assert.match(uiSource, /Ativar recursos online/);
+  assert.match(uiSource, /pablovoice:request-online-auth/);
+  assert.match(uiSource, /Reconhecer este aparelho/);
   assert.match(uiSource, /one-time-code/);
-  assert.match(uiSource, /automaticamente/i);
+  assert.match(uiSource, /Código de ativação/);
   assert.match(uiSource, /rotatingDeviceToken:\s*true/);
   assert.match(uiSource, /noProviderSecretInClient:\s*true/);
+  assert.match(uiSource, /demandDrivenUI:\s*true/);
+  assert.match(uiSource, /noSilentOfflineFallback:\s*true/);
+  assert.match(uiSource, /card\.hidden = true/);
 });
 
 test('canonical device-auth contract requires hash-only single-use codes', () => {
