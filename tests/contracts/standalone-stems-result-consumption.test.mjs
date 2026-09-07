@@ -33,12 +33,12 @@ test('completed outputs are durably promoted into the same local project', () =>
   assert.match(runtime, /await saveProject\(project\)/);
   assert.match(canary, /waitForStandaloneStems/);
   assert.match(canary, /importStandaloneStems/);
-  assert.match(canary, /stems:consumed\.imported/);
+  assert.match(canary, /stems:\s*consumed\.imported/);
 });
 
 test('standalone route validation is distinct from B09 acoustic promotion', () => {
-  assert.match(canary, /routeValidated:true/);
-  assert.match(canary, /b09AcousticValidated:false/);
-  assert.match(canary, /dispatcher:DISPATCHER,engine:'Demucs',model:'htdemucs'/);
+  assert.match(canary, /routeValidated:\s*true/);
+  assert.match(canary, /b09AcousticValidated:\s*false/);
+  assert.match(canary, /dispatcher:\s*DISPATCHER,[\s\S]*engine:\s*'Demucs',[\s\S]*model:\s*'htdemucs'/);
   assert.doesNotMatch(canary, /B09_STANDALONE_STEMS_PASSED/);
 });

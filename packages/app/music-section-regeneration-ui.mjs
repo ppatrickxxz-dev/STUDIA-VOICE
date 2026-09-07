@@ -51,20 +51,31 @@ async function syncSectionActions() {
   const modal = document.querySelector('[data-section-map-modal]');
   if (!modal) return;
   const project = await currentProject().catch(() => null);
-  if (!project) return;
+  if (!project || !modal.isConnected || modal !== document.querySelector('[data-section-map-modal]')) return;
   runtime.project = project;
   const sourceTake = latestInpaintableSongTake(project);
   const list = modal.querySelector('[data-section-list]');
-  if (!list) return;
+  if (!list?.isConnected) return;
 
-  list.querySelector('[data-music-regen-readiness]')?.remove();
-  const readiness = document.createElement('div');
-  readiness.dataset.musicRegenReadiness = 'true';
-  readiness.className = `pv-music-regen-readiness ${sourceTake ? 'ready' : ''}`;
-  readiness.innerHTML = sourceTake
-    ? `<strong>✦ Edição musical seletiva pronta</strong><span>Take HQ com continuidade encontrado. Você pode refazer uma seção sem pedir uma nova música inteira.</span>`
-    : `<strong>Edição musical seletiva</strong><span>Crie uma demo HQ com ID de continuidade para habilitar “Refazer HQ”. O mapa de seções continua funcionando normalmente.</span>`;
-  list.prepend(readiness);
+  let readiness = list.querySelector('[data-music-regen-readiness]');
+  if (!readiness) {
+    readiness = document.createElement('div');
+    readiness.dataset.musicRegenReadiness = 'true';
+    readiness.className = 'pv-music-regen-readiness';
+    readiness.innerHTML = '<strong></strong><span></span>';
+    list.prepend(readiness);
+  }
+  readiness.classList.toggle('ready', Boolean(sourceTake));
+  setText(
+    readiness.querySelector('strong'),
+    sourceTake ? '〰 Edição por seção pronta' : 'Edição por seção',
+  );
+  setText(
+    readiness.querySelector('span'),
+    sourceTake
+      ? 'Existe um take conectado com continuidade. Você pode criar outra versão de uma seção sem refazer a música inteira.'
+      : 'Produza uma versão conectada para liberar novas versões seletivas. O mapa de seções continua editável normalmente.',
+  );
 
   for (const row of list.querySelectorAll('[data-section-row]')) {
     const actions = row.querySelector('.pv-section-actions');
@@ -79,7 +90,8 @@ async function syncSectionActions() {
     button.className = 'pv-btn pv-music-regen-button';
     button.type = 'button';
     button.dataset.musicSectionRegen = row.dataset.sectionRow;
-    button.textContent = '✦ Refazer HQ';
+    button.textContent = '〰 Refazer seção';
+    button.title = 'Criar uma nova versão apenas desta seção e preservar o restante do take.';
     actions.prepend(button);
   }
 }
@@ -110,7 +122,7 @@ function renderRegenerationPanel(plan) {
   const seconds = Math.max(0, (plan.section.endMs - plan.section.startMs) / 1000);
   panel.innerHTML = `
     <div class="pv-music-regen-head">
-      <div><small>MUSIC V2 · INPAINTING</small><h3>Refazer só ${escapeHtml(plan.section.label)}</h3><p>${formatMs(plan.section.startMs)} → ${formatMs(plan.section.endMs)} · ${seconds.toFixed(1)}s. O restante da música é referenciado pelo take original.</p></div>
+      <div><small>〰 WAVE · EDIÇÃO SELETIVA</small><h3>Refazer só ${escapeHtml(plan.section.label)}</h3><p>${formatMs(plan.section.startMs)} → ${formatMs(plan.section.endMs)} · ${seconds.toFixed(1)}s. O restante da música é referenciado pelo take original.</p></div>
       <button class="pv-btn" type="button" data-music-regen-close>Cancelar</button>
     </div>
     <form data-music-regen-form class="pv-music-regen-form">
@@ -123,8 +135,8 @@ function renderRegenerationPanel(plan) {
       <label>Evitar nesta seção · opcional
         <input class="pv-field" name="negative" maxlength="700" placeholder="Ex.: dembow pesado, drop EDM, excesso de guitarra">
       </label>
-      <div class="pv-music-regen-safety"><b>Preservação seletiva</b><span>O PabloVoice envia o intervalo escolhido como substituição e referencia as faixas anteriores/posteriores pelo <code>song-id</code>. A versão anterior não é apagada.</span></div>
-      <div class="pv-music-regen-actions"><span data-music-regen-status>Pronto para criar uma nova versão desta seção.</span><button class="pv-btn primary" type="submit" data-music-regen-submit>✦ Gerar nova versão</button></div>
+      <div class="pv-music-regen-safety"><b>Preservar o resto da música</b><span>Só o intervalo selecionado recebe uma nova versão. O take anterior continua intacto para comparação e retorno.</span></div>
+      <div class="pv-music-regen-actions"><span data-music-regen-status>Pronto para criar uma nova versão desta seção.</span><button class="pv-btn primary" type="submit" data-music-regen-submit>〰 Criar nova versão</button></div>
     </form>`;
   const editor = modal.querySelector('.pv-section-editor');
   if (editor) editor.insertAdjacentElement('beforebegin', panel);
@@ -146,8 +158,8 @@ async function onSubmit(event) {
   if (!direction) return setText(status, 'Descreva o que você quer mudar nesta seção.');
 
   runtime.busy = true;
-  if (submit) { submit.disabled = true; submit.textContent = 'Gerando seção…'; }
-  setText(status, 'Confirmando take HQ, tempos e contexto da seção…');
+  if (submit) { submit.disabled = true; submit.textContent = '〰 Criando seção…'; }
+  setText(status, 'Confirmando take, tempos e contexto da seção…');
   try {
     const project = await currentProject();
     const plan = resolveSectionRegeneration(project, runtime.selectedSectionId, {
@@ -174,10 +186,10 @@ async function onSubmit(event) {
     location.reload();
   } catch (error) {
     console.error('PABLOVOICE_MUSIC_SECTION_REGEN_FAILED', error);
-    setText(status, error?.message || 'A regeneração não concluiu. A versão anterior foi preservada.');
+    setText(status, error?.message || 'A edição da seção não concluiu. A versão anterior foi preservada.');
   } finally {
     runtime.busy = false;
-    if (submit) { submit.disabled = false; submit.textContent = '✦ Gerar nova versão'; }
+    if (submit) { submit.disabled = false; submit.textContent = '〰 Criar nova versão'; }
   }
 }
 
@@ -205,19 +217,19 @@ async function currentProject() {
 }
 
 function humanPlanError(error) {
-  if (error === 'inpainting_source_missing') return 'Esta música ainda não tem um take HQ com continuidade para regeneração seletiva.';
+  if (error === 'inpainting_source_missing') return 'Esta música ainda não tem um take conectado com continuidade para edição seletiva.';
   if (error === 'section_not_found') return 'Esta seção não está mais no mapa canônico.';
-  if (error === 'section_timing_incomplete') return 'Confirme os tempos desta seção antes de regenerá-la.';
-  return 'Não consegui preparar esta seção para regeneração.';
+  if (error === 'section_timing_incomplete') return 'Confirme os tempos desta seção antes de editá-la.';
+  return 'Não consegui preparar esta seção para edição.';
 }
 
 function humanRuntimeError(result = {}) {
-  if (result.error === 'auth_required') return 'Conecte sua sessão do PabloVoice para usar a regeneração HQ. O take atual foi preservado.';
-  if (result.error === 'provider_unavailable') return 'O motor Music v2 não está disponível agora. O take atual foi preservado.';
-  if (result.error === 'provider_rate_limited') return 'O motor Music v2 atingiu o limite temporário. Tente novamente depois; nada foi substituído.';
-  if (result.error === 'provider_auth_failed') return 'A credencial do motor Music v2 precisa ser corrigida no backend. Nada foi substituído.';
-  if (result.error === 'invalid_inpainting_plan') return 'O intervalo selecionado não pôde ser enviado com segurança ao motor musical.';
-  return `A regeneração não concluiu (${result.error || 'erro remoto'}). O take anterior continua intacto.`;
+  if (result.error === 'auth_required') return 'Reconheça este aparelho para usar a edição conectada. O take atual foi preservado.';
+  if (result.error === 'provider_unavailable') return 'A produção conectada não está disponível agora. O take atual foi preservado.';
+  if (result.error === 'provider_rate_limited') return 'A produção conectada atingiu o limite temporário. Tente novamente depois; nada foi substituído.';
+  if (result.error === 'provider_auth_failed') return 'A credencial da produção conectada precisa ser corrigida no backend. Nada foi substituído.';
+  if (result.error === 'invalid_inpainting_plan') return 'O intervalo selecionado não pôde ser enviado com segurança para edição.';
+  return `A edição não concluiu (${result.error || 'erro remoto'}). O take anterior continua intacto.`;
 }
 
 function parseStyles(value) {
@@ -237,5 +249,11 @@ function notify(message, kind = '') {
   wrap.appendChild(item);
   setTimeout(() => item.remove(), 3500);
 }
-function setText(node, value) { if (node) node.textContent = value; }
+function setText(node, value) {
+  if (!node) return;
+  const text = String(value ?? '');
+  if (node.textContent !== text) node.textContent = text;
+}
 function escapeHtml(value = '') { return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[char]); }
+
+installMusicSectionRegenerationUI();

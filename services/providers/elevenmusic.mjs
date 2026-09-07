@@ -1,4 +1,5 @@
 const DEFAULT_BASE_URL = 'https://api.elevenlabs.io';
+const SYNTH_GUIDE_PLACEHOLDERS = new Set(['guia', 'melodica', 'para', 'cantar']);
 
 function requireApiKey(apiKey) {
   if (!apiKey || typeof apiKey !== 'string') {
@@ -143,15 +144,24 @@ export function buildPabloMusicV2Plan({ plan, negativeStyles = [] } = {}) {
   if (!plan || !Array.isArray(plan.sections) || plan.sections.length === 0) {
     throw new Error('A PabloVoice song plan with sections is required');
   }
+
   const guideLines = Array.isArray(plan.guideLines) ? plan.guideLines : [];
+  const instrumentalOnly = isInstrumentalPlan(plan, guideLines);
+  const promptDirections = productionBriefStyles(plan.brief);
   const globalStyles = compactStyles([
-    plan.brief,
+    ...promptDirections,
     genreStyle(plan.genre),
     plan.mood,
+    instrumentalOnly
+      ? 'instrumental-only production; musical identity is carried by rhythm, bass, harmony, texture and motifs'
+      : 'instrumental drives the groove and arrangement while leaving controlled midrange space for the lead vocal',
     Number.isFinite(Number(plan.bpm)) ? `${Math.round(Number(plan.bpm))} BPM` : '',
     plan.key ? `${plan.key} ${plan.mode === 'major' ? 'major' : 'minor'}` : '',
   ]);
-  const negatives = compactStyles(negativeStyles);
+  const negatives = compactStyles([
+    ...negativeStyles,
+    ...(instrumentalOnly ? ['lead vocals', 'sung lyrics', 'spoken word', 'vocal chops'] : []),
+  ]);
 
   const chunks = plan.sections.map((section) => {
     const startBeat = Number(section.startBeat);
@@ -161,16 +171,19 @@ export function buildPabloMusicV2Plan({ plan, negativeStyles = [] } = {}) {
     if (![startBeat, endBeat, startSeconds, endSeconds].every(Number.isFinite) || endBeat <= startBeat || endSeconds <= startSeconds) {
       throw new Error(`Invalid PabloVoice section timing: ${String(section.id || section.label || 'unknown')}`);
     }
-    const lines = guideLines
+
+    const lines = instrumentalOnly ? [] : guideLines
       .filter((line) => Number(line.startBeat) >= startBeat && Number(line.startBeat) < endBeat)
       .map((line) => String(line.text || '').trim())
       .filter(Boolean);
     const label = String(section.label || section.id || 'Section').trim().slice(0, 80) || 'Section';
     const energy = Number(section.energy);
     const localStyles = compactStyles([
-      ...globalStyles,
+      sectionRoleStyle(section.id || section.label, instrumentalOnly),
       Number.isFinite(energy) ? energyStyle(energy) : '',
+      ...globalStyles,
     ]);
+
     return {
       text: lines.length ? `[${label}]\n${lines.join('\n')}` : `[${label} instrumental]`,
       duration_ms: Math.max(1000, Math.round((endSeconds - startSeconds) * 1000)),
@@ -181,6 +194,78 @@ export function buildPabloMusicV2Plan({ plan, negativeStyles = [] } = {}) {
   });
 
   return { chunks };
+}
+
+export function productionBriefStyles(value = '') {
+  const source = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!source) return [];
+
+  // Music generators respond more consistently when a long description is
+  // compiled into short production directions instead of one prose paragraph.
+  // Keep the user's wording and ordering, but deduplicate before applying the
+  // six-direction budget so a repeated identity clause never pushes out a real
+  // instrument, groove, bass or arrangement direction.
+  const clauses = source
+    .split(/[,;|]+|\.(?=\s|$)/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => part.slice(0, 150));
+
+  const selected = [];
+  const seen = new Set();
+  const add = (value) => {
+    const text = String(value || '').trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || selected.length >= 6) return false;
+    seen.add(key);
+    selected.push(text);
+    return true;
+  };
+  const categories = [
+    /groove|rhythm|ritmo|batida|drum|bateria|percuss|kick|snare|caixa|swing|syncop|sincop|clave|dembow/i,
+    /bass|baixo|sub|grave/i,
+    /synth|sintet|pad|pluck|keys|piano|guitar|viol[aã]o|string|cordas|brass|metais/i,
+    /chorus|refr[aã]o|hook|verse|verso|bridge|ponte|intro|outro|post|motif|motivo|arranj|build|cresce|abre/i,
+  ];
+
+  add(clauses[0]);
+  for (const category of categories) {
+    add(clauses.find((clause) => category.test(clause)));
+  }
+  for (const clause of clauses) {
+    if (selected.length >= 6) break;
+    add(clause);
+  }
+  return selected;
+}
+
+export function isInstrumentalPlan(plan = {}, guideLines = []) {
+  const explicitMode = String(plan.creationMode || plan.creation_mode || plan.vocalIntent || '').toLowerCase();
+  if (['instrumental', 'instrumental_first', 'instrumental-only', 'instrumental_only'].includes(explicitMode)) return true;
+  if (!Array.isArray(guideLines) || guideLines.length === 0) return true;
+
+  // The local guide renderer intentionally creates these four placeholder words
+  // when no lyrics exist. They are a local audition aid and must never be sent to
+  // the connected music provider as lyric content.
+  const words = guideLines
+    .map((line) => normalizeWord(line?.text))
+    .filter(Boolean);
+  return words.length > 0 && words.every((word) => SYNTH_GUIDE_PLACEHOLDERS.has(word));
+}
+
+function sectionRoleStyle(value = '', instrumentalOnly = false) {
+  const id = normalizeWord(value).replace(/\s+/g, '_');
+  if (/intro/.test(id)) return 'intro establishes the sonic palette without revealing the full arrangement';
+  if (/pre/.test(id)) return 'pre-chorus builds tension and forward motion toward the hook';
+  if (/refr|chorus|hook/.test(id)) return 'chorus opens wider with a memorable motif and fuller rhythm section';
+  if (/ponte|bridge/.test(id)) return 'bridge creates a clear textural contrast while preserving the song identity';
+  if (/outro/.test(id)) return 'outro resolves the track with a deliberate reduction or final motif';
+  if (/vers|verse/.test(id)) {
+    return instrumentalOnly
+      ? 'verse section develops the groove with controlled density and room for later melodic ideas'
+      : 'verse keeps controlled density and leaves space around the lead vocal';
+  }
+  return 'section evolves the arrangement without overcrowding the core groove';
 }
 
 function compactStyles(values) {
@@ -213,4 +298,13 @@ function energyStyle(value) {
   if (value >= 0.62) return 'rising energy, fuller arrangement';
   if (value <= 0.35) return 'sparse, restrained arrangement';
   return 'moderate energy, controlled arrangement';
+}
+
+function normalizeWord(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_\s-]/g, '')
+    .trim();
 }

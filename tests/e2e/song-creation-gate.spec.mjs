@@ -8,7 +8,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('SONG CREATION GATE: lyrics become persisted instrumental + guide, PMI evidence and exportable Studio mix', async ({ page }) => {
+test('SONG CREATION GATE: offline fallback persists instrumental + guide, PMI evidence and exportable Studio mix', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -29,11 +29,19 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide, PMI evid
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
   await form.locator('input[name="brief"]').fill('Pop R&B noturno, synths suaves, grave redondo e refrão aberto');
+  await form.locator('.pv-intimate-advanced > summary').click();
   await form.locator('select[name="genre"]').selectOption('rnb');
   await form.locator('input[name="bpm"]').fill('112');
   await form.locator('select[name="duration"]').selectOption('60');
   await form.locator('select[name="key"]').selectOption('A');
   await form.locator('input[name="mood"]').fill('íntimo, elegante, noturno');
+
+  // The deterministic local renderer is now explicitly the no-network fallback.
+  // Load the app first, then take the browser offline so the local engine remains
+  // fully available without blocking the already-loaded canonical shell.
+  await context.setOffline(true);
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'offline');
+  await expect(form.locator('.pv-local-fallback-card')).toBeVisible();
   await form.locator('[data-song-create-button]').click();
 
   await expect(page.locator('#pv-song-create-status')).toContainText('Pronto.', { timeout: 45_000 });
@@ -90,6 +98,9 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide, PMI evid
   expect(evidence.sections).toBeGreaterThanOrEqual(6);
   expect(evidence.confirmedSections).toBeGreaterThanOrEqual(6);
 
+  // Restore network before the app reload used to reopen the persisted Studio.
+  await context.setOffline(false);
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
   await page.locator('[data-song-open-studio]').click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible({ timeout: 20_000 });
   await page.getByRole('tab', { name: 'Mixer' }).click();
