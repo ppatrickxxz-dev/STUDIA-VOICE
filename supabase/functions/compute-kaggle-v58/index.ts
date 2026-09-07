@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.112.2'
 const cors={
   'access-control-allow-origin':'*',
   'access-control-allow-headers':'authorization, x-client-info, apikey, content-type',
-  'access-control-allow-methods':'POST, OPTIONS'
+  'access-control-allow-methods':'GET, POST, OPTIONS'
 }
 const json=(b:any,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...cors,'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})
 const isUuid=(v:any)=>/^[0-9a-f-]{36}$/i.test(String(v||''))
@@ -48,24 +48,63 @@ async function kaggleRpc(token:string,method:string,payload:any){
   if(!r.ok||Number(out?.code||0)>=400)throw new Error(`Kaggle ${method}: ${out?.message||text.slice(0,600)}`)
   return out
 }
+function envClients(){
+  const url=Deno.env.get('SUPABASE_URL')||''
+  const pubs=JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')||'{}')
+  const secs=JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}')
+  const pub=pubs.default||Deno.env.get('SUPABASE_ANON_KEY')||''
+  const secret=secs.default||Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
+  if(!url||!pub||!secret)return null
+  const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
+  return {url,pub,secret,admin}
+}
+async function readiness(){
+  const env=envClients()
+  if(!env)return json({ok:false,error:'server_configuration_error'},500)
+  const {data:rows,error}=await env.admin.from('render_jobs').select('finished_at,proof,engine,provider').eq('job_type','music_generation').eq('status','completed').order('finished_at',{ascending:false}).limit(1)
+  if(error)return json({ok:false,error:'readiness_query_failed'},500)
+  const row=rows?.[0]||null
+  const proof=row?.proof&&typeof row.proof==='object'?row.proof:{}
+  const verified=proof?.verified===true&&proof?.model===ACE_MODEL&&proof?.model_revision===ACE_REVISION&&Number(proof?.audio_size_bytes)>4096&&Number(proof?.duration_seconds)>1&&Number(proof?.sample_rate)>0&&Number(proof?.channels)>0&&/^[0-9a-f]{64}$/i.test(String(proof?.audio_sha256||''))
+  return json({
+    ok:true,
+    service:'pablovoice-native-music',
+    provider:'kaggle',
+    engine:'ACE-Step 1.5',
+    model:ACE_MODEL,
+    model_revision:ACE_REVISION,
+    worker:WORKER_SLUG,
+    callback:COMPLETE_SLUG,
+    auth_for_generation:'required',
+    credential_exposed:false,
+    configured:verified,
+    runnable:verified,
+    physical_canary:verified?{
+      verified:true,
+      finished_at:row.finished_at,
+      duration_seconds:Number(proof.duration_seconds),
+      sample_rate:Number(proof.sample_rate),
+      channels:Number(proof.channels),
+      audio_size_bytes:Number(proof.audio_size_bytes),
+      audio_sha256:String(proof.audio_sha256),
+      generation_seed:Number.isFinite(Number(proof.generation_seed))?Number(proof.generation_seed):null,
+    }:{verified:false},
+  })
+}
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:cors})
+  if(req.method==='GET')return readiness()
   if(req.method!=='POST')return json({ok:false,error:'method_not_allowed'},405)
   let jobId=''
   try{
-    const url=Deno.env.get('SUPABASE_URL')||''
-    const pubs=JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')||'{}')
-    const secs=JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}')
-    const pub=pubs.default||Deno.env.get('SUPABASE_ANON_KEY')||''
-    const secret=secs.default||Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
-    if(!url||!pub||!secret)return json({ok:false,error:'server_configuration_error'},500)
-
+    const env=envClients()
+    if(!env)return json({ok:false,error:'server_configuration_error'},500)
+    const {url,pub,admin}=env
     const auth=req.headers.get('authorization')||''
     const jwt=auth.startsWith('Bearer ')?auth.slice(7):''
     if(!jwt)return json({ok:false,error:'auth_required'},401)
     const userClient=createClient(url,pub,{global:{headers:{Authorization:`Bearer ${jwt}`}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
-    const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
     const {data:ud,error:ue}=await userClient.auth.getUser(jwt)
     const user=ud?.user
     if(ue||!user)return json({ok:false,error:'invalid_session'},401)
