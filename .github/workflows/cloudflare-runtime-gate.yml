@@ -13,7 +13,7 @@ on:
       - 'tests/contracts/cloudflare-runtime.test.mjs'
       - 'tests/contracts/cloudflare-music-regeneration.test.mjs'
       - 'tests/contracts/native-music-kaggle.test.mjs'
-      - 'tests/contracts/song-creation-native-provider.test.mjs'
+      - 'tests/contracts/native-music-creator-wiring.test.mjs'
       - '.github/workflows/cloudflare-runtime-gate.yml'
       - '.github/workflows/composer-provider-canary.yml'
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
       - name: Build canonical Web
         run: npm run build:web
       - name: Verify Cloudflare and connected music runtime contracts
-        run: node --test tests/contracts/cloudflare-runtime.test.mjs tests/contracts/cloudflare-music-regeneration.test.mjs tests/contracts/native-music-kaggle.test.mjs tests/contracts/song-creation-native-provider.test.mjs
+        run: node --test tests/contracts/cloudflare-runtime.test.mjs tests/contracts/cloudflare-music-regeneration.test.mjs tests/contracts/native-music-kaggle.test.mjs tests/contracts/native-music-creator-wiring.test.mjs
       - name: Bundle Worker and Static Assets without deployment
         run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
 
@@ -113,8 +113,6 @@ jobs:
           fetch_200 "$BASE_URL/api/pablo-agent" "$tmp/agent.json" "$tmp/agent.headers"
           jq -e '.ok == true and .provider == "cloudflare_workers_ai" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
 
-          # Eleven Music routes remain published for compatibility/section inpainting, but the
-          # release-critical Creator provider is now the PabloVoice-owned native GPU runtime.
           fetch_200 "$BASE_URL/api/music-generation" "$tmp/music.json" "$tmp/music.headers"
           jq -e '.ok == true and .service == "pablovoice-music-generation" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required"' "$tmp/music.json" >/dev/null
 
