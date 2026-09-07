@@ -42,11 +42,14 @@ function sync() {
   }
   const offline = navigator.onLine === false;
   const source = document.querySelector('#pv-stems-canary-run');
-  button.disabled = offline || Boolean(source?.disabled);
-  button.textContent = offline ? 'STEMS · OFF' : source?.disabled ? 'STEMS…' : 'STEMS';
-  button.title = offline
+  const disabled = offline || Boolean(source?.disabled);
+  const label = offline ? 'STEMS · OFF' : source?.disabled ? 'STEMS…' : 'STEMS';
+  const title = offline
     ? 'A separação de stems precisa de conexão.'
     : 'Separar a faixa ativa em Vocal + Instrumental e importar os resultados no projeto.';
+  if (button.disabled !== disabled) button.disabled = disabled;
+  if (button.textContent !== label) button.textContent = label;
+  if (button.title !== title) button.title = title;
 }
 
 function triggerStems(event) {
@@ -56,7 +59,9 @@ function triggerStems(event) {
   if (button && !button.disabled) {
     document.documentElement.dataset.pvActionState = 'processing';
     document.documentElement.dataset.pvPabloState = 'recording';
-    document.querySelectorAll('[data-pv-state-label]').forEach((node) => { node.textContent = 'PROCESSANDO'; });
+    document.querySelectorAll('[data-pv-state-label]').forEach((node) => {
+      if (node.textContent !== 'PROCESSANDO') node.textContent = 'PROCESSANDO';
+    });
     button.click();
     document.querySelector('#pv-stems-canary')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -65,9 +70,12 @@ function triggerStems(event) {
 function onImported() {
   document.documentElement.dataset.pvActionState = 'approving';
   document.documentElement.dataset.pvPabloState = 'happy';
-  document.querySelectorAll('[data-pv-state-label]').forEach((node) => { node.textContent = 'APROVANDO'; });
+  document.querySelectorAll('[data-pv-state-label]').forEach((node) => {
+    if (node.textContent !== 'APROVANDO') node.textContent = 'APROVANDO';
+  });
+  const line = 'Separei Vocal + Instrumental e trouxe os dois de volta. Compara com o mix original antes de escolher.';
   document.querySelectorAll('[data-pv-pablo-line]').forEach((node) => {
-    node.textContent = 'Separei Vocal + Instrumental e trouxe os dois de volta. Compara com o mix original antes de escolher.';
+    if (node.textContent !== line) node.textContent = line;
   });
   setTimeout(() => {
     delete document.documentElement.dataset.pvActionState;
