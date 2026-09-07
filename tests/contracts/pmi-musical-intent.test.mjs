@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   interpretMusicalIntent,
   respondToMusicCreation,
+  routeMusicalIntent,
   upgradeSongPlanToMusicSpec,
   musicSpecProviderContext,
   MUSIC_SPEC_V2_SCHEMA,
@@ -22,33 +23,54 @@ test('musical intent translates subjective production language into bounded delt
 });
 
 test('bass language targets bass and asks for syncopation/humanization instead of generative replacement', () => {
-  const result = interpretMusicalIntent('Esse baixo está muito quadrado, deixa mais vivo');
+  const intent = interpretMusicalIntent('Esse baixo está muito quadrado, deixa mais vivo');
+  const route = routeMusicalIntent(intent);
 
-  assert.equal(result.supported, true);
-  assert.equal(result.scope.target, 'bass');
-  assert.equal(result.scope.preserveUnselected, true);
-  assert.ok(result.deltas.syncopation > 0);
-  assert.ok(result.deltas.humanize > 0);
-  assert.ok(result.deltas.noteVariation > 0);
+  assert.equal(intent.supported, true);
+  assert.equal(intent.scope.target, 'bass');
+  assert.equal(intent.scope.preserveUnselected, true);
+  assert.ok(intent.deltas.syncopation > 0);
+  assert.ok(intent.deltas.humanize > 0);
+  assert.ok(intent.deltas.noteVariation > 0);
+  assert.equal(route.executor, 'instrument_lab');
+  assert.equal(route.strategy, 'midi_first');
+  assert.deepEqual(route.fallback, ['music_generation']);
+  assert.equal(route.constraints.canApply, false);
 });
 
-test('localized chorus request preserves unselected material and controls density', () => {
-  const result = interpretMusicalIntent('Abre o refrão, mas sem ficar barulhento; mantém o resto');
+test('localized chorus request preserves unselected material and routes to selective generation', () => {
+  const intent = interpretMusicalIntent('Abre o refrão, mas sem ficar barulhento; mantém o resto');
+  const route = routeMusicalIntent(intent);
 
-  assert.equal(result.scope.section, 'chorus');
-  assert.equal(result.scope.preserveUnselected, true);
-  assert.ok(result.deltas.energy > 0);
-  assert.ok(result.deltas.width > 0);
-  assert.ok(result.deltas.clarity > 0);
-  assert.ok(result.deltas.density < 0);
+  assert.equal(intent.scope.section, 'chorus');
+  assert.equal(intent.scope.preserveUnselected, true);
+  assert.ok(intent.deltas.energy > 0);
+  assert.ok(intent.deltas.width > 0);
+  assert.ok(intent.deltas.clarity > 0);
+  assert.ok(intent.deltas.density < 0);
+  assert.equal(route.executor, 'music_generation');
+  assert.equal(route.action, 'regenerate_section');
+  assert.equal(route.constraints.preserveUnselected, true);
 });
 
-test('explicit localized change understands target-only preservation language', () => {
-  const result = interpretMusicalIntent('Troca só o synth e mantém o resto');
+test('explicit localized synth change routes to MIDI/instrument editing first', () => {
+  const intent = interpretMusicalIntent('Troca só o synth e mantém o resto');
+  const route = routeMusicalIntent(intent);
 
-  assert.equal(result.supported, true);
-  assert.equal(result.scope.target, 'synth');
-  assert.equal(result.scope.preserveUnselected, true);
+  assert.equal(intent.supported, true);
+  assert.equal(intent.scope.target, 'synth');
+  assert.equal(intent.scope.preserveUnselected, true);
+  assert.equal(route.executor, 'instrument_lab');
+  assert.equal(route.strategy, 'midi_first');
+});
+
+test('drum edits prefer Beat Lab before generative replacement', () => {
+  const intent = interpretMusicalIntent('Ajusta só a bateria e mantém o resto');
+  const route = routeMusicalIntent(intent);
+
+  assert.equal(route.executor, 'beat_lab');
+  assert.equal(route.strategy, 'deterministic_first');
+  assert.deepEqual(route.fallback, ['music_generation']);
 });
 
 test('target or section nouns alone do not become fake edit plans', () => {
@@ -56,7 +78,7 @@ test('target or section nouns alone do not become fake edit plans', () => {
   assert.deepEqual(interpretMusicalIntent('baixo'), { supported: false, reason: 'no_musical_intent' });
 });
 
-test('PMI conversation exposes musical direction as a review-only plan', () => {
+test('PMI conversation exposes musical direction and chosen executor as a review-only plan', () => {
   const result = respondToMusicCreation('Abre o refrão, mas sem ficar barulhento; mantém o resto', { projectId: 'project-1' });
 
   assert.equal(result.supported, true);
@@ -64,15 +86,20 @@ test('PMI conversation exposes musical direction as a review-only plan', () => {
   assert.equal(result.reviewRequired, true);
   assert.equal(result.canApply, false);
   assert.equal(result.musicalIntent.scope.section, 'chorus');
+  assert.equal(result.operationRoute.executor, 'music_generation');
+  assert.equal(result.operationRoute.action, 'regenerate_section');
   assert.match(result.reply, /ainda não alterei o áudio/i);
 });
 
-test('version preference is represented explicitly without mutating audio', () => {
-  const result = interpretMusicalIntent('O primeiro estava melhor, prefiro a versão anterior');
+test('version preference is represented explicitly and routed to take history', () => {
+  const intent = interpretMusicalIntent('O primeiro estava melhor, prefiro a versão anterior');
+  const route = routeMusicalIntent(intent);
 
-  assert.equal(result.supported, true);
-  assert.equal(result.versionReference, 'prefer_previous');
-  assert.equal(result.scope.preserveUnselected, false);
+  assert.equal(intent.supported, true);
+  assert.equal(intent.versionReference, 'prefer_previous');
+  assert.equal(intent.scope.preserveUnselected, false);
+  assert.equal(route.executor, 'version_history');
+  assert.equal(route.action, 'preview_previous_take');
 });
 
 test('MusicSpec v2 upgrades the current song plan without dropping canonical material', () => {
