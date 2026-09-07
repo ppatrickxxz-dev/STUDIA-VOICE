@@ -101,12 +101,14 @@ export function interpretMusicalIntent(message = '', context = {}) {
   const target = inferTarget(source);
   const section = inferSection(source);
   const preserveAllElse = /\b(mant[eé]m|mantem|preserva|n[aã]o mexe|sem mexer)\b.*\b(tudo|resto|restante)\b/i.test(source)
-    || /\b(s[oó]|somente|apenas)\b.*\b(troca|muda|altera|refaz)\b/i.test(source);
+    || /\b(s[oó]|somente|apenas)\b.*\b(troca|muda|altera|refaz|ajusta)\b/i.test(source)
+    || /\b(troca|muda|altera|refaz|ajusta)\b.{0,30}\b(s[oó]|somente|apenas)\b/i.test(source);
+  const explicitLocalizedChange = Boolean(target || section) && /\b(troca|muda|altera|refaz|ajusta)\b/i.test(source);
   const versionReference = /\b(primeiro|primeira|anterior|vers[aã]o anterior|take anterior)\b.*\b(melhor|prefiro|gostei mais)\b/i.test(source)
     ? 'prefer_previous'
     : null;
 
-  const supported = evidence.length > 0 || target != null || section != null || preserveAllElse || versionReference != null;
+  const supported = evidence.length > 0 || preserveAllElse || explicitLocalizedChange || versionReference != null;
   if (!supported) return Object.freeze({ supported: false, reason: 'no_musical_intent' });
 
   return Object.freeze({
