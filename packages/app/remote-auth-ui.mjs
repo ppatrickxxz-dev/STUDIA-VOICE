@@ -23,10 +23,12 @@ async function injectPairing() {
   const existing = document.querySelector('#pv-remote-pairing');
   const session = await auth.ensureSession().catch(() => null);
   if (session?.accessToken) {
-    existing?.remove();
+    document.querySelectorAll('#pv-remote-pairing').forEach((node) => node.remove());
     return;
   }
-  if (existing) return;
+  // MutationObserver callbacks can overlap while ensureSession is pending. Re-check
+  // after the async boundary so only one activation card can ever be inserted.
+  if (existing || document.querySelector('#pv-remote-pairing')) return;
   const host = findHost();
   if (!host) return;
   const card = document.createElement('article');
