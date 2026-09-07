@@ -4,7 +4,11 @@ async function seedSectionsAndTake(page, { withSongId }) {
   await page.evaluate(async ({ withSongId }) => {
     const storage = await import('./storage.mjs');
     const sections = await import('./core/src/section-map.mjs');
-    const project = await storage.getProject(storage.activeProjectSessionId());
+    const activeId = storage.activeProjectSessionId();
+    const projects = activeId ? [] : await storage.listProjects();
+    const projectId = activeId || projects[0]?.id;
+    if (!projectId) throw new Error('ui_gate_project_missing');
+    const project = await storage.getProject(projectId);
     let map = project.arrangementMap;
     map = sections.upsertConfirmedSection(map, { kind: 'verse', startSeconds: 0, endSeconds: 20, source: 'song_creation_runtime_v1', confidence: 1 });
     map = sections.upsertConfirmedSection(map, { kind: 'chorus', startSeconds: 20, endSeconds: 40, source: 'song_creation_runtime_v1', confidence: 1 });
