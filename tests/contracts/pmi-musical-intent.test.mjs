@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   interpretMusicalIntent,
+  respondToMusicCreation,
   upgradeSongPlanToMusicSpec,
   musicSpecProviderContext,
   MUSIC_SPEC_V2_SCHEMA,
@@ -40,6 +41,30 @@ test('localized chorus request preserves unselected material and controls densit
   assert.ok(result.deltas.width > 0);
   assert.ok(result.deltas.clarity > 0);
   assert.ok(result.deltas.density < 0);
+});
+
+test('explicit localized change understands target-only preservation language', () => {
+  const result = interpretMusicalIntent('Troca só o synth e mantém o resto');
+
+  assert.equal(result.supported, true);
+  assert.equal(result.scope.target, 'synth');
+  assert.equal(result.scope.preserveUnselected, true);
+});
+
+test('target or section nouns alone do not become fake edit plans', () => {
+  assert.deepEqual(interpretMusicalIntent('o refrão'), { supported: false, reason: 'no_musical_intent' });
+  assert.deepEqual(interpretMusicalIntent('baixo'), { supported: false, reason: 'no_musical_intent' });
+});
+
+test('PMI conversation exposes musical direction as a review-only plan', () => {
+  const result = respondToMusicCreation('Abre o refrão, mas sem ficar barulhento; mantém o resto', { projectId: 'project-1' });
+
+  assert.equal(result.supported, true);
+  assert.equal(result.kind, 'pmi_musical_intent_plan');
+  assert.equal(result.reviewRequired, true);
+  assert.equal(result.canApply, false);
+  assert.equal(result.musicalIntent.scope.section, 'chorus');
+  assert.match(result.reply, /ainda não alterei o áudio/i);
 });
 
 test('version preference is represented explicitly without mutating audio', () => {
