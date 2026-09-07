@@ -7,8 +7,13 @@ on:
       - 'wrangler.jsonc'
       - 'packages/app/**'
       - 'services/api/**'
+      - 'supabase/functions/compute-kaggle-v58/**'
+      - 'supabase/functions/kaggle-worker-source-v58/**'
+      - 'supabase/functions/complete-kaggle-pipeline-job-v58/**'
       - 'tests/contracts/cloudflare-runtime.test.mjs'
       - 'tests/contracts/cloudflare-music-regeneration.test.mjs'
+      - 'tests/contracts/native-music-kaggle.test.mjs'
+      - 'tests/contracts/song-creation-native-provider.test.mjs'
       - '.github/workflows/cloudflare-runtime-gate.yml'
       - '.github/workflows/composer-provider-canary.yml'
   workflow_dispatch:
@@ -34,8 +39,8 @@ jobs:
           node-version: 24
       - name: Build canonical Web
         run: npm run build:web
-      - name: Verify Cloudflare runtime contract
-        run: node --test tests/contracts/cloudflare-runtime.test.mjs tests/contracts/cloudflare-music-regeneration.test.mjs
+      - name: Verify Cloudflare and connected music runtime contracts
+        run: node --test tests/contracts/cloudflare-runtime.test.mjs tests/contracts/cloudflare-music-regeneration.test.mjs tests/contracts/native-music-kaggle.test.mjs tests/contracts/song-creation-native-provider.test.mjs
       - name: Bundle Worker and Static Assets without deployment
         run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
 
@@ -77,44 +82,60 @@ jobs:
           echo "url=${url%/}" >> "$GITHUB_OUTPUT"
           printf 'Cloudflare URL: %s\nHead SHA: %s\n' "$url" "$HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke physical Studio, Site Vivo and Cloudflare APIs
+      - name: Smoke physical Studio, Site Vivo and connected music runtime
         env:
           BASE_URL: ${{ steps.discover.outputs.url }}
+          NATIVE_MUSIC_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/compute-kaggle-v58
         shell: bash
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           fetch_200() {
-            local path="$1" out="$2" headers="$3"
-            code="$(curl --fail-with-body --silent --show-error -D "$headers" -o "$out" -w '%{http_code}' "$BASE_URL$path" || true)"
+            local url="$1" out="$2" headers="$3"
+            code="$(curl --fail-with-body --silent --show-error -D "$headers" -o "$out" -w '%{http_code}' "$url" || true)"
             if [ "$code" != '200' ]; then
-              echo "CLOUDFLARE_PHYSICAL_GATE_FAILED: $path returned HTTP $code" >&2
+              echo "CLOUDFLARE_PHYSICAL_GATE_FAILED: $url returned HTTP $code" >&2
               cat "$out" >&2 2>/dev/null || true
               exit 1
             fi
           }
-          fetch_200 '/' "$tmp/root.html" "$tmp/root.headers"
-          fetch_200 '/site/' "$tmp/site.html" "$tmp/site.headers"
+          fetch_200 "$BASE_URL/" "$tmp/root.html" "$tmp/root.headers"
+          fetch_200 "$BASE_URL/site/" "$tmp/site.html" "$tmp/site.headers"
           grep -qi '^x-content-type-options: nosniff' "$tmp/root.headers"
 
-          fetch_200 '/api/health' "$tmp/health.json" "$tmp/health.headers"
+          fetch_200 "$BASE_URL/api/health" "$tmp/health.json" "$tmp/health.headers"
           jq -e '.ok == true' "$tmp/health.json" >/dev/null
 
-          fetch_200 '/api/provider-readiness' "$tmp/readiness.json" "$tmp/readiness.headers"
+          fetch_200 "$BASE_URL/api/provider-readiness" "$tmp/readiness.json" "$tmp/readiness.headers"
           jq -e '.ok == true and .providers.pablovoice.transport == "cloudflare_workers_ai" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .providers.elevenmusic.transport == "official_api" and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null
 
-          fetch_200 '/api/pablo-agent' "$tmp/agent.json" "$tmp/agent.headers"
+          fetch_200 "$BASE_URL/api/pablo-agent" "$tmp/agent.json" "$tmp/agent.headers"
           jq -e '.ok == true and .provider == "cloudflare_workers_ai" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
 
-          fetch_200 '/api/music-generation' "$tmp/music.json" "$tmp/music.headers"
-          jq -e '.ok == true and .service == "pablovoice-music-generation" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .section_locked_plan == true and .inpainting_source_id == true' "$tmp/music.json" >/dev/null
-          music_configured="$(jq -r '.configured' "$tmp/music.json")"
+          # Eleven Music routes remain published for compatibility/section inpainting, but the
+          # release-critical Creator provider is now the PabloVoice-owned native GPU runtime.
+          fetch_200 "$BASE_URL/api/music-generation" "$tmp/music.json" "$tmp/music.headers"
+          jq -e '.ok == true and .service == "pablovoice-music-generation" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required"' "$tmp/music.json" >/dev/null
 
-          fetch_200 '/api/music-regeneration' "$tmp/regen.json" "$tmp/regen.headers"
+          fetch_200 "$BASE_URL/api/music-regeneration" "$tmp/regen.json" "$tmp/regen.headers"
           jq -e '.ok == true and .service == "pablovoice-music-regeneration" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .requires_song_id == true and .preserves_unselected_ranges == true' "$tmp/regen.json" >/dev/null
-          regen_configured="$(jq -r '.configured' "$tmp/regen.json")"
-          printf 'Music v2 route: published\nMusic v2 provider configured on preview: %s\nSelective regeneration route: published\nSelective provider configured on preview: %s\n' "$music_configured" "$regen_configured" >> "$GITHUB_STEP_SUMMARY"
+
+          fetch_200 "$NATIVE_MUSIC_URL" "$tmp/native-music.json" "$tmp/native-music.headers"
+          jq -e '.ok == true and .service == "pablovoice-native-music" and .provider == "kaggle" and .engine == "ACE-Step 1.5" and .model == "acestep-v15-turbo" and .model_revision == "ca1e85fe9430179831e6bc6be790c332190a3866" and .worker == "kaggle-worker-source-v58" and .callback == "complete-kaggle-pipeline-job-v58" and .auth_for_generation == "required" and .credential_exposed == false and .configured == true and .runnable == true and .physical_canary.verified == true and .physical_canary.duration_seconds > 1 and .physical_canary.sample_rate > 0 and .physical_canary.channels > 0 and .physical_canary.audio_size_bytes > 4096 and (.physical_canary.audio_sha256 | test("^[0-9a-f]{64}$"))' "$tmp/native-music.json" >/dev/null || {
+            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: PabloVoice native music provider has no verified physical canary.' >&2
+            jq '{service,provider,engine,model,model_revision,configured,runnable,physical_canary,credential_exposed}' "$tmp/native-music.json" >&2
+            exit 1
+          }
+          printf 'Native music provider: VERIFIED\nModel: %s\nRevision: %s\nCanary: %ss · %s Hz · %s channels · %s bytes\nEleven generation configured (optional): %s\nEleven selective regeneration configured (optional): %s\n' \
+            "$(jq -r '.model' "$tmp/native-music.json")" \
+            "$(jq -r '.model_revision' "$tmp/native-music.json")" \
+            "$(jq -r '.physical_canary.duration_seconds' "$tmp/native-music.json")" \
+            "$(jq -r '.physical_canary.sample_rate' "$tmp/native-music.json")" \
+            "$(jq -r '.physical_canary.channels' "$tmp/native-music.json")" \
+            "$(jq -r '.physical_canary.audio_size_bytes' "$tmp/native-music.json")" \
+            "$(jq -r '.configured' "$tmp/music.json")" \
+            "$(jq -r '.configured' "$tmp/regen.json")" >> "$GITHUB_STEP_SUMMARY"
 
           code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
@@ -127,5 +148,9 @@ jobs:
           code="$(curl --silent --show-error -o "$tmp/regen-unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/music-regeneration" -H 'content-type: application/json' --data '{"project_id":"00000000-0000-0000-0000-000000000000","source_song_id":"probe","duration_ms":10000,"section":{"start_ms":1000,"end_ms":2000,"text":"probe"}}')"
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/regen-unauth.json" >/dev/null
+
+          code="$(curl --silent --show-error -o "$tmp/native-unauth.json" -w '%{http_code}' -X POST "$NATIVE_MUSIC_URL" -H 'content-type: application/json' --data '{"project_id":"00000000-0000-0000-0000-000000000000","plan":{"schema":"pablovoice_song_creation_v1","sections":[{"id":"intro"}]}}')"
+          test "$code" = '401'
+          jq -e '.ok == false and .error == "auth_required"' "$tmp/native-unauth.json" >/dev/null
 
           printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"
