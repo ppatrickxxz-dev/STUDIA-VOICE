@@ -5,16 +5,21 @@ import test from 'node:test';
 const index = await readFile(new URL('../../packages/app/index.html', import.meta.url), 'utf8');
 const canonicalUi = await readFile(new URL('../../packages/app/canonical-ui.mjs', import.meta.url), 'utf8');
 const canonicalCss = await readFile(new URL('../../packages/app/canonical-ui.css', import.meta.url), 'utf8');
+const productUx = await readFile(new URL('../../packages/app/product-ux.mjs', import.meta.url), 'utf8');
+const productCss = await readFile(new URL('../../packages/app/product-ux.css', import.meta.url), 'utf8');
 const canonDoc = await readFile(new URL('../../docs/UI_CANON_LOCK.md', import.meta.url), 'utf8');
 
 const companions = ['Nota Drop', 'Star Spark', 'Wave Ribbon', 'EQ Bloom', 'Chime Lantern', 'Vinyl Groove'];
 
-test('PabloVoice loads the canonical presentation layer without replacing the product shell', () => {
+test('PabloVoice loads canonical identity plus creator-first UX without replacing the product shell', () => {
   assert.match(index, /<title>PabloVoice<\/title>/);
   assert.match(index, /\.\/canonical-ui\.css/);
   assert.match(index, /\.\/canonical-ui\.mjs/);
+  assert.match(index, /\.\/product-ux\.css/);
+  assert.match(index, /\.\/product-ux\.mjs/);
   assert.match(canonicalUi, /retro-tape-onyx-galaxy-v1/);
   assert.match(canonicalCss, /Retro Tape \+ Ônix Galáxia/);
+  assert.match(productUx, /creator-first-v2/);
 });
 
 test('canonical Pablo and companion assets remain the visual source of truth', async () => {
@@ -33,6 +38,19 @@ test('provider brands are presentation details, never PabloVoice product navigat
   assert.match(canonicalUi, /motor de alta qualidade/);
   const visibleCanon = canonicalUi.replace(/const PROVIDER_COPY[\s\S]*?\]\);/, '');
   assert.doesNotMatch(visibleCanon, /ElevenLabs|Eleven Music|Music v2|\bSuno\b/i);
+});
+
+test('creator-first UX hides engineering and keeps advanced power available on demand', () => {
+  assert.match(productUx, /Ferramentas desta versão|pv-product-diagnostics-hidden/);
+  assert.match(productUx, /⚡ Ideia rápida/);
+  assert.match(productUx, /✦ Produzir música/);
+  assert.match(productUx, /pv-creator-advanced/);
+  assert.match(productUx, /pv-creator-pablo-assistant/);
+  assert.match(productUx, /Ativar criação completa/);
+  assert.match(productUx, /pendingNewSong/);
+  assert.match(productCss, /@media \(min-width: 1050px\)/);
+  assert.match(productCss, /flex-direction: column/);
+  assert.match(productCss, /@media \(max-width: 760px\)/);
 });
 
 test('UI canon explicitly locks Pablo, companions and creative flow', () => {
