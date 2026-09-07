@@ -2,7 +2,10 @@ import { createId, createTrack, snapshotProject } from './core/src/project.mjs';
 import { saveAudioAsset, saveProject } from './storage.mjs';
 import { MUSIC_SECTION_REGEN_SCHEMA } from './music-section-regeneration.mjs';
 
-export async function persistSectionRegeneration(project, plan, result) {
+export async function persistSectionRegeneration(project, plan, result, {
+  saveAudio = saveAudioAsset,
+  save = saveProject,
+} = {}) {
   if (!project?.id) throw new TypeError('Projeto inválido para salvar regeneração por seção.');
   if (!plan?.ok || !plan?.section?.id) throw new TypeError('Plano de regeneração por seção inválido.');
   if (!result?.ok || !(result.blob instanceof Blob) || result.blob.size <= 0) throw new TypeError('Áudio regenerado inválido.');
@@ -15,7 +18,7 @@ export async function persistSectionRegeneration(project, plan, result) {
   const assetId = createId('asset');
   const safeLabel = String(plan.section.label || 'Seção').trim().slice(0, 80) || 'Seção';
   const extension = String(result.type || '').includes('mpeg') ? 'mp3' : 'audio';
-  await saveAudioAsset({
+  await saveAudio({
     id: assetId,
     blob: result.blob,
     name: `Demo IA HQ · ${safeLabel} v${takeNumber}.${extension}`,
@@ -84,7 +87,7 @@ export async function persistSectionRegeneration(project, plan, result) {
   };
 
   const snapshotted = snapshotProject(next, `${safeLabel} regenerado · Take ${takeNumber}`);
-  const saved = await saveProject(snapshotted);
+  const saved = await save(snapshotted);
   return Object.freeze({
     project: saved,
     take: newTake,
