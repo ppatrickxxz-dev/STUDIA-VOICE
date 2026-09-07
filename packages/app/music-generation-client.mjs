@@ -1,10 +1,11 @@
 import { RemoteAuthAdapter, REMOTE_ENDPOINTS } from './remote-auth.mjs';
 
 export const HIGH_QUALITY_MUSIC_SCHEMA = 'pablovoice_high_quality_music_v1';
+const CANONICAL_MUSIC_RUNTIME = 'https://studia-voice.ppatrickxxz.workers.dev/api/music-generation';
 
 function musicGenerationUrl(agentUrl = REMOTE_ENDPOINTS.agent) {
   const value = String(agentUrl || '').trim();
-  if (!value) return '';
+  if (!value) return CANONICAL_MUSIC_RUNTIME;
   return value.replace(/\/api\/pablo-agent$/, '/api/music-generation');
 }
 
