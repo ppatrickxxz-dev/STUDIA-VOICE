@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
 
 function unexpectedErrors(errors) {
@@ -97,6 +97,8 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide, PMI evid
   await page.getByRole('tab', { name: 'Mixer' }).click();
   await expect(page.getByText('Instrumental · Take 1').first()).toBeVisible();
   await expect(page.getByText('Guia melódica · Take 1').first()).toBeVisible();
+  await mkdir('test-results/canonical-ui', { recursive: true });
+  await page.screenshot({ path: 'test-results/canonical-ui/studio-generated-desktop.png', fullPage: true, animations: 'disabled' });
 
   const mixDownloadPromise = page.waitForEvent('download');
   await page.locator('[data-action="export"]').first().click();
