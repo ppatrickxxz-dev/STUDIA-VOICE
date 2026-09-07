@@ -74,6 +74,7 @@ try {
   const { installSectionMapUI } = await import('./section-map-ui.mjs');
   const { installMusicSectionRegenerationUI } = await import('./music-section-regeneration-ui.mjs');
   const { installPabloVoiceIntimateUI } = await import('./pablovoice-intimate-ui.mjs');
+  const { installPabloLifeUI } = await import('./pablo-life-ui.mjs');
   installPabloConversationUI();
   installPabloMusicalPlanUI();
   installPabloSectionHereAdapter();
@@ -111,6 +112,7 @@ try {
   installSectionMapUI();
   installMusicSectionRegenerationUI();
   installPabloVoiceIntimateUI();
+  installPabloLifeUI();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
