@@ -1,6 +1,6 @@
 import { createId, createTrack, snapshotProject } from './core/src/project.mjs';
 import { upsertConfirmedSection } from './core/src/section-map.mjs';
-import { MusicGenerationClient } from './music-generation-client.mjs';
+import { NativeMusicGenerationClient } from './native-music-generation-client.mjs';
 import { buildSongCreationIntelligence, resolveSongCreationLyrics } from './song-creation-intelligence.mjs';
 import { activeProjectSessionId, getProject, listProjects, rememberActiveProject, saveAudioAsset, saveProject } from './storage.mjs';
 import { createSongCreationPlan, describeSongPlan, renderSongCreation, SONG_CREATION_SCHEMA } from './song-creation-engine.mjs';
@@ -96,9 +96,9 @@ function injectSongCreator() {
           <button class="pv-btn" type="submit" data-song-create-button>♫ Criar rascunho</button>
         </div>
         <div class="pv-song-mode-card emphasis">
-          <strong>Alta qualidade · IA</strong>
-          <span>Cria uma demo musical HQ pelo backend e mantém uma guia melódica separada para você cantar/substituir.</span>
-          <button class="pv-btn primary" type="button" data-song-create-hq>✦ Criar demo HQ</button>
+          <strong>Alta qualidade · PabloVoice GPU</strong>
+          <span>Gera uma demo musical no motor nativo do PabloVoice e mantém uma guia melódica separada para você cantar ou substituir.</span>
+          <button class="pv-btn primary" type="button" data-song-create-hq>✦ Criar com PabloVoice</button>
         </div>
       </div>
       <div class="pv-note" id="pv-song-create-status">A PMI organiza conceito e crítica criativa junto do take. Nada substitui automaticamente suas versões.</div>
@@ -160,12 +160,14 @@ async function runCreation(form, mode) {
     let saved;
     if (mode === 'hq') {
       setText(status, lyricMode.creationMode === 'instrumental_first'
-        ? 'Conectando ao motor HQ para criar uma base sem letra…'
-        : 'Conectando ao motor musical de alta qualidade…');
+        ? 'Conectando ao motor nativo para criar uma base instrumental…'
+        : 'Conectando ao motor musical nativo do PabloVoice…');
       const highQuality = await highQualityClient().generate({
         localProject: project,
         plan,
         negativeStyles: parseNegativeStyles(form.elements.negative?.value),
+        instrumental: lyricMode.creationMode === 'instrumental_first',
+        onProgress: (current) => setText(status, nativeMusicProgress(current, lyricMode.creationMode)),
       });
       if (!highQuality?.ok) throw new Error(humanHighQualityError(highQuality));
       setText(status, 'Criando guia melódica separada e salvando a nova versão…');
@@ -173,10 +175,10 @@ async function runCreation(form, mode) {
       const guideAudio = renderSongCreation(plan).guide;
       saved = await persistHighQualitySongTake(project, plan, highQuality, guideAudio, lyricMode.projectLyrics, intelligence);
       runtime.result = { ...saved, plan, intelligence, instrumentalFirst: lyricMode.creationMode === 'instrumental_first', mode: 'hq', previews: [
-        { label: lyricMode.creationMode === 'instrumental_first' ? 'Demo IA HQ · base' : 'Demo IA HQ', blob: highQuality.blob, note: lyricMode.creationMode === 'instrumental_first' ? 'Geração HQ orientada como base instrumental; a letra do projeto foi preservada fora deste render.' : 'Mix de referência de alta qualidade. Pode conter voz gerada; não é rotulada como instrumental isolado.' },
+        { label: lyricMode.creationMode === 'instrumental_first' ? 'PabloVoice GPU · Instrumental' : 'PabloVoice GPU · Mix', blob: highQuality.blob, note: lyricMode.creationMode === 'instrumental_first' ? 'Instrumental gerado pelo motor nativo do PabloVoice; a letra do projeto foi preservada fora deste render.' : 'Mix de referência gerado pelo motor nativo. Pode conter voz gerada; não é rotulado como instrumental isolado.' },
         { label: 'Guia melódica', blob: guideAudio.blob, note: lyricMode.creationMode === 'instrumental_first' ? 'Melodia sintetizada livre para experimentar voz e letra depois.' : 'Melodia sintetizada separada para cantar por cima ou substituir pela sua voz.' },
       ] };
-      setText(status, `Pronto. Demo HQ e guia foram salvas como Take ${saved.takeNumber}, sem apagar versões anteriores.`);
+      setText(status, `Pronto. Música GPU e guia foram salvas como Take ${saved.takeNumber}, sem apagar versões anteriores.`);
     } else {
       setText(status, `Renderizando ${Math.round(plan.durationSeconds)}s de áudio no aparelho…`);
       await nextPaint();
@@ -238,19 +240,26 @@ async function persistHighQualitySongTake(project, plan, highQuality, guideAudio
   const takeNumber = nextTakeNumber(project);
   const referenceAssetId = createId('asset');
   const guideAssetId = createId('asset');
-  const extension = highQuality.type === 'audio/mpeg' ? 'mp3' : 'audio';
-  await saveAudioAsset({ id: referenceAssetId, blob: highQuality.blob, name: `Demo IA HQ · Take ${takeNumber}.${extension}`, type: highQuality.type || 'audio/mpeg' });
+  const extension = highQuality.type === 'audio/flac' ? 'flac' : highQuality.type === 'audio/mpeg' ? 'mp3' : 'audio';
+  const remoteAsset = highQuality.asset || {};
+  const duration = Number(remoteAsset.duration_seconds) || plan.durationSeconds;
+  const sampleRate = Number(remoteAsset.sample_rate) || 48000;
+  const channels = Number(remoteAsset.channels) || 2;
+  await saveAudioAsset({ id: referenceAssetId, blob: highQuality.blob, name: `PabloVoice GPU · Take ${takeNumber}.${extension}`, type: highQuality.type || 'audio/flac' });
   await saveAudioAsset({ id: guideAssetId, blob: guideAudio.blob, name: `Guia melódica · Take ${takeNumber}.wav`, type: 'audio/wav' });
 
-  const referenceTrack = createTrack({ name: `Demo IA HQ · Take ${takeNumber}`, assetId: referenceAssetId, type: highQuality.type || 'audio/mpeg', duration: plan.durationSeconds, sampleRate: 48000, channels: 2, kind: 'ai_music_demo' });
+  const referenceTrack = createTrack({ name: `PabloVoice GPU · Take ${takeNumber}`, assetId: referenceAssetId, type: highQuality.type || 'audio/flac', duration, sampleRate, channels, kind: 'ai_music_demo' });
   Object.assign(referenceTrack, {
     role: 'reference_mix',
     songTakeId: takeId,
-    source: 'elevenmusic_music_v2',
+    source: highQuality.source || 'pablovoice_native_music_v1',
     provider: highQuality.provider,
     providerModel: highQuality.model,
-    providerSongId: highQuality.songId,
+    providerModelRevision: highQuality.modelRevision || null,
+    providerSongId: highQuality.songId || null,
     requestId: highQuality.requestId,
+    remoteAssetId: remoteAsset.id || null,
+    remoteSha256: highQuality.sha256 || remoteAsset.sha256 || null,
   });
   const guideTrack = createTrack({ name: `Guia melódica · Take ${takeNumber}`, assetId: guideAssetId, type: 'audio/wav', duration: plan.durationSeconds, sampleRate: 24000, channels: 1, kind: 'guide_melody' });
   Object.assign(guideTrack, { role: 'guide_vocal_target', songTakeId: takeId, source: 'song_creation_runtime_v1', guideType: 'synth_melody', replaceableByVoice: true, gain: 0.62 });
@@ -264,20 +273,25 @@ async function persistHighQualitySongTake(project, plan, highQuality, guideAudio
       referenceTrackId: referenceTrack.id,
       guideTrackId: guideTrack.id,
       guideType: 'synth_melody',
-      providerSongId: highQuality.songId,
+      providerSongId: highQuality.songId || null,
       remoteProjectId: highQuality.remoteProjectId,
+      remoteAssetId: remoteAsset.id || null,
       intelligence,
       render: {
         provider: highQuality.provider,
         model: highQuality.model,
+        modelRevision: highQuality.modelRevision || null,
         requestId: highQuality.requestId,
-        format: highQuality.type || 'audio/mpeg',
+        sha256: highQuality.sha256 || remoteAsset.sha256 || null,
+        format: highQuality.type || 'audio/flac',
+        sampleRate,
+        channels,
         purpose: 'high_quality_reference_mix',
       },
     },
   });
-  await saveSongSnapshot(project, `Demo IA HQ criada · Take ${takeNumber}`);
-  return { projectId: project.id, takeId, takeNumber, referenceTrack, guideTrack, providerSongId: highQuality.songId };
+  await saveSongSnapshot(project, `Música PabloVoice GPU criada · Take ${takeNumber}`);
+  return { projectId: project.id, takeId, takeNumber, referenceTrack, guideTrack, providerSongId: highQuality.songId || null };
 }
 
 function commitSongTake(project, plan, lyrics, { takeId, tracks, activeTrackId, take }) {
@@ -344,7 +358,7 @@ async function resolveActiveProject() {
 }
 
 function highQualityClient() {
-  if (!runtime.highQualityClient) runtime.highQualityClient = new MusicGenerationClient();
+  if (!runtime.highQualityClient) runtime.highQualityClient = new NativeMusicGenerationClient();
   return runtime.highQualityClient;
 }
 
@@ -357,7 +371,7 @@ function renderResult(result) {
     runtime.urls.push(url);
     return `<label><strong>${escapeHtml(preview.label)}</strong><audio controls preload="metadata" src="${url}"></audio><small>${escapeHtml(preview.note)}</small></label>`;
   }).join('');
-  const badge = result.mode === 'hq' ? 'HQ · SALVO' : 'LOCAL · SALVO';
+  const badge = result.mode === 'hq' ? 'GPU · SALVO' : 'LOCAL · SALVO';
   const providerNote = result.mode === 'hq' && result.providerSongId ? `<p class="pv-note">ID de continuidade salvo para futuras regenerações por seção.</p>` : '';
   host.innerHTML = `<div class="pv-song-result">
     <div class="pv-card-head"><div><h3>Take ${result.takeNumber}</h3><p>${escapeHtml(describeSongPlan(result.plan))}</p></div><span class="pv-tag ok">${badge}</span></div>
@@ -435,18 +449,27 @@ function consumeOpenStudioRequest() {
 
 function nextTakeNumber(project) { return Math.max(1, Number(project.songCreation?.takes?.length || 0) + 1); }
 function parseNegativeStyles(value) { return String(value || '').split(/[,;\n]+/).map((item) => item.trim()).filter(Boolean).slice(0, 12); }
+function nativeMusicProgress(current = {}, creationMode = '') {
+  const progress = Math.max(0, Math.min(100, Math.round(Number(current.progress) || 0)));
+  if (current.status === 'completed' || progress >= 100) return 'Música concluída. Validando o áudio antes de salvar…';
+  if (creationMode === 'instrumental_first') return `PabloVoice GPU criando o instrumental… ${progress}%`;
+  return `PabloVoice GPU criando a música… ${progress}%`;
+}
 function humanHighQualityError(result = {}) {
-  if (result.error === 'auth_required') return 'Conecte sua sessão do PabloVoice para usar a geração de alta qualidade. O rascunho local continua disponível.';
+  if (result.error === 'auth_required') return 'Conecte sua sessão do PabloVoice para usar a geração GPU. O rascunho local continua disponível.';
   if (result.error === 'project_link_failed') return 'Não consegui vincular este projeto ao runtime remoto. Nenhum take local foi alterado.';
-  if (result.error === 'provider_unavailable') return 'O motor de alta qualidade não está configurado ou está indisponível agora. Use o rascunho local sem perder o projeto.';
-  if (result.error === 'provider_rate_limited') return 'O motor de alta qualidade atingiu o limite temporário. Seu projeto foi preservado.';
-  return `A geração de alta qualidade não concluiu (${result.error || 'erro remoto'}). Nenhuma versão anterior foi substituída.`;
+  if (result.error === 'kaggle_not_connected') return 'A GPU do PabloVoice não está conectada para esta conta. Nenhuma versão anterior foi alterada.';
+  if (['kaggle_dispatch_failed', 'kaggle_dispatch_rejected'].includes(result.error)) return 'A GPU não aceitou esta geração. O projeto foi preservado e nenhum take anterior foi substituído.';
+  if (result.error === 'music_job_timeout') return 'A geração excedeu o tempo de execução desta tentativa. O projeto anterior continua intacto.';
+  if (['music_sha256_mismatch', 'music_size_mismatch', 'music_proof_missing'].includes(result.error)) return 'O áudio retornou, mas falhou na verificação de integridade. Ele não foi aplicado ao projeto.';
+  if (result.error === 'native_music_failed') return 'O motor musical nativo não concluiu esta geração. Nenhum take anterior foi substituído.';
+  return `A geração GPU não concluiu (${result.error || 'erro remoto'}). Nenhuma versão anterior foi substituída.`;
 }
 function revokeUrls() { for (const url of runtime.urls) URL.revokeObjectURL(url); runtime.urls = []; }
 function setText(node, text) { if (node) node.textContent = text; }
 function setCreationButtons(localButton, highQualityButton, busy, mode) {
   if (localButton) { localButton.disabled = busy; localButton.textContent = busy && mode === 'local' ? 'Criando rascunho…' : '♫ Criar rascunho'; }
-  if (highQualityButton) { highQualityButton.disabled = busy; highQualityButton.textContent = busy && mode === 'hq' ? 'Gerando demo HQ…' : '✦ Criar demo HQ'; }
+  if (highQualityButton) { highQualityButton.disabled = busy; highQualityButton.textContent = busy && mode === 'hq' ? 'Criando na GPU…' : '✦ Criar com PabloVoice'; }
 }
 function nextPaint() { return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))); }
 function escapeHtml(value) { return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
