@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MusicGenerationClient, resolveMusicGenerationUrl } from '../../packages/app/music-generation-client.mjs';
+import {
+  MusicGenerationClient,
+  resolveMusicGenerationUrl,
+  resolveMusicSectionRegenerationUrl,
+} from '../../packages/app/music-generation-client.mjs';
 
-test('music generation URL follows preview runtime and uses canonical runtime from local Creator', () => {
+test('music generation URLs follow preview runtime and use canonical runtime from local Creator', () => {
   assert.equal(
     resolveMusicGenerationUrl('https://preview-studia-voice.ppatrickxxz.workers.dev/api/pablo-agent'),
     'https://preview-studia-voice.ppatrickxxz.workers.dev/api/music-generation',
@@ -11,11 +15,14 @@ test('music generation URL follows preview runtime and uses canonical runtime fr
     resolveMusicGenerationUrl(''),
     'https://studia-voice.ppatrickxxz.workers.dev/api/music-generation',
   );
+  assert.equal(
+    resolveMusicSectionRegenerationUrl('https://preview-studia-voice.ppatrickxxz.workers.dev/api/music-generation'),
+    'https://preview-studia-voice.ppatrickxxz.workers.dev/api/music-regeneration',
+  );
 });
 
-test('high-quality generation links project, authenticates and returns provider audio metadata', async () => {
-  const calls = [];
-  const auth = {
+function authFixture() {
+  return {
     session: { accessToken: 'token-1' },
     async ensureRemoteProject(localProject) {
       assert.equal(localProject.id, 'local_1');
@@ -25,8 +32,12 @@ test('high-quality generation links project, authenticates and returns provider 
     clearSession() {},
     async loginWithDevice() { return null; },
   };
+}
+
+test('high-quality generation links project, authenticates and returns provider audio metadata', async () => {
+  const calls = [];
   const client = new MusicGenerationClient({
-    authAdapter: auth,
+    authAdapter: authFixture(),
     endpoint: 'https://runtime.example/api/music-generation',
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
@@ -60,6 +71,59 @@ test('high-quality generation links project, authenticates and returns provider 
   const body = JSON.parse(calls[0].options.body);
   assert.equal(body.project_id, '11111111-1111-4111-8111-111111111111');
   assert.deepEqual(body.negative_styles, ['heavy dembow']);
+  assert.equal(JSON.stringify(body).includes('token-1'), false);
+});
+
+test('section regeneration posts only source id, exact range and replacement instructions', async () => {
+  const calls = [];
+  const client = new MusicGenerationClient({
+    authAdapter: authFixture(),
+    endpoint: 'https://runtime.example/api/music-generation',
+    sectionEndpoint: 'https://runtime.example/api/music-regeneration',
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), options });
+      return new Response(new Uint8Array([9, 8, 7]), {
+        status: 200,
+        headers: {
+          'content-type': 'audio/mpeg',
+          'x-pv-provider': 'elevenmusic',
+          'x-pv-model': 'music_v2',
+          'x-pv-song-id': 'song_after_chorus',
+          'x-pv-request-id': 'request_regen',
+        },
+      });
+    },
+  });
+  const result = await client.regenerateSection({
+    localProject: { id: 'local_1', name: 'Demo' },
+    sourceSongId: 'song_before',
+    durationMs: 90000,
+    section: {
+      id: 'chorus-1',
+      label: 'Refrão',
+      startMs: 30000,
+      endMs: 50000,
+      text: '[Refrão]\nAmanhã a gente vê',
+      positiveStyles: ['mais energia'],
+      negativeStyles: ['heavy dembow'],
+      contextAdherence: 'high',
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.sourceSongId, 'song_before');
+  assert.equal(result.sectionId, 'chorus-1');
+  assert.equal(result.songId, 'song_after_chorus');
+  assert.equal(result.blob.size, 3);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://runtime.example/api/music-regeneration');
+  const body = JSON.parse(calls[0].options.body);
+  assert.equal(body.project_id, '11111111-1111-4111-8111-111111111111');
+  assert.equal(body.source_song_id, 'song_before');
+  assert.equal(body.duration_ms, 90000);
+  assert.equal(body.section.start_ms, 30000);
+  assert.equal(body.section.end_ms, 50000);
+  assert.equal(body.section.text, '[Refrão]\nAmanhã a gente vê');
+  assert.deepEqual(body.section.positive_styles, ['mais energia']);
   assert.equal(JSON.stringify(body).includes('token-1'), false);
 });
 
