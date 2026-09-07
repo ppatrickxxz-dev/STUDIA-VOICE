@@ -11,15 +11,16 @@ document.addEventListener('click', (event) => {
 
 function fallbackShell() {
   if (!app || document.querySelector('.pv-nav')) return;
+  const offline = navigator.onLine === false;
   app.innerHTML = `<div class="pv-shell">
     <header class="pv-top">
       <div class="pv-brand"><span>PV</span> PABLOVOICE <small>iniciando</small></div>
-      <div class="pv-top-actions"><span class="pv-health connected"><span></span>restaurando local</span></div>
+      <div class="pv-top-actions"><span class="pv-health ${offline ? '' : 'connected'}"><span></span>${offline ? 'OFFLINE · LOCAL' : 'ONLINE · FULL'}</span></div>
     </header>
     <main>
-      <section class="pv-hero"><div class="pv-kicker">PabloVoice · estúdio local</div><h1 class="pv-title">Você tá no <em>estúdio</em></h1><p class="pv-lead">Sua ideia ganha som. Restaurando seus projetos no aparelho.</p></section>
-      <article class="pv-card chrome"><div class="pv-card-head"><div><h2>Studio pronto para abrir</h2><p>Seu histórico local continua sendo carregado em segundo plano.</p></div><span class="pv-tag ok">LOCAL</span></div>
-        <div class="pv-quick"><button class="pv-btn" data-action="new-project">＋ <span>Novo projeto<small>nome e histórico local</small></span></button><button class="pv-btn" data-action="import">↥ <span>Importar áudio<small>use um arquivo do aparelho</small></span></button><button class="pv-btn record" data-action="record">● <span>Gravar voz<small>microfone local</small></span></button><button class="pv-btn" data-route="projects">▤ <span>Meus projetos<small>abrir quando a restauração terminar</small></span></button></div>
+      <section class="pv-hero"><div class="pv-kicker">PabloVoice · pocket music studio</div><h1 class="pv-title">Você tá no <em>estúdio</em></h1><p class="pv-lead">${offline ? 'Sem rede agora. Restaurando seus projetos e o motor local no aparelho.' : 'Restaurando seu estúdio, projetos e recursos conectados.'}</p></section>
+      <article class="pv-card chrome"><div class="pv-card-head"><div><h2>Studio pronto para abrir</h2><p>Seu histórico continua sendo carregado em segundo plano.</p></div><span class="pv-tag ok">MEMÓRIA</span></div>
+        <div class="pv-quick"><button class="pv-btn" data-action="new-project">＋ <span>Novo projeto<small>nome e histórico</small></span></button><button class="pv-btn" data-action="import">↥ <span>Importar áudio<small>use um arquivo do aparelho</small></span></button><button class="pv-btn record" data-action="record">● <span>Gravar voz<small>microfone do aparelho</small></span></button><button class="pv-btn" data-route="projects">▤ <span>Meus projetos<small>abrir quando a restauração terminar</small></span></button></div>
       </article>
     </main>
   </div>
@@ -71,6 +72,7 @@ try {
   const { installBeatLab } = await import('./beat-lab-ui.mjs');
   const { installSectionMapUI } = await import('./section-map-ui.mjs');
   const { installMusicSectionRegenerationUI } = await import('./music-section-regeneration-ui.mjs');
+  const { installPabloVoiceIntimateUI } = await import('./pablovoice-intimate-ui.mjs');
   installPabloConversationUI();
   installPabloSectionHereAdapter();
   installPabloSectionAuditionAdapter();
@@ -106,6 +108,7 @@ try {
   installBeatLab();
   installSectionMapUI();
   installMusicSectionRegenerationUI();
+  installPabloVoiceIntimateUI();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
