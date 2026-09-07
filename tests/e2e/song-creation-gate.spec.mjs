@@ -8,7 +8,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('SONG CREATION GATE: lyrics become persisted instrumental + guide and exportable Studio mix', async ({ page }) => {
+test('SONG CREATION GATE: lyrics become persisted instrumental + guide, PMI evidence and exportable Studio mix', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -39,6 +39,7 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide and expor
   await expect(page.locator('#pv-song-create-status')).toContainText('Pronto.', { timeout: 45_000 });
   await expect(page.locator('#pv-song-create-result audio')).toHaveCount(2);
   await expect(page.locator('#pv-song-create-result')).toContainText('112 BPM');
+  await expect(page.locator('#pv-song-create-result')).toContainText('PMI · Letra guiando a música');
 
   const evidence = await page.evaluate(async () => {
     const storage = await import('./storage.mjs');
@@ -47,6 +48,7 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide and expor
     const guide = project.tracks.find((track) => track.kind === 'guide_melody');
     const instrumentalAsset = await storage.getAudioAsset(instrumental?.assetId);
     const guideAsset = await storage.getAudioAsset(guide?.assetId);
+    const take = project.songCreation?.takes?.at(-1) || null;
     return {
       name: project.name,
       preset: project.preset,
@@ -54,8 +56,14 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide and expor
       instrumental: instrumental ? { role: instrumental.role, duration: instrumental.duration, bytes: instrumentalAsset?.blob?.size || 0 } : null,
       guide: guide ? { role: guide.role, guideType: guide.guideType, replaceableByVoice: guide.replaceableByVoice, duration: guide.duration, bytes: guideAsset?.blob?.size || 0 } : null,
       takeCount: project.songCreation?.takes?.length || 0,
-      bpm: project.songCreation?.takes?.at(-1)?.bpm || null,
-      key: project.songCreation?.takes?.at(-1)?.key || null,
+      bpm: take?.bpm || null,
+      key: take?.key || null,
+      intelligenceEngine: take?.intelligence?.engine || null,
+      intelligenceSchema: take?.intelligence?.schema || null,
+      creationMode: take?.intelligence?.creationMode || null,
+      conceptTension: take?.intelligence?.concept?.tension || null,
+      conceptPayoff: take?.intelligence?.concept?.payoff || null,
+      lyricMeter: take?.intelligence?.lyricCritique?.dimensions?.meter ?? null,
       sections: project.arrangementMap?.sections?.length || 0,
       confirmedSections: (project.arrangementMap?.sections || []).filter((section) => section.timingStatus === 'confirmed' && section.source === 'song_creation_runtime_v1').length,
     };
@@ -73,6 +81,12 @@ test('SONG CREATION GATE: lyrics become persisted instrumental + guide and expor
   expect(evidence.takeCount).toBe(1);
   expect(evidence.bpm).toBe(112);
   expect(evidence.key).toBe('A');
+  expect(evidence.intelligenceEngine).toBe('pmi-music-1.0');
+  expect(evidence.intelligenceSchema).toBe('pablovoice_song_creation_intelligence_v1');
+  expect(evidence.creationMode).toBe('lyrics_led');
+  expect(evidence.conceptTension).toBeTruthy();
+  expect(evidence.conceptPayoff).toBeTruthy();
+  expect(typeof evidence.lyricMeter).toBe('number');
   expect(evidence.sections).toBeGreaterThanOrEqual(6);
   expect(evidence.confirmedSections).toBeGreaterThanOrEqual(6);
 
