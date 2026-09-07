@@ -12,11 +12,11 @@ const COMPANIONS = Object.freeze([
 ]);
 
 const CONTEXT = Object.freeze({
-  home: { companion: 'Star Spark', state: 'idle', line: 'Me conta a intenção. Eu seguro o resto do estúdio com você.' },
-  compose: { companion: 'Nota Drop', state: 'listening', line: 'Pode começar por uma frase, por uma letra ou só pelo som que você quer sentir.' },
-  studio: { companion: 'Wave Ribbon', state: 'idle', line: 'Escolhe um trecho. A gente mexe nele sem desmontar o resto.' },
-  projects: { companion: 'Chime Lantern', state: 'idle', line: 'Seus takes continuam aqui. Nada precisa recomeçar.' },
-  pablo: { companion: 'EQ Bloom', state: 'listening', line: 'Tô ouvindo o projeto inteiro, não só um botão.' },
+  home: { state: 'idle', line: 'Me conta a intenção. Eu seguro o resto do estúdio com você.' },
+  compose: { state: 'listening', line: 'Pode começar por uma frase, por uma letra ou só pelo som que você quer sentir.' },
+  studio: { state: 'idle', line: 'Escolhe um trecho. A gente mexe nele sem desmontar o resto.' },
+  projects: { state: 'idle', line: 'Seus takes continuam aqui. Nada precisa recomeçar.' },
+  pablo: { state: 'listening', line: 'Tô ouvindo o projeto inteiro, não só um botão.' },
 });
 
 const runtime = {
@@ -65,16 +65,18 @@ function queueDecorate() {
 }
 
 function decorate() {
-  setNetworkMode();
   const route = activeRoute();
   document.documentElement.dataset.pvIntimateRoute = route;
+  setNetworkMode();
   decorateTopbar();
   decorateHome(route);
   decorateCreator(route);
   decorateStudio(route);
   decoratePabloRoute(route);
   continuePendingCreation(route);
-  if (!document.documentElement.dataset.pvPabloState) setPabloState(CONTEXT[route]?.state || 'idle', CONTEXT[route]?.line);
+  if (!document.documentElement.dataset.pvPabloState) {
+    setPabloState(CONTEXT[route]?.state || 'idle', CONTEXT[route]?.line || CONTEXT.home.line);
+  }
 }
 
 function activeRoute() {
@@ -106,8 +108,7 @@ function onNetworkChange() {
 }
 
 function decorateTopbar() {
-  const brand = document.querySelector('.pv-brand');
-  brand?.classList.add('pv-intimate-brand');
+  document.querySelector('.pv-brand')?.classList.add('pv-intimate-brand');
   const settings = document.querySelector('[data-action="settings"]');
   if (settings && !settings.dataset.pvCrystal) {
     settings.dataset.pvCrystal = 'true';
@@ -126,7 +127,7 @@ function decorateHome(route) {
   const kicker = hero.querySelector('.pv-kicker');
   const lead = hero.querySelector('.pv-lead');
   if (kicker) setText(kicker, 'PabloVoice · pocket music studio');
-  if (lead) setText(lead, 'Sua ideia ganha som, versões e memória. Online por padrão; local só quando a rede some.');
+  if (lead) setText(lead, 'Sua ideia ganha som. Versões, memória e produção completa conectada; local só quando a rede some.');
 
   document.querySelector('.pv-cap-card')?.classList.add('pv-intimate-diagnostics');
   homeGrid.classList.add('pv-intimate-utility-grid');
@@ -149,7 +150,7 @@ function homeStageMarkup() {
     <div class="pv-recorder-display">
       <div class="pv-crystal-cluster" aria-hidden="true"><i></i><i></i><i></i></div>
       <img src="/site/assets/pablo_fullbody.webp" class="pv-intimate-pablo" alt="Pablo, companion canônico do PabloVoice">
-      <div class="pv-pablo-state-readout"><span data-pv-state-label>IDLE</span><b data-pv-pablo-line>Pronto pra criar com você.</b></div>
+      <div class="pv-pablo-state-readout"><span data-pv-state-label>CALMO</span><b data-pv-pablo-line>Pronto pra criar com você.</b></div>
       <div class="pv-mini-wave" aria-hidden="true">${'<i></i>'.repeat(22)}</div>
     </div>
     <div class="pv-recorder-meter"><span>MIC</span><div>${'<i></i>'.repeat(12)}</div><b>REC</b></div>
@@ -179,11 +180,11 @@ function refreshHomeStage(stage) {
   const project = document.querySelector('.pv-project-now');
   const projectName = project?.querySelector('b')?.textContent?.trim();
   const trackCopy = project?.querySelector('small')?.textContent?.trim();
-  const prompt = stage.querySelector('[data-pv-home-prompt]');
-  setText(prompt, projectName ? `${projectName}${trackCopy ? ` · ${trackCopy}` : ''}` : 'Comece por uma sensação, uma letra ou uma batida.');
-  const counter = stage.querySelector('[data-pv-project-counter]');
+  setText(stage.querySelector('[data-pv-home-prompt]'), projectName
+    ? `${projectName}${trackCopy ? ` · ${trackCopy}` : ''}`
+    : 'Comece por uma sensação, uma letra ou uma batida.');
   const trackMatch = String(document.querySelector('.pv-home-grid h2 + p')?.textContent || '').match(/(\d+)\s+faixa/i);
-  setText(counter, `${projectName ? '01' : '00'} · ${String(Number(trackMatch?.[1] || 0)).padStart(2, '0')}`);
+  setText(stage.querySelector('[data-pv-project-counter]'), `${projectName ? '01' : '00'} · ${String(Number(trackMatch?.[1] || 0)).padStart(2, '0')}`);
   syncPabloReadout(stage);
 }
 
@@ -192,17 +193,14 @@ function decorateCreator(route) {
   const hero = document.querySelector('.pv-hero.compact');
   if (hero) {
     hero.classList.add('pv-intimate-compose-hero');
-    const kicker = hero.querySelector('.pv-kicker');
-    const lead = hero.querySelector('.pv-lead');
-    if (kicker) setText(kicker, 'Criar · Pablo + PMI + Wave');
-    if (lead) setText(lead, 'Descreva a música como você falaria com um produtor. Pablo organiza intenção, letra, estrutura e mudanças reversíveis.');
+    setText(hero.querySelector('.pv-kicker'), 'Criar · Pablo + PMI + Wave');
+    setText(hero.querySelector('.pv-lead'), 'Descreva a música como você falaria com um produtor. Pablo organiza intenção, letra, estrutura e mudanças reversíveis.');
   }
 
   const creator = document.querySelector('#pv-song-creator');
-  if (!creator) return;
+  const form = creator?.querySelector('[data-song-create-form]');
+  if (!creator || !form) return;
   creator.classList.add('pv-intimate-creator');
-  const form = creator.querySelector('[data-song-create-form]');
-  if (!form) return;
 
   if (!form.querySelector('[data-pv-kind-switch]')) {
     const brief = form.querySelector('input[name="brief"]')?.closest('label');
@@ -216,28 +214,24 @@ function decorateCreator(route) {
   const briefLabel = form.querySelector('input[name="brief"]')?.closest('label');
   if (briefLabel) {
     briefLabel.classList.add('pv-intimate-main-prompt');
-    const first = briefLabel.childNodes[0];
-    if (first?.nodeType === Node.TEXT_NODE && first.textContent.trim() !== 'O que você quer ouvir?') first.textContent = 'O que você quer ouvir?\n        ';
     const input = briefLabel.querySelector('input');
     if (input) input.placeholder = 'Ex.: R&B 2000s sensual, baixo redondo, bateria solta, synths escuros, refrão abrindo…';
   }
 
   wrapAdvancedControls(form);
   ensurePmiWavePreview(form);
-  applyCreatorNetworkMode();
   syncCreationKind(form);
-
-  const status = creator.querySelector('#pv-song-create-status');
-  if (status) status.classList.add('pv-intimate-pmi-status');
+  applyCreatorNetworkMode();
+  creator.querySelector('#pv-song-create-status')?.classList.add('pv-intimate-pmi-status');
 }
 
 function wrapAdvancedControls(form) {
   if (form.querySelector('.pv-intimate-advanced')) return;
   const fields = form.querySelector('.pv-song-fields');
+  if (!fields) return;
   const mood = form.querySelector('[name="mood"]')?.closest('label');
   const negative = form.querySelector('[name="negative"]')?.closest('label');
   const instrumental = form.querySelector('.pv-song-start-mode');
-  if (!fields) return;
   const details = document.createElement('details');
   details.className = 'pv-intimate-advanced';
   details.innerHTML = '<summary><span>Ajustes de produção</span><small>BPM · tom · duração · clima · evitar</small><b>＋</b></summary><div class="pv-intimate-advanced-body"></div>';
@@ -256,65 +250,60 @@ function ensurePmiWavePreview(form) {
   brief?.insertAdjacentElement('afterend', preview);
 }
 
+function syncCreationKind(form) {
+  const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
+  const kind = instrumental ? 'instrumental' : 'song';
+  form.dataset.pvCreationKind = kind;
+  form.querySelectorAll('[data-pv-kind]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.pvKind === kind);
+  });
+}
+
 function applyCreatorNetworkMode() {
   const form = document.querySelector('[data-song-create-form]');
   if (!form) return;
-  const localCard = form.querySelector('[data-song-create-button]')?.closest('.pv-song-mode-card');
-  const onlineCard = form.querySelector('[data-song-create-hq]')?.closest('.pv-song-mode-card');
   const localButton = form.querySelector('[data-song-create-button]');
   const onlineButton = form.querySelector('[data-song-create-hq]');
+  const localCard = localButton?.closest('.pv-song-mode-card');
+  const onlineCard = onlineButton?.closest('.pv-song-mode-card');
   if (!localCard || !onlineCard) return;
 
   localCard.classList.add('pv-local-fallback-card');
   onlineCard.classList.add('pv-online-primary-card');
   const online = runtime.network === 'online';
+  const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
+  const onlineLabel = instrumental ? '● Produzir instrumental' : '● Produzir música';
+
   localCard.hidden = online;
   onlineCard.hidden = !online;
+  form.dataset.pvNetworkPolicy = online ? 'online_full' : 'offline_local';
+
   if (online) {
-    const title = onlineCard.querySelector('strong');
-    const copy = onlineCard.querySelector(':scope > span');
-    if (title) setText(title, 'Produzir agora');
-    if (copy) setText(copy, 'Produção completa conectada. Salva um novo take e mantém guia, estrutura e histórico para continuar editando.');
-    if (onlineButton && !onlineButton.classList.contains('busy')) setText(onlineButton, '● Produzir música');
+    setText(onlineCard.querySelector('strong'), 'Produzir agora');
+    setText(onlineCard.querySelector(':scope > span'), 'Produção completa conectada. Salva um novo take e mantém guia, estrutura e histórico para continuar editando.');
+    if (onlineButton && !onlineButton.classList.contains('busy')) setText(onlineButton, onlineLabel);
   } else {
-    const title = localCard.querySelector('strong');
-    const copy = localCard.querySelector(':scope > span');
-    if (title) setText(title, 'Criar offline');
-    if (copy) setText(copy, 'Sem rede: o motor local cria instrumental WAV + guia e mantém tudo editável no aparelho.');
+    setText(localCard.querySelector('strong'), 'Criar offline');
+    setText(localCard.querySelector(':scope > span'), 'Sem rede: o motor local cria instrumental WAV + guia e mantém tudo editável no aparelho.');
     if (localButton && !localButton.classList.contains('busy')) setText(localButton, '♫ Criar offline');
   }
-  form.dataset.pvNetworkPolicy = online ? 'online_full' : 'offline_local';
-}
-
-function syncCreationKind(form) {
-  const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
-  form.dataset.pvCreationKind = instrumental ? 'instrumental' : 'song';
-  form.querySelectorAll('[data-pv-kind]').forEach((button) => button.classList.toggle('active', button.dataset.pvKind === (instrumental ? 'instrumental' : 'song')));
-  const onlineButton = form.querySelector('[data-song-create-hq]');
-  if (onlineButton && runtime.network === 'online' && !onlineButton.classList.contains('busy')) setText(onlineButton, instrumental ? '● Produzir instrumental' : '● Produzir música');
 }
 
 function decorateStudio(route) {
   if (route !== 'studio') return;
   const main = document.querySelector('main');
   const hero = main?.querySelector('.pv-hero.compact');
-  const transport = main?.querySelector('.pv-transport-card');
   if (!main || !hero) return;
   main.classList.add('pv-intimate-studio');
-  transport?.classList.add('pv-intimate-transport');
-  const kicker = hero.querySelector('.pv-kicker');
-  if (kicker) setText(kicker, 'Studio · gravador não destrutivo');
-  ensureStudioRail(hero);
-}
-
-function ensureStudioRail(hero) {
-  if (document.querySelector('[data-pv-studio-rail]')) return;
-  const rail = document.createElement('div');
-  rail.className = 'pv-studio-life-rail';
-  rail.dataset.pvStudioRail = 'true';
-  rail.innerHTML = `<div class="pv-studio-life-head"><span class="pv-crystal-mini">〰</span><div><b>Wave Ribbon acompanha a sessão</b><small>Editar → Voz → Arranjo → Mix → Master</small></div><em data-pv-studio-state>PRONTO</em></div>
-    <div class="pv-studio-life-steps"><button type="button" data-pv-studio-step="edit">EDITAR</button><button type="button" data-pv-studio-step="voice">VOZ</button><button type="button" data-pv-studio-step="sections">ARRANJO</button><button type="button" data-pv-studio-step="mixer">MIX</button><button type="button" data-pv-studio-step="export">MASTER</button></div>`;
-  hero.insertAdjacentElement('afterend', rail);
+  main.querySelector('.pv-transport-card')?.classList.add('pv-intimate-transport');
+  setText(hero.querySelector('.pv-kicker'), 'Studio · gravador não destrutivo');
+  if (!document.querySelector('[data-pv-studio-rail]')) {
+    const rail = document.createElement('div');
+    rail.className = 'pv-studio-life-rail';
+    rail.dataset.pvStudioRail = 'true';
+    rail.innerHTML = `<div class="pv-studio-life-head"><span class="pv-crystal-mini">〰</span><div><b>Wave Ribbon acompanha a sessão</b><small>Editar → Voz → Arranjo → Mix → Master</small></div><em>PRONTO</em></div><div class="pv-studio-life-steps"><button type="button" data-pv-studio-step="edit">EDITAR</button><button type="button" data-pv-studio-step="voice">VOZ</button><button type="button" data-pv-studio-step="sections">ARRANJO</button><button type="button" data-pv-studio-step="mixer">MIX</button><button type="button" data-pv-studio-step="export">MASTER</button></div>`;
+    hero.insertAdjacentElement('afterend', rail);
+  }
 }
 
 function decoratePabloRoute(route) {
@@ -324,7 +313,7 @@ function decoratePabloRoute(route) {
   const panel = document.createElement('div');
   panel.className = 'pv-pablo-intimacy-panel';
   panel.dataset.pvPabloIntimacy = 'true';
-  panel.innerHTML = `<div class="pv-pablo-mini-device"><img src="/site/assets/pablo_fullbody.webp" alt="Pablo canônico"><span data-pv-state-label>IDLE</span></div><div><small>PABLO · MEMÓRIA CRIATIVA</small><h2>Ele acompanha decisões, não só comandos.</h2><p data-pv-pablo-line>Posso ouvir, pensar, reagir, explicar uma mudança e manter o que você pediu para preservar.</p><div class="pv-expression-strip">${PABLO_STATES.map((state) => `<button type="button" data-pv-expression="${state}">${stateLabel(state)}</button>`).join('')}</div></div>`;
+  panel.innerHTML = `<div class="pv-pablo-mini-device"><img src="/site/assets/pablo_fullbody.webp" alt="Pablo canônico"><span data-pv-state-label>CALMO</span></div><div><small>PABLO · MEMÓRIA CRIATIVA</small><h2>Ele acompanha decisões, não só comandos.</h2><p data-pv-pablo-line>Posso ouvir, pensar, reagir, explicar uma mudança e manter o que você pediu para preservar.</p><div class="pv-expression-strip">${PABLO_STATES.map((state) => `<button type="button" data-pv-expression="${state}">${stateLabel(state)}</button>`).join('')}</div></div>`;
   hero.appendChild(panel);
   syncPabloReadout(panel);
 }
@@ -372,8 +361,13 @@ function onEarlyClick(event) {
     const form = target.closest('[data-song-create-form]');
     const checkbox = form?.elements?.instrumentalFirst;
     if (checkbox) checkbox.checked = target.dataset.pvKind === 'instrumental';
-    if (form) syncCreationKind(form);
-    setPabloState('happy', target.dataset.pvKind === 'instrumental' ? 'Beleza. Vamos construir o som antes da voz.' : 'Fechado. Música completa, mas sem perder o controle por seção.');
+    if (form) {
+      syncCreationKind(form);
+      applyCreatorNetworkMode();
+    }
+    setPabloState('happy', target.dataset.pvKind === 'instrumental'
+      ? 'Beleza. Vamos construir o som antes da voz.'
+      : 'Fechado. Música completa, mas sem perder o controle por seção.');
     return;
   }
   if (target.matches('[data-pv-companion]')) {
@@ -394,7 +388,10 @@ function onEarlyClick(event) {
 
   const hq = target.closest('[data-song-create-hq]');
   if (hq) {
-    if (hq.dataset.pvAuthBypass === '1') { delete hq.dataset.pvAuthBypass; return; }
+    if (hq.dataset.pvAuthBypass === '1') {
+      delete hq.dataset.pvAuthBypass;
+      return;
+    }
     if (runtime.network === 'offline') {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -421,7 +418,9 @@ async function authorizeAndContinue(button) {
     return;
   }
   runtime.pendingOnlineButton = button;
-  document.dispatchEvent(new CustomEvent('pablovoice:request-online-auth', { detail: { reason: button.closest('form')?.dataset.pvCreationKind === 'instrumental' ? 'Produzir instrumental' : 'Produzir música' } }));
+  document.dispatchEvent(new CustomEvent('pablovoice:request-online-auth', {
+    detail: { reason: button.closest('form')?.dataset.pvCreationKind === 'instrumental' ? 'Produzir instrumental' : 'Produzir música' },
+  }));
   setPabloState('listening', 'Só falta reconhecer este aparelho. Depois a criação online fica no fluxo normal.');
 }
 
@@ -446,7 +445,10 @@ function updateIntentPreview(value) {
   const node = document.querySelector('[data-pv-intent-copy]');
   if (!node) return;
   const text = String(value || '').trim();
-  if (!text) return setText(node, 'Diga estilo, energia, groove, instrumento ou seção. Ex.: “abre o refrão, menos batestaca e baixo mais solto”.');
+  if (!text) {
+    setText(node, 'Diga estilo, energia, groove, instrumento ou seção. Ex.: “abre o refrão, menos batestaca e baixo mais solto”.');
+    return;
+  }
   const hints = [];
   if (/refr[aã]o|chorus|hook/i.test(text)) hints.push('refrão localizado');
   if (/verso|estrofe|verse/i.test(text)) hints.push('verso localizado');
@@ -456,7 +458,9 @@ function updateIntentPreview(value) {
   if (/2000|y2k/i.test(text)) hints.push('caráter 2000s');
   if (/menos|sem|evit/i.test(text)) hints.push('restrições explícitas');
   if (/abre|maior|cresce/i.test(text)) hints.push('crescimento de energia');
-  setText(node, hints.length ? `Entendi: ${[...new Set(hints)].join(' · ')}. A PMI preserva o que não foi selecionado e mantém revisão/undo.` : 'Direção recebida. Pablo vai combinar conceito, estrutura e linguagem musical antes de gerar.');
+  setText(node, hints.length
+    ? `Entendi: ${[...new Set(hints)].join(' · ')}. A PMI preserva o que não foi selecionado e mantém revisão/undo.`
+    : 'Direção recebida. Pablo vai combinar conceito, estrutura e linguagem musical antes de gerar.');
 }
 
 function beginCreation(kind) {
@@ -472,9 +476,7 @@ function beginCreation(kind) {
 }
 
 function continuePendingCreation(route) {
-  if (!runtime.pendingCreation) return;
-  const modal = document.querySelector('.pv-modal-back');
-  if (modal) return;
+  if (!runtime.pendingCreation || document.querySelector('.pv-modal-back')) return;
   if (route !== 'compose') {
     const projectReady = Boolean(document.querySelector('.pv-studio-actions') || document.querySelector('.pv-project-now'));
     if (!projectReady) return;
@@ -488,8 +490,11 @@ function continuePendingCreation(route) {
   const checkbox = form.elements.instrumentalFirst;
   if (checkbox) checkbox.checked = kind === 'instrumental';
   syncCreationKind(form);
+  applyCreatorNetworkMode();
   form.querySelector('input[name="brief"]')?.focus();
-  setPabloState('happy', kind === 'instrumental' ? 'Som primeiro. Descreve o groove, a textura e como as seções devem crescer.' : 'Pode me dar a letra ou só a direção. A gente constrói daqui.');
+  setPabloState('happy', kind === 'instrumental'
+    ? 'Som primeiro. Descreve o groove, a textura e como as seções devem crescer.'
+    : 'Pode me dar a letra ou só a direção. A gente constrói daqui.');
 }
 
 function runCompanion(id) {
@@ -525,21 +530,21 @@ function runStudioStep(step) {
 function setPabloState(state, line = '', duration = 0) {
   const safe = PABLO_STATES.includes(state) ? state : 'idle';
   document.documentElement.dataset.pvPabloState = safe;
-  document.querySelectorAll('[data-pv-pablo-device], .pv-pablo-mini-device').forEach((node) => node.dataset.pvState = safe);
+  document.querySelectorAll('[data-pv-pablo-device], .pv-pablo-mini-device').forEach((node) => { node.dataset.pvState = safe; });
   document.querySelectorAll('[data-pv-state-label]').forEach((node) => setText(node, stateLabel(safe).toUpperCase()));
   if (line) document.querySelectorAll('[data-pv-pablo-line]').forEach((node) => setText(node, line));
   clearTimeout(runtime.stateTimer);
-  if (duration > 0) runtime.stateTimer = setTimeout(() => {
-    delete document.documentElement.dataset.pvPabloState;
-    queueDecorate();
-  }, duration);
+  if (duration > 0) {
+    runtime.stateTimer = setTimeout(() => {
+      delete document.documentElement.dataset.pvPabloState;
+      queueDecorate();
+    }, duration);
+  }
 }
 
 function syncPabloReadout(scope = document) {
   const state = document.documentElement.dataset.pvPabloState || CONTEXT[activeRoute()]?.state || 'idle';
   scope.querySelectorAll('[data-pv-state-label]').forEach((node) => setText(node, stateLabel(state).toUpperCase()));
-  const defaultLine = CONTEXT[activeRoute()]?.line || CONTEXT.home.line;
-  scope.querySelectorAll('[data-pv-pablo-line]').forEach((node) => { if (!node.textContent.trim()) setText(node, defaultLine); });
 }
 
 function stateLabel(state) {
