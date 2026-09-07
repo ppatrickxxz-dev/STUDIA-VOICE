@@ -51,20 +51,31 @@ async function syncSectionActions() {
   const modal = document.querySelector('[data-section-map-modal]');
   if (!modal) return;
   const project = await currentProject().catch(() => null);
-  if (!project) return;
+  if (!project || !modal.isConnected || modal !== document.querySelector('[data-section-map-modal]')) return;
   runtime.project = project;
   const sourceTake = latestInpaintableSongTake(project);
   const list = modal.querySelector('[data-section-list]');
-  if (!list) return;
+  if (!list?.isConnected) return;
 
-  list.querySelector('[data-music-regen-readiness]')?.remove();
-  const readiness = document.createElement('div');
-  readiness.dataset.musicRegenReadiness = 'true';
-  readiness.className = `pv-music-regen-readiness ${sourceTake ? 'ready' : ''}`;
-  readiness.innerHTML = sourceTake
-    ? `<strong>✦ Edição musical seletiva pronta</strong><span>Take HQ com continuidade encontrado. Você pode refazer uma seção sem pedir uma nova música inteira.</span>`
-    : `<strong>Edição musical seletiva</strong><span>Crie uma demo HQ com ID de continuidade para habilitar “Refazer HQ”. O mapa de seções continua funcionando normalmente.</span>`;
-  list.prepend(readiness);
+  let readiness = list.querySelector('[data-music-regen-readiness]');
+  if (!readiness) {
+    readiness = document.createElement('div');
+    readiness.dataset.musicRegenReadiness = 'true';
+    readiness.className = 'pv-music-regen-readiness';
+    readiness.innerHTML = '<strong></strong><span></span>';
+    list.prepend(readiness);
+  }
+  readiness.classList.toggle('ready', Boolean(sourceTake));
+  setText(
+    readiness.querySelector('strong'),
+    sourceTake ? '✦ Edição musical seletiva pronta' : 'Edição musical seletiva',
+  );
+  setText(
+    readiness.querySelector('span'),
+    sourceTake
+      ? 'Take HQ com continuidade encontrado. Você pode refazer uma seção sem pedir uma nova música inteira.'
+      : 'Crie uma demo HQ com ID de continuidade para habilitar “Refazer HQ”. O mapa de seções continua funcionando normalmente.',
+  );
 
   for (const row of list.querySelectorAll('[data-section-row]')) {
     const actions = row.querySelector('.pv-section-actions');
@@ -237,5 +248,11 @@ function notify(message, kind = '') {
   wrap.appendChild(item);
   setTimeout(() => item.remove(), 3500);
 }
-function setText(node, value) { if (node) node.textContent = value; }
+function setText(node, value) {
+  if (!node) return;
+  const text = String(value ?? '');
+  if (node.textContent !== text) node.textContent = text;
+}
 function escapeHtml(value = '') { return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[char]); }
+
+installMusicSectionRegenerationUI();
