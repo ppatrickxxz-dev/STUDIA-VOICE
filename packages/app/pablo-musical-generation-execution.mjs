@@ -1,7 +1,7 @@
 import { compileMusicalOperation } from './musical-operation-compiler.mjs';
-import { MusicGenerationClient } from './music-generation-client.mjs';
 import { latestInpaintableSongTake, resolveSectionRegeneration } from './music-section-regeneration.mjs';
 import { validateMusicalPlanReview } from './pablo-musical-plan-review.mjs';
+import { executeSectionRegenerationRuntime } from './section-regeneration-runtime.mjs';
 import { readStudioPlayhead } from './studio-playhead-context.mjs';
 
 export const REVIEWED_MUSIC_GENERATION_SCHEMA = 'pablovoice_reviewed_music_generation_v1';
@@ -51,7 +51,9 @@ export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
     targetSection: Object.freeze({ ...resolvedTarget.section }),
     targetSource: resolvedTarget.source,
     sourceTakeId: take.id,
-    sourceSongId: providerPlan.sourceSongId,
+    sourceProvider: providerPlan.sourceProvider,
+    sourceAssetId: providerPlan.sourceAssetId || null,
+    sourceSongId: providerPlan.sourceSongId || null,
     providerPlan,
     executionPlan: plan,
     preserveUnselected: true,
@@ -67,15 +69,11 @@ export async function executeReviewedSectionRegeneration(review = {}, project = 
   const prepared = prepareReviewedSectionRegeneration(review, project, { playhead, now });
   if (!prepared.ok) return Object.freeze({ ok: false, mutated: false, reason: prepared.reason, prepared });
 
-  const runtime = client || new MusicGenerationClient();
   let result;
   try {
-    result = await runtime.regenerateSection({
-      localProject: project,
-      sourceSongId: prepared.providerPlan.sourceSongId,
-      durationMs: prepared.providerPlan.durationMs,
-      section: prepared.providerPlan.section,
-    });
+    const native = prepared.providerPlan.sourceProvider === 'pablovoice_native_repaint' ? client : null;
+    const legacy = prepared.providerPlan.sourceProvider !== 'pablovoice_native_repaint' ? client : null;
+    result = await executeSectionRegenerationRuntime(project, prepared.providerPlan, { native, legacy });
   } catch (error) {
     return Object.freeze({
       ok: false,
@@ -170,6 +168,8 @@ export function humanizeReviewedGenerationError(reason = '') {
     provider_auth_failed: 'A credencial da produção conectada precisa ser corrigida no backend; nada foi substituído.',
     provider_request_rejected: 'A produção conectada recusou esse plano; nada foi substituído.',
     invalid_inpainting_plan: 'O intervalo não pôde ser enviado com segurança para edição.',
+    invalid_repaint_range: 'O intervalo selecionado não é seguro para repaint.',
+    repaint_outside_preservation_failed: 'A nova versão alteraria conteúdo fora da seção; ela foi rejeitada e o take anterior continua intacto.',
     section_regeneration_persist_failed: 'A nova versão respondeu, mas não pôde ser salva; o projeto anterior foi preservado.',
     musical_state_drift: 'A música mudou desde a revisão. Não executei um plano antigo.',
     project_changed: 'O projeto ativo mudou desde a revisão. Faça o pedido novamente nesse projeto.',
@@ -200,6 +200,8 @@ function classifyGenerationError(value = '') {
   if (text.includes('auth_failed') || text.includes('(401)') || text.includes('(403)')) return 'provider_auth_failed';
   if (text.includes('request_rejected') || /\(4\d\d\)/.test(text)) return 'provider_request_rejected';
   if (text.includes('invalid_inpainting_plan')) return 'invalid_inpainting_plan';
+  if (text.includes('invalid_repaint_range')) return 'invalid_repaint_range';
+  if (text.includes('preservation') || text.includes('outside_changed')) return 'repaint_outside_preservation_failed';
   if (text.includes('unavailable') || text.includes('remote_') || text.includes('timeout')) return 'provider_unavailable';
   return String(value || 'provider_unavailable');
 }
