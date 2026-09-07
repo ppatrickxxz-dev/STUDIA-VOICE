@@ -129,6 +129,7 @@ export function snapshotProject(project, label = 'Salvamento') {
     authorialMemory: clean.authorialMemory ? structuredClone(clean.authorialMemory) : null,
     arrangementMap: structuredClone(clean.arrangementMap),
     beatLab: clean.beatLab ? structuredClone(clean.beatLab) : null,
+    instrumentLab: clean.instrumentLab ? structuredClone(clean.instrumentLab) : null,
   };
   clean.revisions = [...clean.revisions, revision].slice(-40);
   clean.updatedAt = revision.at;
