@@ -70,12 +70,16 @@ function decorateHome(route) {
   if (route !== 'home') return;
   document.querySelector('.pv-cap-card')?.classList.add('pv-product-diagnostics-hidden');
 
+  const hero = document.querySelector('.pv-canon-home-hero');
+  setText(hero?.querySelector('.pv-kicker'), 'PabloVoice · seu estúdio musical');
+  setText(hero?.querySelector('.pv-lead'), 'Da ideia ao master: crie, grave, edite e finalize no mesmo projeto.');
+
   const primaryCard = document.querySelector('.pv-home-grid > .pv-card.chrome');
   primaryCard?.classList.add('pv-product-home-primary');
   setText(primaryCard?.querySelector('.pv-card-head h2'), document.querySelector('.pv-project-now') ? 'Continue sua música' : 'Comece uma música');
   setText(primaryCard?.querySelector('.pv-card-head .pv-tag'), 'SALVO');
 
-  setHtml(document.querySelector('.pv-home-grid [data-action="new-project"] span'), 'Nova música<small>comece do zero</small>');
+  setHtml(document.querySelector('.pv-home-grid [data-action="new-project"] span'), 'Novo projeto<small>abra um Studio vazio</small>');
   setHtml(document.querySelector('.pv-home-grid [data-action="import"] span'), 'Importar áudio<small>traga uma base, demo ou vocal</small>');
   setHtml(document.querySelector('.pv-home-grid [data-action="record"] span'), 'Gravar minha voz<small>capture uma ideia ou take</small>');
   setHtml(document.querySelector('.pv-home-grid [data-route="projects"] span'), 'Continuar projeto<small>volte aos seus takes e versões</small>');
@@ -288,10 +292,7 @@ function handleEarlyClick(event) {
     event.stopImmediatePropagation();
     pendingNewSong = true;
     document.querySelector('.pv-home-grid [data-action="new-project"]')?.click();
-    return;
   }
-
-  if (target.matches('.pv-home-grid [data-action="new-project"]')) pendingNewSong = true;
 }
 
 function handleEarlySubmit(event) {
