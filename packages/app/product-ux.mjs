@@ -337,11 +337,18 @@ function handleRemoteAuthenticated() {
 }
 
 function continueNewSongFlow(route) {
-  if (!pendingNewSong || route !== 'home') return;
+  if (!pendingNewSong) return;
   if (document.querySelector('.pv-modal-back')) return;
-  if (!document.querySelector('.pv-project-now')) return;
+  if (route === 'compose') {
+    pendingNewSong = false;
+    return;
+  }
+  const projectReady = Boolean(document.querySelector('.pv-project-now') || document.querySelector('.pv-studio-actions'));
+  if (!projectReady) return;
+  const compose = document.querySelector('.pv-nav [data-route="compose"]');
+  if (!compose) return;
   pendingNewSong = false;
-  document.querySelector('.pv-nav [data-route="compose"]')?.click();
+  compose.click();
 }
 
 installProductUX();
