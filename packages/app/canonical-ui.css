@@ -1,0 +1,121 @@
+/* PabloVoice canonical presentation layer: Retro Tape + Ônix Galáxia. */
+:root {
+  --pv-canon-purple: #ae4dff;
+  --pv-canon-cyan: #1fe7ff;
+  --pv-canon-pink: #ff4db8;
+  --pv-canon-gold: #ffcb59;
+}
+
+body {
+  background:
+    radial-gradient(circle at 78% 4%, rgba(124,44,255,.24), transparent 28%),
+    radial-gradient(circle at 12% 34%, rgba(31,231,255,.055), transparent 24%),
+    radial-gradient(circle at 54% 100%, rgba(255,77,184,.08), transparent 31%),
+    linear-gradient(180deg, #04050a 0%, #080913 44%, #05060b 100%);
+}
+body::before {
+  opacity: .7;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,.9), transparent 60%),
+    radial-gradient(1px 1px at 40% 10%, rgba(173,216,255,.75), transparent 60%),
+    radial-gradient(1.5px 1.5px at 80% 12%, rgba(255,255,255,.82), transparent 60%),
+    radial-gradient(1px 1px at 70% 28%, rgba(255,255,255,.62), transparent 60%),
+    radial-gradient(1px 1px at 15% 70%, rgba(255,255,255,.72), transparent 60%),
+    radial-gradient(1px 1px at 90% 66%, rgba(255,255,255,.85), transparent 60%),
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.01) 1px, transparent 1px);
+  background-size: auto, auto, auto, auto, auto, auto, 36px 36px, 36px 36px;
+  mask-image: linear-gradient(to bottom, black, rgba(0,0,0,.72) 65%, transparent);
+}
+
+.pv-shell { width: min(1240px, 100%); }
+.pv-brand-canon { text-shadow: 0 0 18px rgba(174,77,255,.18); }
+.pv-brand-canon > span { color: #c45cff; }
+.pv-card {
+  background: linear-gradient(180deg, rgba(14,16,29,.88), rgba(7,9,17,.9));
+  border-color: rgba(188,111,255,.18);
+  box-shadow: 0 16px 54px rgba(0,0,0,.34), 0 0 0 1px rgba(174,77,255,.025);
+}
+.pv-card.chrome::before { background: linear-gradient(125deg, rgba(255,255,255,.15), rgba(174,77,255,.32) 38%, rgba(31,231,255,.08) 72%); }
+
+.pv-canon-home-hero {
+  position: relative;
+  min-height: 260px;
+  margin: 6px 0 18px;
+  padding: 42px 34px 30px;
+  overflow: hidden;
+  border: 1px solid rgba(174,77,255,.18);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 80% 24%, rgba(31,231,255,.12), transparent 22%),
+    radial-gradient(circle at 62% 80%, rgba(174,77,255,.22), transparent 32%),
+    linear-gradient(120deg, rgba(8,9,17,.98), rgba(16,9,31,.86));
+  box-shadow: 0 24px 80px rgba(0,0,0,.42), 0 0 50px rgba(124,44,255,.08);
+}
+.pv-canon-home-hero::after {
+  position: absolute; inset: 0; pointer-events: none; content: "";
+  background-image: radial-gradient(1px 1px at 18% 22%, #fff, transparent 60%), radial-gradient(1px 1px at 77% 28%, #d7c9ff, transparent 60%), radial-gradient(1px 1px at 64% 68%, #fff, transparent 60%), radial-gradient(1px 1px at 92% 74%, #7ceaff, transparent 60%);
+  opacity: .55;
+}
+.pv-canon-home-hero > * { position: relative; z-index: 1; }
+.pv-canon-home-hero .pv-title { max-width: 760px; }
+.pv-canon-home-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 22px; }
+.pv-canon-home-actions > span { color: #9b93aa; font-size: 8px; font-weight: 760; letter-spacing: .14em; }
+
+.companion-card { min-height: 320px; }
+.pv-companion { min-height: 286px; }
+.pv-canon-pablo-card { position: relative; width: min(100%, 390px); min-height: 245px; display: grid; grid-template-columns: 42% 1fr; align-items: end; overflow: hidden; border: 1px solid rgba(174,77,255,.22); border-radius: 24px; background: radial-gradient(circle at 27% 27%, rgba(31,231,255,.1), transparent 28%), radial-gradient(circle at 62% 10%, rgba(174,77,255,.18), transparent 31%), #070912; box-shadow: inset 0 0 38px rgba(124,44,255,.08), 0 18px 50px rgba(0,0,0,.35); }
+.pv-canon-pablo-orbit { position: absolute; width: 250px; height: 250px; left: -72px; bottom: -88px; border: 1px solid rgba(31,231,255,.15); border-radius: 50%; box-shadow: 0 0 70px rgba(124,44,255,.18); }
+.pv-canon-pablo { position: relative; z-index: 2; width: 100%; max-width: 155px; align-self: end; justify-self: center; image-rendering: pixelated; filter: drop-shadow(0 16px 20px rgba(0,0,0,.5)) drop-shadow(0 0 15px rgba(31,231,255,.08)); }
+.pv-canon-pablo-copy { position: relative; z-index: 2; align-self: center; display: flex; flex-direction: column; gap: 7px; padding: 24px 20px 24px 6px; }
+.pv-canon-pablo-label { display: flex; align-items: center; gap: 6px; color: #cbb2ff; font-size: 8px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.pv-canon-pablo-copy strong { font-size: clamp(19px, 3vw, 28px); letter-spacing: -.04em; }
+.pv-canon-pablo-copy > span { color: #aaa4b8; font-size: 11px; line-height: 1.5; }
+.pv-companion.compact .pv-canon-pablo-card { min-height: 154px; grid-template-columns: 40% 1fr; border-radius: 18px; }
+.pv-companion.compact .pv-canon-pablo { max-width: 95px; }
+.pv-companion.compact .pv-canon-pablo-copy { padding: 16px 12px 16px 0; }
+.pv-companion.compact .pv-canon-pablo-copy strong { font-size: 17px; }
+.pv-companion.compact .pv-canon-pablo-copy > span { font-size: 9px; }
+
+.pv-canon-companions { margin-top: 14px; }
+.pv-canon-companion-layout { display: grid; grid-template-columns: minmax(170px, .75fr) 1.25fr; gap: 14px; margin-top: 14px; }
+.pv-canon-companion-layout > img { width: 100%; height: 100%; min-height: 210px; object-fit: cover; object-position: top; border: 1px solid rgba(174,77,255,.2); border-radius: 18px; background: #05060b; image-rendering: auto; }
+.pv-canon-companion-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.pv-canon-companion-grid > div { min-height: 64px; display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; border: 1px solid rgba(174,77,255,.14); border-radius: 14px; background: rgba(255,255,255,.022); }
+.pv-canon-companion-grid b { color: #eee8f8; font-size: 11px; }
+.pv-canon-companion-grid span { margin-top: 3px; color: #888294; font-size: 9px; }
+.pv-canon-companion-grid > div:nth-child(2), .pv-canon-companion-grid > div:nth-child(5) { border-color: rgba(255,203,89,.18); }
+.pv-canon-companion-grid > div:nth-child(3) { border-color: rgba(31,231,255,.22); }
+.pv-canon-companion-grid > div:nth-child(4) { border-color: rgba(109,227,165,.2); }
+.pv-canon-companion-grid > div:nth-child(6) { border-color: rgba(255,77,184,.2); }
+
+.pv-canon-creator { border-color: rgba(174,77,255,.28); }
+.pv-canon-creator-banner { position: relative; min-height: 126px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: -16px -16px 16px; padding: 20px 22px; overflow: hidden; border-bottom: 1px solid rgba(174,77,255,.2); background: radial-gradient(circle at 82% 30%, rgba(31,231,255,.11), transparent 24%), radial-gradient(circle at 54% 100%, rgba(174,77,255,.22), transparent 38%), #080a13; }
+.pv-canon-creator-banner::before { position: absolute; inset: 0; content: ""; pointer-events: none; background: radial-gradient(1px 1px at 20% 25%, #fff, transparent 60%), radial-gradient(1px 1px at 66% 32%, #fff, transparent 60%), radial-gradient(1px 1px at 79% 76%, #9ceeff, transparent 60%); opacity: .5; }
+.pv-canon-creator-banner > div, .pv-canon-creator-banner img { position: relative; z-index: 1; }
+.pv-canon-creator-banner > div { display: flex; flex-direction: column; }
+.pv-canon-creator-banner span { color: #c8a7ff; font-size: 8px; font-weight: 800; letter-spacing: .18em; }
+.pv-canon-creator-banner strong { margin-top: 6px; font-size: clamp(18px,3vw,28px); letter-spacing: -.035em; }
+.pv-canon-creator-banner small { margin-top: 5px; color: #948d9f; }
+.pv-canon-creator-banner img { width: 78px; align-self: flex-end; image-rendering: pixelated; filter: drop-shadow(0 10px 16px #000); }
+
+.pv-song-mode-card.emphasis, .pv-music-regen-panel { background: linear-gradient(180deg, rgba(124,44,255,.12), rgba(8,9,17,.88)); border-color: rgba(174,77,255,.32); }
+.pv-music-regen-button, [data-music-regen-submit] { box-shadow: 0 0 24px rgba(174,77,255,.1); }
+
+@media (max-width: 760px) {
+  .pv-canon-home-hero { min-height: 0; padding: 28px 18px 22px; }
+  .pv-canon-home-actions > span { width: 100%; }
+  .pv-canon-companion-layout { grid-template-columns: 1fr; }
+  .pv-canon-companion-layout > img { max-height: 360px; object-fit: contain; }
+  .pv-canon-companion-grid { grid-template-columns: 1fr 1fr; }
+  .pv-canon-pablo-card { min-height: 220px; }
+}
+
+@media (max-width: 480px) {
+  .pv-canon-pablo-card { grid-template-columns: 44% 1fr; min-height: 200px; }
+  .pv-canon-pablo-copy { padding-right: 13px; }
+  .pv-canon-pablo-copy > span { font-size: 10px; }
+  .pv-canon-companion-grid { grid-template-columns: 1fr; }
+  .pv-canon-creator-banner { min-height: 110px; padding: 16px; }
+  .pv-canon-creator-banner img { width: 62px; }
+}
