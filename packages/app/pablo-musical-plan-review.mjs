@@ -77,12 +77,8 @@ export async function materializeMusicalPlanReview(review = {}, project = null) 
     return Object.freeze({ ok: false, mutated: false, reason: freshPlan?.reason || 'musical_execution_unavailable', plan: freshPlan });
   }
 
-  if (freshPlan.executor === 'instrument_lab') {
-    return applyPabloInstrumentOperation(project, freshPlan);
-  }
-  if (freshPlan.executor === 'beat_lab') {
-    return applyPabloBeatOperation(project, { action: freshPlan.action, args: freshPlan.args });
-  }
+  if (freshPlan.executor === 'instrument_lab') return applyPabloInstrumentOperation(project, freshPlan);
+  if (freshPlan.executor === 'beat_lab') return applyPabloBeatOperation(project, { action: freshPlan.action, args: freshPlan.args });
 
   return Object.freeze({
     ok: false,
@@ -102,7 +98,25 @@ export function musicalExecutionFingerprint(project = {}, plan = {}) {
   } else if (executor === 'music_generation') {
     state = {
       arrangementMap: project.arrangementMap || null,
-      tracks: (project.tracks || []).map(({ id, assetId, duration, offset, trimStart, trimEnd }) => ({ id, assetId, duration, offset, trimStart, trimEnd })),
+      tracks: (project.tracks || []).map(({ id, assetId, duration, offset, trimStart, trimEnd, providerSongId }) => ({
+        id,
+        assetId,
+        duration,
+        offset,
+        trimStart,
+        trimEnd,
+        providerSongId: providerSongId || null,
+      })),
+      songCreation: {
+        latestTakeId: project.songCreation?.latestTakeId || null,
+        takes: (project.songCreation?.takes || []).map(({ id, providerSongId, referenceTrackId, durationSeconds, derivedFromTakeId }) => ({
+          id,
+          providerSongId: providerSongId || null,
+          referenceTrackId: referenceTrackId || null,
+          durationSeconds: Number(durationSeconds) || null,
+          derivedFromTakeId: derivedFromTakeId || null,
+        })),
+      },
     };
   } else if (executor === 'version_history') {
     state = (project.revisions || []).map(({ id, at, label }) => ({ id, at, label }));
@@ -129,8 +143,8 @@ export function describeMusicalExecutionPlan(plan = {}) {
   }
   if (plan.executor === 'music_generation') {
     return plan.action === 'regenerate_section'
-      ? `Regeneração por seção preparada para ${humanSection(plan.args?.section)}; o restante deve ser preservado.`
-      : 'Variante musical generativa preparada para revisão; ainda não foi enviada ao provider.';
+      ? `Edição por seção preparada para ${humanSection(plan.args?.section)}; o restante da música será preservado.`
+      : 'Nova versão musical preparada para revisão; ainda não foi enviada para produção conectada.';
   }
   if (plan.executor === 'version_history') return 'Referência à versão anterior preparada; nenhum take foi trocado automaticamente.';
   if (plan.executor === 'audio_dsp') return 'Direção de mix entendida, mas mantida em revisão até existir mapeamento DSP seguro.';
@@ -141,7 +155,7 @@ export function humanizeMusicalReviewError(reason = '') {
   const messages = {
     project_required: 'Crie ou abra um projeto primeiro.',
     project_changed: 'O projeto ativo mudou desde a análise. Faça o pedido novamente para eu recalcular com o estado atual.',
-    musical_state_drift: 'O instrumento ou beat mudou desde a análise. Recalculei como necessário e não apliquei um plano antigo.',
+    musical_state_drift: 'O estado musical mudou desde a análise. Não apliquei um plano antigo; faça o pedido novamente sobre a versão atual.',
     music_intelligence_unavailable: 'A inteligência musical local não está disponível nesta versão.',
     musical_intent_plan_unavailable: 'Esse pedido não terminou em um plano instrumental aplicável.',
     musical_execution_compile_failed: 'Não consegui compilar esse pedido para um executor seguro.',
@@ -163,8 +177,7 @@ function blockedReview(reason, extra = {}) {
 }
 
 function blockedPlanMessage(reason) {
-  const message = humanizeMusicalReviewError(reason || 'musical_execution_unavailable');
-  return `${message} Não alterei o projeto.`;
+  return `${humanizeMusicalReviewError(reason || 'musical_execution_unavailable')} Não alterei o projeto.`;
 }
 
 function humanTarget(value) {
@@ -196,7 +209,7 @@ async function loadMusicIntelligence() {
       const module = await import(specifier);
       if (typeof module.respondToMusicCreation === 'function') return module;
     } catch {
-      // Packaged runtime and source tests expose the canonical package from different paths.
+      // Packaged runtime and source tests expose canonical packages from different roots.
     }
   }
   return null;
