@@ -34,10 +34,21 @@ test('CANONICAL UI GATE: real Pablo and six Companions survive Home and Creator'
   await screenshot(page, 'home-desktop');
 
   await page.getByRole('button', { name: 'Criar música' }).click();
-  await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
+  const creator = page.locator('#pv-song-creator');
+  await expect(creator).toBeVisible({ timeout: 10_000 });
   const creatorPablo = page.locator('.pv-canon-creator-banner img');
   await expect(creatorPablo).toHaveAttribute('src', '/site/assets/pablo_fullbody.webp');
   await expectImageLoaded(creatorPablo);
+
+  // Creator is primary on Compor: it follows lyrics/analysis directly and
+  // provider activation can never duplicate during async session checks.
+  await expect(page.locator('#pv-remote-pairing')).toHaveCount(1);
+  const creatorPlacement = await page.evaluate(() => {
+    const lyricsGrid = document.querySelector('#lyrics')?.closest('.pv-grid');
+    const creatorNode = document.querySelector('#pv-song-creator');
+    return Boolean(lyricsGrid && creatorNode && lyricsGrid.nextElementSibling === creatorNode);
+  });
+  expect(creatorPlacement).toBe(true);
   await screenshot(page, 'creator-desktop');
 
   const visibleText = await page.locator('body').innerText();
