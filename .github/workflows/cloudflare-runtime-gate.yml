@@ -102,19 +102,29 @@ jobs:
           jq -e '.ok == true' "$tmp/health.json" >/dev/null
 
           fetch_200 '/api/provider-readiness' "$tmp/readiness.json" "$tmp/readiness.headers"
-          jq -e '.ok == true and .providers.pablovoice.transport == "cloudflare_workers_ai" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .providers.elevenmusic.transport == "official_api" and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null
+          jq -e '.ok == true and .providers.pablovoice.transport == "cloudflare_workers_ai" and .providers.pablovoice.configured == true and .providers.pablovoice.runnable == true and .providers.elevenmusic.transport == "official_api" and .providers.elevenmusic.configured == true and .providers.elevenmusic.runnable == true and .secrets_exposed == false' "$tmp/readiness.json" >/dev/null || {
+            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: connected music provider is not configured on this exact preview.' >&2
+            jq '{providers: {elevenmusic: .providers.elevenmusic, pablovoice: .providers.pablovoice}, secrets_exposed}' "$tmp/readiness.json" >&2
+            exit 1
+          }
 
           fetch_200 '/api/pablo-agent' "$tmp/agent.json" "$tmp/agent.headers"
           jq -e '.ok == true and .provider == "cloudflare_workers_ai" and .configured == true and .credential_exposed == false' "$tmp/agent.json" >/dev/null
 
           fetch_200 '/api/music-generation' "$tmp/music.json" "$tmp/music.headers"
-          jq -e '.ok == true and .service == "pablovoice-music-generation" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .section_locked_plan == true and .inpainting_source_id == true' "$tmp/music.json" >/dev/null
-          music_configured="$(jq -r '.configured' "$tmp/music.json")"
+          jq -e '.ok == true and .service == "pablovoice-music-generation" and .configured == true and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .section_locked_plan == true and .inpainting_source_id == true' "$tmp/music.json" >/dev/null || {
+            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: /api/music-generation is published but its connected provider is not configured.' >&2
+            jq '{ok, service, configured, provider, model, credential_exposed}' "$tmp/music.json" >&2
+            exit 1
+          }
 
           fetch_200 '/api/music-regeneration' "$tmp/regen.json" "$tmp/regen.headers"
-          jq -e '.ok == true and .service == "pablovoice-music-regeneration" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .requires_song_id == true and .preserves_unselected_ranges == true' "$tmp/regen.json" >/dev/null
-          regen_configured="$(jq -r '.configured' "$tmp/regen.json")"
-          printf 'Music v2 route: published\nMusic v2 provider configured on preview: %s\nSelective regeneration route: published\nSelective provider configured on preview: %s\n' "$music_configured" "$regen_configured" >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.ok == true and .service == "pablovoice-music-regeneration" and .configured == true and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .requires_song_id == true and .preserves_unselected_ranges == true' "$tmp/regen.json" >/dev/null || {
+            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: /api/music-regeneration is published but its connected provider is not configured.' >&2
+            jq '{ok, service, configured, provider, model, credential_exposed}' "$tmp/regen.json" >&2
+            exit 1
+          }
+          printf 'Connected music provider: configured\nMusic v2 route: published\nSelective regeneration route: published\n' >> "$GITHUB_STEP_SUMMARY"
 
           code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
