@@ -151,7 +151,7 @@ export function describeMusicalExecutionPlan(plan = {}) {
   if (plan.executor === 'instrument_lab') {
     const target = humanTarget(plan.args?.target);
     const section = plan.args?.section ? ` em ${humanSection(plan.args.section)}` : '';
-    return `${target}${section} · ajuste MIDI reversível de timing, dinâmica e duração; pitch, quantidade de notas e material fora da seleção ficam preservados.`;
+    return `${target}${section} · ajuste MIDI reversível de timing, dinâmica e duração; pitch e quantidade de notas ficam preservados; material fora da seleção também.`;
   }
   if (plan.executor === 'beat_lab') {
     const amount = Math.round((Number(plan.args?.amount) || 0) * 100);
