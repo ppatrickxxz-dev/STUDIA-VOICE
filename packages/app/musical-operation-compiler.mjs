@@ -102,6 +102,22 @@ function compileBeat(route, project) {
     });
   }
 
+  const sectionScope = resolvedSectionScope(route.scope);
+  if (route.scope?.section) {
+    if (!sectionScope) {
+      return blocked(route, 'beat_section_mapping_unavailable', {
+        executor: 'beat_lab',
+        fallback: route.fallback || ['music_generation'],
+        note: 'O pedido é regional, mas a seção ainda não foi resolvida no Music Graph.',
+      });
+    }
+    return blocked(route, 'beat_section_local_executor_required', {
+      executor: 'beat_lab',
+      fallback: route.fallback || ['music_generation'],
+      note: 'O Beat Lab atual humaniza o padrão inteiro. Não vou aplicar uma mutação global fingindo que ficou limitada à seção resolvida.',
+    });
+  }
+
   const deltas = route.payload?.deltas || {};
   const humanize = positive(deltas.humanize);
   const handled = humanize > 0 ? ['humanize'] : [];
