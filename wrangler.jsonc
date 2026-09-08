@@ -1,6 +1,3 @@
-// PR previews are owned by Cloudflare Workers Builds. Keep this config touch
-// non-functional: it exists to retrigger a same-head version preview without
-// introducing GitHub-held Cloudflare credentials or changing production traffic.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "studia-voice",
