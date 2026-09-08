@@ -20,7 +20,7 @@ concurrency:
 jobs:
   materialize:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Acquire repository OIDC token
         id: oidc
@@ -32,6 +32,7 @@ jobs:
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
           token="$(python -c 'import json,sys; print(json.load(sys.stdin)["value"])' <<<"$response")"
           test -n "$token"
+          echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Materialize canonical source
@@ -49,17 +50,73 @@ jobs:
           echo "$response" | python -m json.tool
           python -c 'import json,sys; result=json.load(sys.stdin); asset=result.get("asset") or {}; assert result.get("ok") is True, result; assert asset.get("sha256") == "852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83", result; assert int(asset.get("size_bytes") or 0) == 13909412, result' <<<"$response"
 
-      - name: Materialize frozen provider input
+      - name: Rebuild exact frozen provider input
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          body='{"action":"materialize","expected_sha256":"85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95"}'
-          response="$(curl --fail-with-body --silent --show-error \
+          endpoint='https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/diagnose-once-v56'
+          canonical_sha='852890854c128a4ee222505a910c3dc01465579d34ed6b49b5019aec8f16ad83'
+          provider_sha='85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95'
+
+          source_response="$(curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
             -H 'content-type: application/json' \
-            --data "$body" \
-            'https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/diagnose-once-v56')"
-          echo "$response" | python -m json.tool
-          python -c 'import json,sys; result=json.load(sys.stdin); asset=result.get("asset") or {}; assert result.get("ok") is True, result; assert asset.get("sha256") == "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95", result; assert int(asset.get("size_bytes") or 0) == 15335120, result' <<<"$response"
+            --data "{\"action\":\"source_url\",\"expected_sha256\":\"${canonical_sha}\"}" \
+            "$endpoint")"
+          source_url="$(python -c 'import json,sys; r=json.load(sys.stdin); assert r.get("ok") is True,r; print(r["signed_url"])' <<<"$source_response")"
+          curl --fail-with-body --silent --show-error --location "$source_url" -o voz.wav
+          test "$(stat -c '%s' voz.wav)" = '13909412'
+          test "$(sha256sum voz.wav | cut -d' ' -f1)" = "$canonical_sha"
+
+          ffmpeg -hide_banner -loglevel error -i voz.wav -vn -ac 1 -ar 44100 -c:a pcm_s16le vocal_provider_input.wav
+          actual_size="$(stat -c '%s' vocal_provider_input.wav)"
+          actual_sha="$(sha256sum vocal_provider_input.wav | cut -d' ' -f1)"
+          echo "FROZEN_PROVIDER_REBUILD size=${actual_size} sha256=${actual_sha}"
+          test "$actual_size" = '15335120'
+          test "$actual_sha" = "$provider_sha"
+
+          rm -rf transport-chunks
+          mkdir -p transport-chunks
+          split -b 1000000 -d -a 3 vocal_provider_input.wav transport-chunks/chunk-
+          chunk_count="$(find transport-chunks -type f -name 'chunk-*' | wc -l | tr -d ' ')"
+          prepare_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'content-type: application/json' \
+            --data "{\"action\":\"prepare_transport\",\"expected_sha256\":\"${provider_sha}\",\"chunk_count\":${chunk_count}}" \
+            "$endpoint")"
+          echo "$prepare_response" | python -m json.tool
+          session_id="$(python -c 'import json,sys; r=json.load(sys.stdin); assert r.get("ok") is True,r; print(r.get("session_id") or "")' <<<"$prepare_response")"
+
+          if [ -n "$session_id" ]; then
+            index=0
+            for chunk in transport-chunks/chunk-*; do
+              python - "$session_id" "$index" "$chunk" <<'PY'
+          import base64, json, pathlib, sys
+          session_id, index, path = sys.argv[1], int(sys.argv[2]), pathlib.Path(sys.argv[3])
+          payload = {
+              "action": "stage_chunk",
+              "session_id": session_id,
+              "chunk_index": index,
+              "chunk_b64": base64.b64encode(path.read_bytes()).decode("ascii"),
+          }
+          pathlib.Path("chunk-payload.json").write_text(json.dumps(payload), encoding="utf-8")
+          PY
+              chunk_response="$(curl --fail-with-body --silent --show-error \
+                -H "Authorization: Bearer ${OIDC_TOKEN}" \
+                -H 'content-type: application/json' \
+                --data-binary @chunk-payload.json \
+                "$endpoint")"
+              python -c 'import json,sys; r=json.load(sys.stdin); assert r.get("ok") is True,r' <<<"$chunk_response"
+              index=$((index + 1))
+            done
+          fi
+
+          materialize_response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'content-type: application/json' \
+            --data "{\"action\":\"materialize\",\"expected_sha256\":\"${provider_sha}\"}" \
+            "$endpoint")"
+          echo "$materialize_response" | python -m json.tool
+          python -c 'import json,sys; r=json.load(sys.stdin); a=r.get("asset") or {}; assert r.get("ok") is True,r; assert a.get("sha256") == "85b6341bac253f85a48506400baed3dd2bbf212ac172af6d0fa8e47d35642b95",r; assert int(a.get("size_bytes") or 0) == 15335120,r' <<<"$materialize_response"
