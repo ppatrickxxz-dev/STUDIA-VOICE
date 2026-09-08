@@ -17,9 +17,14 @@ build_tools="${ANDROID_HOME:?ANDROID_HOME is required}/build-tools/35.0.0"
 badging="$($build_tools/aapt dump badging "$apk_path")"
 grep -F "package: name='$expected_package'" <<<"$badging"
 
-for asset in assets/index.html assets/app.js assets/styles.css assets/core/src/project.mjs assets/audio/src/presets.mjs; do
+for asset in assets/index.html assets/app.js assets/preboot.mjs assets/physical-gate-runtime.mjs assets/storage.mjs assets/styles.css assets/core/src/project.mjs assets/audio/src/presets.mjs; do
   unzip -l "$apk_path" "$asset" | grep -F "$asset"
 done
+
+storage_module="$(unzip -p "$apk_path" assets/storage.mjs)"
+grep -F 'globalThis.PabloVoiceAndroid' <<<"$storage_module" >/dev/null
+grep -F "'./core/src/project.mjs'" <<<"$storage_module" >/dev/null
+grep -F "'../core/src/project.mjs'" <<<"$storage_module" >/dev/null
 
 if unzip -p "$apk_path" assets/app.js | grep -E "https://[^[:space:]\"']+\\.vercel\\.app" >/dev/null; then
   echo 'REGRESSION-001 FAIL: remote Vercel boot URL is present in the APK' >&2
