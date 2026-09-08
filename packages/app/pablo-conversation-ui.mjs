@@ -87,16 +87,25 @@ async function getAnalysis(assetId) {
   return track ? analyzeTrack(track) : null;
 }
 
+async function getMusicGraph(projectId = null) {
+  const project = await activeProject();
+  if (!project || (projectId && project.id !== projectId)) return null;
+  const unified = await buildUnifiedProjectContext(project, { evidenceByTrack: analysisCache });
+  return unified?.graph || null;
+}
+
 async function getMixState(projectId) {
   const project = await activeProject();
   if (!project || (projectId && project.id !== projectId)) return null;
+  const unified = await buildUnifiedProjectContext(project);
+  const roles = new Map((unified?.graph?.tracks || []).map((track) => [track.id, track.role]));
   const tracks = [];
   for (const track of project.tracks || []) {
     const analysis = await analyzeTrack(track);
     if (!analysis) continue;
     tracks.push({
       trackId: track.id,
-      role: track.kind === 'recording' ? 'lead-vocal' : 'instrumental',
+      role: roles.get(track.id) || 'unknown',
       analysis,
       confidence: analysis.confidence?.voice ?? analysis.confidence?.pitch ?? 0,
     });
@@ -104,7 +113,7 @@ async function getMixState(projectId) {
   return buildProjectMixState({ tracks });
 }
 
-const audioToolRuntime = createPabloVoiceAudioToolRuntime({ getAnalysis, getMixState });
+const audioToolRuntime = createPabloVoiceAudioToolRuntime({ getAnalysis, getMixState, getMusicGraph });
 
 async function executeDeterministicEdit(message, trackId) {
   const project = await activeProject();
@@ -153,6 +162,7 @@ async function generateMusicDraft(request) {
   if (!linked?.ok || !linked.project?.id) throw new Error('Não consegui ligar este projeto ao Composer agora.');
   const unified = await buildUnifiedProjectContext(project, {
     pendingDraft: request?.contextPack?.pendingDraft || null,
+    evidenceByTrack: analysisCache,
   });
 
   const result = await remoteAuth.agentTurn({
@@ -202,7 +212,7 @@ async function contextForMessage() {
   const other = project?.tracks?.find((track) => track.id !== active?.id) || null;
   const lyrics = String(project?.lyrics || '').slice(0, 12000);
   const pendingDraft = project?.id ? await loadPmiComposerState(project.id, lyrics) : null;
-  const unified = project ? await buildUnifiedProjectContext(project, { pendingDraft }) : null;
+  const unified = project ? await buildUnifiedProjectContext(project, { pendingDraft, evidenceByTrack: analysisCache }) : null;
   return {
     projectId: project?.id || null,
     trackId: active?.id || null,
@@ -220,7 +230,7 @@ async function contextForMessage() {
 }
 
 async function remoteContextPack(project) {
-  const unified = await buildUnifiedProjectContext(project);
+  const unified = await buildUnifiedProjectContext(project, { evidenceByTrack: analysisCache });
   if (unified?.contextPack) return unified.contextPack;
   const tracks = Array.isArray(project?.tracks) ? project.tracks : [];
   return {
