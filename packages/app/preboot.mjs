@@ -1,5 +1,6 @@
 const app = document.querySelector('#app');
 const ACTIVE_PROJECT_SESSION_KEY = 'pablovoice.activeProjectId';
+const bootFailures = [];
 
 document.addEventListener('click', (event) => {
   const target = event.target.closest('[data-action="open-project"][data-id]');
@@ -33,94 +34,129 @@ function fallbackShell() {
   </nav>`;
 }
 
-try {
-  const { installAudioPlaybackRecovery, installPhysicalGateRuntime } = await import('./physical-gate-runtime.mjs');
-  installAudioPlaybackRecovery();
-  await import('./app.js');
-  const { installPabloConversationUI } = await import('./pablo-conversation-ui.mjs');
-  const { installPabloMusicalPlanUI } = await import('./pablo-musical-plan-ui.mjs');
-  const { installPabloSectionHereAdapter } = await import('./pablo-section-here-adapter.mjs');
-  const { installPabloSectionAuditionAdapter } = await import('./pablo-section-audition-adapter.mjs');
-  const { installPabloSectionVocalGainAdapter } = await import('./pablo-section-vocal-gain-adapter.mjs');
-  const { installPabloSectionVocalBrightnessAdapter } = await import('./pablo-section-vocal-brightness-adapter.mjs');
-  const { installPabloSectionVocalBodyAdapter } = await import('./pablo-section-vocal-body-adapter.mjs');
-  const { installPabloSectionVocalPresenceAdapter } = await import('./pablo-section-vocal-presence-adapter.mjs');
-  const { installPabloSectionVocalDynamicsAdapter } = await import('./pablo-section-vocal-dynamics-adapter.mjs');
-  const { installPabloSectionVocalDeEsserAdapter } = await import('./pablo-section-vocal-deesser-adapter.mjs');
-  const { installPabloSectionVocalPlosiveAdapter } = await import('./pablo-section-vocal-plosive-adapter.mjs');
-  const { installPabloSectionVocalClickAdapter } = await import('./pablo-section-vocal-click-adapter.mjs');
-  const { installPabloSectionVocalRestorationRecommendationAdapter } = await import('./pablo-section-vocal-restoration-recommendation-adapter.mjs');
-  const { installPabloSectionVocalRestorationSelectiveAdapter } = await import('./pablo-section-vocal-restoration-selective-adapter.mjs');
-  const { installPabloFullVocalScanAdapter } = await import('./pablo-full-vocal-scan-adapter.mjs');
-  const { installPabloFullVocalTreatmentAdapter } = await import('./pablo-full-vocal-treatment-adapter.mjs');
-  const { installPabloSectionVocalScanAdapter } = await import('./pablo-section-vocal-scan-adapter.mjs');
-  const { installPabloSectionVocalCleanupAdapter } = await import('./pablo-section-vocal-cleanup-adapter.mjs');
-  const { installPabloSectionVocalSoftnessAdapter } = await import('./pablo-section-vocal-softness-adapter.mjs');
-  const { installPabloSectionVocalSpaceAdapter } = await import('./pablo-section-vocal-space-adapter.mjs');
-  const { installPabloSectionMixUndoAdapter } = await import('./pablo-section-mix-undo-adapter.mjs');
-  const { installPabloSectionMixABAdapter } = await import('./pablo-section-mix-ab-adapter.mjs');
-  const { installBreathReviewUI } = await import('./breath-review-ui.mjs');
-  const { installAdvancedAIStudio } = await import('./advanced-ai-studio.mjs');
-  const { installSongCreationStudio } = await import('./song-creation-studio.mjs');
-  const { installAcousticEvidenceStatusUI } = await import('./acoustic-evidence-status-ui.mjs');
-  const { installVoiceIdentityReferenceUI } = await import('./voice-identity-reference-ui.mjs');
-  const { installRuntimeCapabilityStatus } = await import('./runtime-capability-status.mjs');
-  const { installRemoteAuthUI } = await import('./remote-auth-ui.mjs');
-  const { installInstrumentLab } = await import('./instrument-integration.mjs');
-  const { installPianoRoll } = await import('./piano-roll-ui.mjs');
-  const { installAudioToPianoRoll } = await import('./audio-to-piano-roll-ui.mjs');
-  const { installSampler } = await import('./sampler-ui.mjs');
-  const { installBeatLab } = await import('./beat-lab-ui.mjs');
-  const { installSectionMapUI } = await import('./section-map-ui.mjs');
-  const { installMusicSectionRegenerationUI } = await import('./music-section-regeneration-ui.mjs');
-  const { installPabloVoiceIntimateUI } = await import('./pablovoice-intimate-ui.mjs');
-  const { installPabloLifeUI } = await import('./pablo-life-ui.mjs');
-  const { installPabloVoiceVNextUI } = await import('./pablovoice-vnext-ui.mjs');
-  const { installPabloVoiceVNextRouteCompat } = await import('./pablovoice-vnext-route-compat.mjs');
-  installPabloConversationUI();
-  installPabloMusicalPlanUI();
-  installPabloSectionHereAdapter();
-  installPabloSectionAuditionAdapter();
-  installPabloSectionVocalGainAdapter();
-  installPabloSectionVocalBrightnessAdapter();
-  installPabloSectionVocalBodyAdapter();
-  installPabloSectionVocalPresenceAdapter();
-  installPabloSectionVocalDynamicsAdapter();
-  installPabloSectionVocalDeEsserAdapter();
-  installPabloSectionVocalPlosiveAdapter();
-  installPabloSectionVocalClickAdapter();
-  installPabloSectionVocalRestorationRecommendationAdapter();
-  installPabloSectionVocalRestorationSelectiveAdapter();
-  installPabloFullVocalScanAdapter();
-  installPabloFullVocalTreatmentAdapter();
-  installPabloSectionVocalScanAdapter();
-  installPabloSectionVocalCleanupAdapter();
-  installPabloSectionVocalSoftnessAdapter();
-  installPabloSectionVocalSpaceAdapter();
-  installPabloSectionMixUndoAdapter();
-  installPabloSectionMixABAdapter();
-  installBreathReviewUI();
-  installAdvancedAIStudio();
-  installSongCreationStudio();
-  installAcousticEvidenceStatusUI();
-  installVoiceIdentityReferenceUI();
-  installRuntimeCapabilityStatus();
-  installRemoteAuthUI();
-  installInstrumentLab();
-  installPianoRoll();
-  installAudioToPianoRoll();
-  installSampler();
-  installBeatLab();
-  installSectionMapUI();
-  installMusicSectionRegenerationUI();
-  installPabloVoiceIntimateUI();
-  installPabloLifeUI();
-  installPabloVoiceVNextUI();
-  installPabloVoiceVNextRouteCompat();
-  installPhysicalGateRuntime();
-  fallbackShell();
-} catch (error) {
-  console.error('PABLOVOICE_BOOT_IMPORT_FAILED', error);
-  fallbackShell();
-  document.documentElement.dataset.pvBootError = 'true';
+function recordBootFailure(label, error) {
+  bootFailures.push(label);
+  document.documentElement.dataset.pvBootDegraded = 'true';
+  document.documentElement.dataset.pvBootFailures = bootFailures.join(',');
+  console.error(`PABLOVOICE_BOOT_MODULE_FAILED:${label}`, error);
 }
+
+async function installOptional(label, specifier, exportName) {
+  try {
+    const module = await import(specifier);
+    const install = module?.[exportName];
+    if (typeof install !== 'function') throw new TypeError(`${exportName} não está disponível em ${specifier}.`);
+    install();
+    return true;
+  } catch (error) {
+    recordBootFailure(label, error);
+    return false;
+  }
+}
+
+// A usable shell must exist before IndexedDB restoration, network providers or any specialist starts.
+fallbackShell();
+document.documentElement.dataset.pvBootStage = 'shell';
+
+let physicalRuntime = null;
+try {
+  physicalRuntime = await import('./physical-gate-runtime.mjs');
+  physicalRuntime.installAudioPlaybackRecovery?.();
+} catch (error) {
+  recordBootFailure('audio-playback-recovery', error);
+}
+
+try {
+  await import('./app.js');
+  document.documentElement.dataset.pvBootStage = 'app';
+} catch (error) {
+  recordBootFailure('canonical-app', error);
+}
+
+// Identity and navigation are core product surfaces. Install them before optional specialists so a
+// failing DSP/AI module can never blank the Studio or hide Pablo/companions again.
+try {
+  const { installPabloVoiceIntimateUI } = await import('./pablovoice-intimate-ui.mjs');
+  installPabloVoiceIntimateUI();
+} catch (error) {
+  recordBootFailure('intimate-ui', error);
+}
+
+try {
+  const { installPabloLifeUI } = await import('./pablo-life-ui.mjs');
+  installPabloLifeUI();
+} catch (error) {
+  recordBootFailure('pablo-life-ui', error);
+}
+
+try {
+  const { installPabloVoiceVNextUI } = await import('./pablovoice-vnext-ui.mjs');
+  installPabloVoiceVNextUI();
+} catch (error) {
+  recordBootFailure('vnext-ui', error);
+}
+
+try {
+  const { installPabloVoiceVNextRouteCompat } = await import('./pablovoice-vnext-route-compat.mjs');
+  installPabloVoiceVNextRouteCompat();
+} catch (error) {
+  recordBootFailure('vnext-route-compat', error);
+}
+
+document.documentElement.dataset.pvBootStage = 'specialists';
+
+// Specialists stay ordered because several adapters intentionally decorate hooks installed earlier.
+// Each one is isolated: failure is visible and testable, but it cannot take the whole music studio down.
+const specialists = [
+  ['conversation', './pablo-conversation-ui.mjs', 'installPabloConversationUI'],
+  ['musical-plan', './pablo-musical-plan-ui.mjs', 'installPabloMusicalPlanUI'],
+  ['section-here', './pablo-section-here-adapter.mjs', 'installPabloSectionHereAdapter'],
+  ['section-audition', './pablo-section-audition-adapter.mjs', 'installPabloSectionAuditionAdapter'],
+  ['vocal-gain', './pablo-section-vocal-gain-adapter.mjs', 'installPabloSectionVocalGainAdapter'],
+  ['vocal-brightness', './pablo-section-vocal-brightness-adapter.mjs', 'installPabloSectionVocalBrightnessAdapter'],
+  ['vocal-body', './pablo-section-vocal-body-adapter.mjs', 'installPabloSectionVocalBodyAdapter'],
+  ['vocal-presence', './pablo-section-vocal-presence-adapter.mjs', 'installPabloSectionVocalPresenceAdapter'],
+  ['vocal-dynamics', './pablo-section-vocal-dynamics-adapter.mjs', 'installPabloSectionVocalDynamicsAdapter'],
+  ['vocal-deesser', './pablo-section-vocal-deesser-adapter.mjs', 'installPabloSectionVocalDeEsserAdapter'],
+  ['vocal-plosive', './pablo-section-vocal-plosive-adapter.mjs', 'installPabloSectionVocalPlosiveAdapter'],
+  ['vocal-click', './pablo-section-vocal-click-adapter.mjs', 'installPabloSectionVocalClickAdapter'],
+  ['vocal-restoration-recommendation', './pablo-section-vocal-restoration-recommendation-adapter.mjs', 'installPabloSectionVocalRestorationRecommendationAdapter'],
+  ['vocal-restoration-selective', './pablo-section-vocal-restoration-selective-adapter.mjs', 'installPabloSectionVocalRestorationSelectiveAdapter'],
+  ['full-vocal-scan', './pablo-full-vocal-scan-adapter.mjs', 'installPabloFullVocalScanAdapter'],
+  ['full-vocal-treatment', './pablo-full-vocal-treatment-adapter.mjs', 'installPabloFullVocalTreatmentAdapter'],
+  ['section-vocal-scan', './pablo-section-vocal-scan-adapter.mjs', 'installPabloSectionVocalScanAdapter'],
+  ['section-vocal-cleanup', './pablo-section-vocal-cleanup-adapter.mjs', 'installPabloSectionVocalCleanupAdapter'],
+  ['vocal-softness', './pablo-section-vocal-softness-adapter.mjs', 'installPabloSectionVocalSoftnessAdapter'],
+  ['vocal-space', './pablo-section-vocal-space-adapter.mjs', 'installPabloSectionVocalSpaceAdapter'],
+  ['mix-undo', './pablo-section-mix-undo-adapter.mjs', 'installPabloSectionMixUndoAdapter'],
+  ['mix-ab', './pablo-section-mix-ab-adapter.mjs', 'installPabloSectionMixABAdapter'],
+  ['breath-review', './breath-review-ui.mjs', 'installBreathReviewUI'],
+  ['advanced-ai-studio', './advanced-ai-studio.mjs', 'installAdvancedAIStudio'],
+  ['song-creation', './song-creation-studio.mjs', 'installSongCreationStudio'],
+  ['acoustic-evidence', './acoustic-evidence-status-ui.mjs', 'installAcousticEvidenceStatusUI'],
+  ['voice-identity', './voice-identity-reference-ui.mjs', 'installVoiceIdentityReferenceUI'],
+  ['runtime-capability', './runtime-capability-status.mjs', 'installRuntimeCapabilityStatus'],
+  ['remote-auth', './remote-auth-ui.mjs', 'installRemoteAuthUI'],
+  ['instrument-lab', './instrument-integration.mjs', 'installInstrumentLab'],
+  ['piano-roll', './piano-roll-ui.mjs', 'installPianoRoll'],
+  ['audio-to-piano-roll', './audio-to-piano-roll-ui.mjs', 'installAudioToPianoRoll'],
+  ['sampler', './sampler-ui.mjs', 'installSampler'],
+  ['beat-lab', './beat-lab-ui.mjs', 'installBeatLab'],
+  ['section-map', './section-map-ui.mjs', 'installSectionMapUI'],
+  ['music-section-regeneration', './music-section-regeneration-ui.mjs', 'installMusicSectionRegenerationUI'],
+];
+
+for (const [label, specifier, exportName] of specialists) {
+  await installOptional(label, specifier, exportName);
+}
+
+try {
+  physicalRuntime?.installPhysicalGateRuntime?.();
+} catch (error) {
+  recordBootFailure('physical-gate-runtime', error);
+}
+
+fallbackShell();
+document.documentElement.dataset.pvBootStage = 'ready';
+document.documentElement.dataset.pvBootReady = 'true';
+if (!bootFailures.length) delete document.documentElement.dataset.pvBootDegraded;
