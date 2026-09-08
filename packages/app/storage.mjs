@@ -1,4 +1,4 @@
-import { migrateProject } from './core/src/project.mjs';
+import { migrateProject } from '../core/src/project.mjs';
 import { sortProjectsByContext } from './project-context.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
@@ -38,105 +38,117 @@ export { sortProjectsByContext } from './project-context.mjs';
 
 export async function saveProject(project) {
   const clean = migrateProject(project);
-  await put('projects', clean);
+  const db = await openDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').put(clean);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Falha ao salvar projeto.'));
+  });
+  rememberActiveProject(clean.id);
   return clean;
 }
 
-export async function getProject(id) {
-  const raw = await get('projects', id);
-  if (!raw) return null;
-  const project = migrateProject(raw);
-  if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
-  if (raw.settings) project.legacySettings = raw.settings;
-  return project;
-}
-
-export async function listProjects() {
-  const values = await all('projects');
-  const activeId = activeProjectSessionId();
-  const projects = values.map((raw) => {
-    const project = migrateProject(raw);
-    if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
-    if (raw.settings) project.legacySettings = raw.settings;
-    return project;
+export async function loadProject(id) {
+  const db = await openDatabase();
+  const raw = await new Promise((resolve, reject) => {
+    const tx = db.transaction('projects', 'readonly');
+    const request = tx.objectStore('projects').get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
   });
-  return sortProjectsByContext(projects, activeId);
+  if (!raw) return null;
+  const clean = migrateProject(raw);
+  rememberActiveProject(clean.id);
+  return clean;
 }
 
 export async function deleteProject(id) {
-  const project = await getProject(id);
-  const assetIds = new Set((project?.tracks || []).map((track) => track.assetId).filter(Boolean));
-  if (project?.legacyAudioId) assetIds.add(project.legacyAudioId);
-  const database = await openDatabase();
+  const db = await openDatabase();
   await new Promise((resolve, reject) => {
-    const transaction = database.transaction(['projects', 'audio'], 'readwrite');
-    transaction.objectStore('projects').delete(id);
-    for (const assetId of assetIds) transaction.objectStore('audio').delete(assetId);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error || new Error('Exclusão cancelada.'));
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Falha ao excluir projeto.'));
   });
 }
 
-export async function saveAudioAsset({ id, blob, name, type, createdAt = Date.now() }) {
-  if (!(blob instanceof Blob) || blob.size === 0) throw new TypeError('Arquivo de áudio vazio.');
-  const value = { id, blob, name: String(name || 'áudio'), type: type || blob.type || 'application/octet-stream', createdAt };
-  await put('audio', value);
-  return value;
-}
-
-export function getAudioAsset(id) {
-  return get('audio', id);
-}
-
-export async function saveSetting(key, value) {
-  await put('settings', { key, value });
-}
-
-export async function getSetting(key, fallback = null) {
-  return (await get('settings', key))?.value ?? fallback;
-}
-
-export async function deleteSetting(key) {
-  await remove('settings', key);
-}
-
-async function put(store, value) {
-  const database = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction(store, 'readwrite');
-    transaction.objectStore(store).put(value);
-    transaction.oncomplete = () => resolve(value);
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error || new Error('Operação local cancelada.'));
+export async function listProjects() {
+  const db = await openDatabase();
+  const rows = await new Promise((resolve, reject) => {
+    const tx = db.transaction('projects', 'readonly');
+    const request = tx.objectStore('projects').getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
   });
+  return sortProjectsByContext(rows.map(migrateProject), { activeProjectId: activeProjectSessionId() });
 }
 
-async function get(store, id) {
-  const database = await openDatabase();
+export async function saveAudioAsset({ id, blob, name, type }) {
+  if (!id || !(blob instanceof Blob)) throw new TypeError('Áudio inválido para salvar.');
+  const db = await openDatabase();
+  const record = { id, blob, name: name || 'audio', type: type || blob.type || 'audio/wav', updatedAt: Date.now() };
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('audio', 'readwrite');
+    tx.objectStore('audio').put(record);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Falha ao salvar áudio.'));
+  });
+  return record;
+}
+
+export async function loadAudioAsset(id) {
+  const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const request = database.transaction(store, 'readonly').objectStore(store).get(id);
+    const tx = db.transaction('audio', 'readonly');
+    const request = tx.objectStore('audio').get(id);
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function all(store) {
-  const database = await openDatabase();
+export async function deleteAudioAsset(id) {
+  const db = await openDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('audio', 'readwrite');
+    tx.objectStore('audio').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Falha ao excluir áudio.'));
+  });
+}
+
+export async function saveSetting(key, value) {
+  const db = await openDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('settings', 'readwrite');
+    tx.objectStore('settings').put({ key, value, updatedAt: Date.now() });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Falha ao salvar configuração.'));
+  });
+}
+
+export async function loadSetting(key) {
+  const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const request = database.transaction(store, 'readonly').objectStore(store).getAll();
-    request.onsuccess = () => resolve(request.result || []);
+    const tx = db.transaction('settings', 'readonly');
+    const request = tx.objectStore('settings').get(key);
+    request.onsuccess = () => resolve(request.result?.value ?? null);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function remove(store, id) {
-  const database = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction(store, 'readwrite');
-    transaction.objectStore(store).delete(id);
-    transaction.oncomplete = () => resolve(true);
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error || new Error('Operação local cancelada.'));
+export async function deleteSetting(key) {
+  const db = await openDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('settings', 'readwrite');
+    tx.objectStore('settings').delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Falha ao excluir configuração.'));
   });
 }
