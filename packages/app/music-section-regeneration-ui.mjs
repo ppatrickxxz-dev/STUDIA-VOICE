@@ -1,4 +1,5 @@
 import { MusicGenerationClient } from './music-generation-client.mjs';
+import { NativeMusicSectionRepaintClient } from './native-music-section-repaint-client.mjs';
 import { latestInpaintableSongTake, resolveSectionRegeneration } from './music-section-regeneration.mjs';
 import { persistSectionRegeneration } from './music-section-regeneration-persistence.mjs';
 import { activeProjectSessionId, getProject, listProjects } from './storage.mjs';
@@ -6,7 +7,8 @@ import { activeProjectSessionId, getProject, listProjects } from './storage.mjs'
 const OPEN_STUDIO_KEY = 'pablovoice.songCreation.openStudio';
 const runtime = {
   observer: null,
-  client: null,
+  legacyClient: null,
+  nativeClient: null,
   project: null,
   selectedSectionId: null,
   busy: false,
@@ -66,14 +68,11 @@ async function syncSectionActions() {
     list.prepend(readiness);
   }
   readiness.classList.toggle('ready', Boolean(sourceTake));
-  setText(
-    readiness.querySelector('strong'),
-    sourceTake ? '〰 Edição por seção pronta' : 'Edição por seção',
-  );
+  setText(readiness.querySelector('strong'), sourceTake ? '〰 Edição por seção pronta' : 'Edição por seção');
   setText(
     readiness.querySelector('span'),
     sourceTake
-      ? 'Existe um take conectado com continuidade. Você pode criar outra versão de uma seção sem refazer a música inteira.'
+      ? 'Existe um take conectado editável. Você pode criar outra versão de uma seção sem refazer a música inteira.'
       : 'Produza uma versão conectada para liberar novas versões seletivas. O mapa de seções continua editável normalmente.',
   );
 
@@ -119,10 +118,11 @@ function renderRegenerationPanel(plan) {
   const panel = document.createElement('section');
   panel.className = 'pv-music-regen-panel';
   panel.dataset.musicRegenPanel = 'true';
+  panel.dataset.musicRegenSource = plan.sourceType || 'unknown';
   const seconds = Math.max(0, (plan.section.endMs - plan.section.startMs) / 1000);
   panel.innerHTML = `
     <div class="pv-music-regen-head">
-      <div><small>〰 WAVE · EDIÇÃO SELETIVA</small><h3>Refazer só ${escapeHtml(plan.section.label)}</h3><p>${formatMs(plan.section.startMs)} → ${formatMs(plan.section.endMs)} · ${seconds.toFixed(1)}s. O restante da música é referenciado pelo take original.</p></div>
+      <div><small>〰 WAVE · EDIÇÃO SELETIVA</small><h3>Refazer só ${escapeHtml(plan.section.label)}</h3><p>${formatMs(plan.section.startMs)} → ${formatMs(plan.section.endMs)} · ${seconds.toFixed(1)}s. O take original permanece intacto.</p></div>
       <button class="pv-btn" type="button" data-music-regen-close>Cancelar</button>
     </div>
     <form data-music-regen-form class="pv-music-regen-form">
@@ -135,7 +135,7 @@ function renderRegenerationPanel(plan) {
       <label>Evitar nesta seção · opcional
         <input class="pv-field" name="negative" maxlength="700" placeholder="Ex.: dembow pesado, drop EDM, excesso de guitarra">
       </label>
-      <div class="pv-music-regen-safety"><b>Preservar o resto da música</b><span>Só o intervalo selecionado recebe uma nova versão. O take anterior continua intacto para comparação e retorno.</span></div>
+      <div class="pv-music-regen-safety"><b>Preservar o resto da música</b><span>O motor recebe o mix original como fonte e uma máscara temporal para esta seção. A versão anterior continua disponível para A/B e retorno.</span></div>
       <div class="pv-music-regen-actions"><span data-music-regen-status>Pronto para criar uma nova versão desta seção.</span><button class="pv-btn primary" type="submit" data-music-regen-submit>〰 Criar nova versão</button></div>
     </form>`;
   const editor = modal.querySelector('.pv-section-editor');
@@ -159,7 +159,7 @@ async function onSubmit(event) {
 
   runtime.busy = true;
   if (submit) { submit.disabled = true; submit.textContent = '〰 Criando seção…'; }
-  setText(status, 'Confirmando take, tempos e contexto da seção…');
+  setText(status, 'Confirmando take, fonte e tempos da seção…');
   try {
     const project = await currentProject();
     const plan = resolveSectionRegeneration(project, runtime.selectedSectionId, {
@@ -169,13 +169,28 @@ async function onSubmit(event) {
     });
     if (!plan.ok) throw new Error(humanPlanError(plan.error));
 
-    setText(status, `Refazendo apenas ${plan.section.label}; restante referenciado pelo take anterior…`);
-    const result = await client().regenerateSection({
-      localProject: project,
-      sourceSongId: plan.sourceSongId,
-      durationMs: plan.durationMs,
-      section: plan.section,
-    });
+    let result;
+    if (plan.sourceType === 'native_asset') {
+      setText(status, `Refazendo somente ${plan.section.label} na GPU do PabloVoice…`);
+      result = await nativeClient().repaintSection({
+        localProject: project,
+        sourceAssetId: plan.sourceAssetId,
+        sourceTake: plan.sourceTake,
+        section: plan.section,
+        onProgress: (current) => {
+          const progress = Math.max(0, Math.min(100, Math.round(Number(current?.progress) || 0)));
+          setText(status, `Wave refazendo ${plan.section.label}… ${progress}%`);
+        },
+      });
+    } else {
+      setText(status, `Refazendo apenas ${plan.section.label}; restante referenciado pelo take anterior…`);
+      result = await legacyClient().regenerateSection({
+        localProject: project,
+        sourceSongId: plan.sourceSongId,
+        durationMs: plan.durationMs,
+        section: plan.section,
+      });
+    }
     if (!result?.ok) throw new Error(humanRuntimeError(result));
 
     setText(status, 'Salvando como novo take, sem substituir a versão anterior…');
@@ -202,9 +217,13 @@ document.addEventListener('click', (event) => {
   document.querySelector('[data-music-regen-panel]')?.remove();
 }, true);
 
-function client() {
-  if (!runtime.client) runtime.client = new MusicGenerationClient();
-  return runtime.client;
+function legacyClient() {
+  if (!runtime.legacyClient) runtime.legacyClient = new MusicGenerationClient();
+  return runtime.legacyClient;
+}
+function nativeClient() {
+  if (!runtime.nativeClient) runtime.nativeClient = new NativeMusicSectionRepaintClient();
+  return runtime.nativeClient;
 }
 
 async function currentProject() {
@@ -217,7 +236,7 @@ async function currentProject() {
 }
 
 function humanPlanError(error) {
-  if (error === 'inpainting_source_missing') return 'Esta música ainda não tem um take conectado com continuidade para edição seletiva.';
+  if (error === 'inpainting_source_missing') return 'Esta música ainda não tem um take conectado editável.';
   if (error === 'section_not_found') return 'Esta seção não está mais no mapa canônico.';
   if (error === 'section_timing_incomplete') return 'Confirme os tempos desta seção antes de editá-la.';
   return 'Não consegui preparar esta seção para edição.';
@@ -225,6 +244,11 @@ function humanPlanError(error) {
 
 function humanRuntimeError(result = {}) {
   if (result.error === 'auth_required') return 'Reconheça este aparelho para usar a edição conectada. O take atual foi preservado.';
+  if (result.error === 'project_link_failed') return 'Não consegui vincular o projeto ao runtime conectado. O take atual foi preservado.';
+  if (result.error === 'source_asset_required') return 'O mix-fonte conectado não está disponível para repaint.';
+  if (result.error === 'invalid_repaint_range') return 'O intervalo selecionado não é válido para repaint.';
+  if (result.error === 'music_repaint_proof_missing') return 'A GPU respondeu sem prova de repaint; a versão não foi aplicada.';
+  if (result.error === 'music_sha256_mismatch' || result.error === 'music_size_mismatch') return 'O áudio retornou, mas falhou na verificação de integridade. A versão não foi aplicada.';
   if (result.error === 'provider_unavailable') return 'A produção conectada não está disponível agora. O take atual foi preservado.';
   if (result.error === 'provider_rate_limited') return 'A produção conectada atingiu o limite temporário. Tente novamente depois; nada foi substituído.';
   if (result.error === 'provider_auth_failed') return 'A credencial da produção conectada precisa ser corrigida no backend. Nada foi substituído.';
