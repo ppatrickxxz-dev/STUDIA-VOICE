@@ -9,7 +9,7 @@ const unique = [...new Set(actions)].sort();
 const expected = [
   'ab', 'cancel-record', 'close-modal', 'copy-rhyme', 'delete-project', 'effect', 'export', 'export-track',
   'find-rhymes', 'home', 'import', 'insert-structure', 'mute', 'new-project', 'open-project',
-  'play', 'preset', 'record', 'save', 'seek', 'select-track', 'settings', 'solo', 'stop',
+  'play', 'preset', 'record', 'record-next-section', 'save', 'seek', 'select-track', 'settings', 'solo', 'stop',
   'stop-record', 'studio-tab',
 ].sort();
 
@@ -30,4 +30,3 @@ test('no enabled AI, stems, or voice-conversion button is rendered', () => {
   assert.match(source, /\['Separação de stems', false/);
   assert.match(source, /\['Conversão vocal', false/);
 });
-

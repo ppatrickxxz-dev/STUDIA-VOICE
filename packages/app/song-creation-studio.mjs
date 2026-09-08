@@ -1,11 +1,13 @@
 import { createId, createTrack, snapshotProject } from './core/src/project.mjs';
 import { upsertConfirmedSection } from './core/src/section-map.mjs';
+import { createSectionRecordingIntent } from './core/src/human-vocal-workflow.mjs';
 import { NativeMusicGenerationClient } from './native-music-generation-client.mjs';
 import { buildSongCreationIntelligence, resolveSongCreationLyrics } from './song-creation-intelligence.mjs';
 import { activeProjectSessionId, getProject, listProjects, rememberActiveProject, saveAudioAsset, saveProject } from './storage.mjs';
 import { createSongCreationPlan, describeSongPlan, renderSongCreation, SONG_CREATION_SCHEMA } from './song-creation-engine.mjs';
 
 const OPEN_STUDIO_KEY = 'pablovoice.songCreation.openStudio';
+const RECORDING_INTENT_KEY = 'pablovoice.humanVocal.recordingIntent';
 const runtime = {
   observer: null,
   busy: false,
@@ -85,6 +87,21 @@ function injectSongCreator() {
       <label class="pv-song-wide">Evitar na geração IA
         <input class="pv-field" name="negative" maxlength="700" placeholder="Ex.: dembow pesado, trap, voz feminina, drop EDM">
       </label>
+      <fieldset class="pv-song-vocal-profile pv-song-wide">
+        <legend>Voz-guia para o cantor</legend>
+        <p>A IA canta uma referência confortável. Sua gravação humana substitui essa guia por seção.</p>
+        <div class="pv-song-fields">
+          <label>Tipo de voz
+            <select class="pv-field" name="voiceType"><option value="masculina">Masculina</option><option value="feminina">Feminina</option><option value="neutra">Neutra</option></select>
+          </label>
+          <label>Nota mais grave<input class="pv-field" name="lowMidi" type="number" min="36" max="84" value="48"></label>
+          <label>Nota mais aguda<input class="pv-field" name="highMidi" type="number" min="41" max="96" value="67"></label>
+          <label>Idioma<input class="pv-field" name="vocalLanguage" maxlength="16" value="pt-BR"></label>
+        </div>
+        <label>Timbre e interpretação<input class="pv-field" name="vocalTone" maxlength="100" value="quente, natural e próximo"></label>
+        <label>Direção vocal<input class="pv-field" name="vocalDelivery" maxlength="140" value="dicção clara, fraseado R&B e interpretação confortável"></label>
+        <label class="pv-song-start-mode"><input type="checkbox" name="falsetto"><span><strong>Permitir falsete controlado</strong><small>A melodia-guia continua limitada à extensão informada.</small></span></label>
+      </fieldset>
       <label class="pv-song-start-mode">
         <input type="checkbox" name="instrumentalFirst">
         <span><strong>Começar pelo instrumental</strong><small>Ignora a letra apenas nesta geração, mas mantém o texto salvo no projeto. Se ainda não houver letra, este modo é ativado automaticamente.</small></span>
@@ -155,6 +172,15 @@ async function runCreation(form, mode) {
       bpm: Number(form.elements.bpm?.value),
       durationSeconds: Number(form.elements.duration?.value),
       key: form.elements.key?.value || null,
+      singerProfile: {
+        voiceType: form.elements.voiceType?.value,
+        lowMidi: Number(form.elements.lowMidi?.value),
+        highMidi: Number(form.elements.highMidi?.value),
+        language: form.elements.vocalLanguage?.value,
+        tone: form.elements.vocalTone?.value,
+        delivery: form.elements.vocalDelivery?.value,
+        falsetto: Boolean(form.elements.falsetto?.checked),
+      },
     });
 
     let saved;
@@ -373,11 +399,16 @@ function renderResult(result) {
   }).join('');
   const badge = result.mode === 'hq' ? 'GPU · SALVO' : 'LOCAL · SALVO';
   const providerNote = result.mode === 'hq' && result.providerSongId ? `<p class="pv-note">ID de continuidade salvo para futuras regenerações por seção.</p>` : '';
+  const recordingSections = result.plan.sections.filter((section) => !['intro', 'outro'].includes(section.id)).map((section) => {
+    const lyric = result.plan.guideLines.filter((line) => line.sectionId === section.id).map((line) => line.text).join(' · ');
+    return `<button class="pv-song-record-section" type="button" data-song-record-section="${escapeHtml(section.id)}" data-song-take-id="${escapeHtml(result.takeId)}"><span>●</span><b>${escapeHtml(section.label)}</b><small>${escapeHtml(lyric || 'Ouça a guia e grave este trecho')}</small></button>`;
+  }).join('');
   host.innerHTML = `<div class="pv-song-result">
     <div class="pv-card-head"><div><h3>Take ${result.takeNumber}</h3><p>${escapeHtml(describeSongPlan(result.plan))}</p></div><span class="pv-tag ok">${badge}</span></div>
     ${renderIntelligence(result.intelligence)}
     <div class="pv-song-audios">${cards}</div>
     ${providerNote}
+    <section class="pv-song-human-vocal"><div class="pv-card-head"><div><h3>Agora coloque sua voz</h3><p>Grave por seção. Cada take humano entra alinhado e abaixa somente o trecho correspondente da guia.</p></div><span class="pv-tag">VOZ REAL</span></div><div class="pv-song-record-sections">${recordingSections}</div></section>
     <div class="pv-actions"><button class="pv-btn primary" type="button" data-song-open-studio>◉ Abrir no Studio</button><button class="pv-btn" type="button" data-song-create-again>＋ Criar outro take</button></div>
   </div>`;
 }
@@ -398,6 +429,13 @@ function renderIntelligence(intelligence) {
 }
 
 function handleClick(event) {
+  const recordSection = event.target.closest('[data-song-record-section]');
+  if (recordSection) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void prepareSectionRecording(recordSection).catch((error) => setText(document.querySelector('#pv-song-create-status'), error?.message || 'Não consegui preparar a gravação.'));
+    return;
+  }
   const highQuality = event.target.closest('[data-song-create-hq]');
   if (highQuality) {
     event.preventDefault();
@@ -424,6 +462,15 @@ function handleClick(event) {
     event.stopImmediatePropagation();
     reloadIntoStudio();
   }
+}
+
+async function prepareSectionRecording(button) {
+  const project = await resolveActiveProject();
+  if (!project) throw new Error('Abra o projeto antes de gravar.');
+  const intent = createSectionRecordingIntent({ project, takeId: button.dataset.songTakeId, sectionId: button.dataset.songRecordSection });
+  sessionStorage.setItem(RECORDING_INTENT_KEY, JSON.stringify(intent));
+  sessionStorage.setItem(OPEN_STUDIO_KEY, '1');
+  location.reload();
 }
 
 function reloadIntoStudio() {

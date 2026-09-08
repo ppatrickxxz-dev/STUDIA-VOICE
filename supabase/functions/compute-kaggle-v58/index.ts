@@ -38,6 +38,9 @@ function buildLyrics(plan:any,instrumental:boolean){
 }
 function captionFromPlan(plan:any,negativeStyles:any[]){
   const parts=[clean(plan?.brief,1200),clean(plan?.genre,80),clean(plan?.mood,160)].filter(Boolean)
+  const singer=plan?.singerProfile||{}
+  const singerParts=[clean(singer.voiceType,24),clean(singer.tone,100),clean(singer.delivery,140)].filter(Boolean)
+  if(singerParts.length)parts.push(`Guide singer: ${singerParts.join(', ')}; comfortable MIDI range ${Number(singer.lowMidi)||48}-${Number(singer.highMidi)||67}; ${singer.falsetto?'controlled falsetto allowed':'avoid falsetto'}`)
   const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,120)).filter(Boolean).slice(0,12)
   if(avoid.length)parts.push(`Avoid: ${avoid.join(', ')}`)
   return parts.join('. ').slice(0,500)
@@ -127,7 +130,7 @@ Deno.serve(async(req:Request)=>{
     const duration=clamp(Math.round(Number(plan.durationSeconds)||120),10,600)
     const bpm=clamp(Math.round(Number(plan.bpm)||112),30,300)
     const key=clean(plan.key,8), mode=String(plan.mode||'minor')==='major'?'Major':'Minor'
-    const generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:'unknown',duration,seed:Number.isFinite(Number(plan.seed))?Math.abs(Math.trunc(Number(plan.seed)))%2147483647:42,inference_steps:8}
+    const generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:clean(plan?.singerProfile?.language,16)||'pt-BR',duration,seed:Number.isFinite(Number(plan.seed))?Math.abs(Math.trunc(Number(plan.seed)))%2147483647:42,inference_steps:8}
     if(!generation.caption)return json({ok:false,error:'music_caption_required'},400)
 
     jobId=crypto.randomUUID()

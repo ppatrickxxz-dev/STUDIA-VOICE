@@ -11,9 +11,11 @@ import {
 } from './storage.mjs';
 import { RecordingAdapter } from './recording.mjs';
 import { PabloAudioEngine } from './audio-engine.mjs';
+import { attachHumanVocalTake, createSectionRecordingIntent, HUMAN_VOCAL_WORKFLOW_SCHEMA, vocalWorkflowProgress } from './core/src/human-vocal-workflow.mjs';
 
 const VERSION = '2.4.0-rc.1';
 const MAX_FILE_BYTES = 300 * 1024 * 1024;
+const RECORDING_INTENT_KEY = 'pablovoice.humanVocal.recordingIntent';
 const app = document.querySelector('#app');
 const picker = document.querySelector('#audio-picker');
 const engine = new PabloAudioEngine();
@@ -120,7 +122,9 @@ function homeView() {
 function studioView() {
   if (!state.project) return emptyProjectView('Studio');
   const track = activeTrack();
-  return `<section class="pv-hero compact"><div class="pv-kicker">Studio · não destrutivo</div><h1 class="pv-title">${esc(state.project.name)}</h1><p class="pv-lead">${track ? esc(track.name) : 'Importe ou grave uma faixa para começar.'}</p></section>
+  const vocalProgress = vocalWorkflowProgress(state.project);
+  const vocalJourney = vocalProgress.total ? `<article class="pv-card pv-vocal-journey"><div><b>Substituição da voz-guia</b><span>${vocalProgress.replaced}/${vocalProgress.total} seções concluídas${vocalProgress.partial ? ` · ${vocalProgress.partial} parcial(is)` : ''}</span></div><progress max="100" value="${vocalProgress.percent}">${vocalProgress.percent}%</progress><button class="pv-btn record" data-action="record-next-section">● Gravar próxima seção</button></article>` : '';
+  return `<section class="pv-hero compact"><div class="pv-kicker">Studio · não destrutivo</div><h1 class="pv-title">${esc(state.project.name)}</h1><p class="pv-lead">${track ? esc(track.name) : 'Importe ou grave uma faixa para começar.'}</p></section>${vocalJourney}
   <div class="pv-studio-actions"><button class="pv-btn" data-action="import">↥ Importar</button><button class="pv-btn record" data-action="record">● Gravar</button><button class="pv-btn" data-action="save">Salvar</button><button class="pv-btn primary" data-action="export" ${track ? '' : 'disabled'}>Exportar WAV</button></div>
   <article class="pv-card chrome pv-transport-card"><canvas id="waveform" class="pv-wave-canvas" data-action="seek" aria-label="Forma de onda"></canvas>${track ? `<div class="pv-transport"><span id="current-time">${formatTime(state.cursor)}</span><button class="pv-play" data-action="play" aria-label="${engine.playing ? 'Pausar' : 'Reproduzir'}">${engine.playing ? '❚❚' : '▶'}</button><button class="pv-stop" data-action="stop" aria-label="Parar">■</button><span>${formatTime(engine.duration(state.project))}</span></div><div class="pv-ab-switch" aria-label="Comparação A/B"><button class="${state.playbackMode === 'original' ? 'active' : ''}" data-action="ab" data-value="original">A · Original</button><button class="${state.playbackMode === 'processed' ? 'active' : ''}" data-action="ab" data-value="processed">B · Processado</button></div>` : '<div class="pv-empty">Seu áudio aparece aqui.<div class="pv-actions"><button class="pv-btn primary" data-action="import">Importar áudio</button><button class="pv-btn record" data-action="record">● Gravar voz</button></div></div>'}</article>
   ${track ? `<div class="pv-tabs" role="tablist">${studioTab('edit', 'Editar')}${studioTab('voice', 'Voice Lab')}${studioTab('mixer', 'Mixer')}${studioTab('export', 'Exportar')}</div>${studioPanel(track)}` : ''}`;
@@ -199,7 +203,11 @@ function emptyProjectView(area) {
 
 function modalView() {
   if (state.modal === 'new') return `<div class="pv-modal-back"><form class="pv-modal" data-form="new-project"><h2>Novo projeto</h2><p>Use um nome que você reconheça depois.</p><input name="name" class="pv-field" value="Minha ideia" maxlength="80" autofocus><div class="pv-actions"><button type="button" class="pv-btn" data-action="close-modal">Cancelar</button><button class="pv-btn primary">Criar</button></div></form></div>`;
-  if (state.modal === 'record') return `<div class="pv-modal-back"><div class="pv-modal"><div class="pv-record-dot"></div><h2>Gravando voz</h2><p>O áudio fica no aparelho e entra automaticamente no projeto.</p><div id="record-clock" class="pv-record-clock">0:00.0</div><div class="pv-actions"><button class="pv-btn" data-action="cancel-record">Cancelar</button><button class="pv-btn primary record" data-action="stop-record">■ Parar e usar</button></div></div></div>`;
+  if (state.modal === 'record') {
+    const intent = readRecordingIntent();
+    const guide = intent ? `<div class="pv-record-guide"><span>${esc(intent.sectionLabel)}</span>${intent.lyrics ? `<p>${esc(intent.lyrics).replace(/\n/g, '<br>')}</p>` : ''}<small>A gravação será posicionada em ${formatTime(intent.startSeconds)} e substituirá somente esta parte da guia.</small></div>` : '';
+    return `<div class="pv-modal-back"><div class="pv-modal"><div class="pv-record-dot"></div><h2>${intent ? `Gravando ${esc(intent.sectionLabel)}` : 'Gravando voz'}</h2><p>Cante com fones. O take original fica salvo e o tratamento permanece reversível.</p>${guide}<div id="record-clock" class="pv-record-clock">0:00.0</div><div class="pv-actions"><button class="pv-btn" data-action="cancel-record">Cancelar</button><button class="pv-btn primary record" data-action="stop-record">■ Parar e usar</button></div></div></div>`;
+  }
   if (state.modal === 'settings') return `<div class="pv-modal-back"><div class="pv-modal wide"><div class="pv-card-head"><div><h2>PabloVoice ${VERSION}</h2><p>Build canônica Web + Android.</p></div><button class="pv-icon-btn" data-action="close-modal">×</button></div><div class="pv-cap-table">${capabilities.map(([name, ok, detail]) => `<div><b>${esc(name)}</b><span>${esc(detail)}</span><em class="${ok ? 'ok' : 'off'}">${ok ? 'PASS' : 'N/A'}</em></div>`).join('')}</div><div class="pv-metrics"><span>Boot <b>${Math.round(state.bootMs)} ms</b></span><span>Decode <b>${Math.round(state.lastDecodeMs)} ms</b></span><span>Render <b>${Math.round(state.lastRenderMs)} ms</b></span></div>${state.project?.revisions?.length ? `<h3>Histórico do projeto</h3><div class="pv-history">${[...state.project.revisions].reverse().slice(0, 10).map((revision) => `<div><b>${esc(revision.label)}</b><span>${new Date(revision.at).toLocaleString('pt-BR')}</span></div>`).join('')}</div>` : ''}</div></div>`;
   return '';
 }
@@ -269,18 +277,21 @@ async function importFile(file, kind = 'audio') {
   provisional.trimEnd = buffer.duration;
   provisional.sampleRate = buffer.sampleRate;
   provisional.channels = buffer.numberOfChannels;
+  const recordingIntent = kind === 'recording' ? readRecordingIntent() : null;
+  if (recordingIntent) attachHumanVocalTake(state.project, provisional, recordingIntent);
   await saveAudioAsset({ id: assetId, blob: file, name: provisional.name, type: file.type });
   state.project.tracks.push(provisional);
   state.project.activeTrackId = provisional.id;
-  state.project = snapshotProject(state.project, kind === 'recording' ? 'Gravação adicionada' : 'Áudio importado');
+  state.project = snapshotProject(state.project, recordingIntent ? `Voz humana · ${recordingIntent.sectionLabel}` : kind === 'recording' ? 'Gravação adicionada' : 'Áudio importado');
   state.project = await persistProject(state.project);
   state.cursor = 0;
   state.route = 'studio';
   state.studioTab = 'edit';
   waveCache.delete(provisional.id);
   await refreshProjects();
+  if (recordingIntent) clearRecordingIntent();
   render();
-  toast(kind === 'recording' ? 'Gravação pronta no Studio.' : 'Áudio pronto no Studio.', 'ok');
+  toast(recordingIntent ? `${recordingIntent.sectionLabel}: take humano alinhado e guia substituída.` : kind === 'recording' ? 'Gravação pronta no Studio.' : 'Áudio pronto no Studio.', 'ok');
 }
 
 async function openStoredProject(id, { route = 'studio', notify = true } = {}) {
@@ -446,9 +457,31 @@ async function cancelRecording() {
   await recorder.cancel();
   state.recording = false;
   state.modal = null;
+  clearRecordingIntent();
   render();
   toast('Gravação cancelada.');
 }
+
+async function recordNextSection() {
+  if (!state.project) throw new Error('Abra um projeto antes de gravar.');
+  const take = (state.project.songCreation?.takes || []).find((item) => item.id === state.project.songCreation?.latestTakeId);
+  const sections = (take?.sections || []).filter((section) => !['intro', 'outro'].includes(section.id));
+  const workflow = state.project.humanVocalWorkflow?.sections || {};
+  const section = sections.find((item) => workflow[item.id]?.status !== 'replaced') || sections[0];
+  if (!take || !section) return startRecording();
+  const intent = createSectionRecordingIntent({ project: state.project, takeId: take.id, sectionId: section.id });
+  sessionStorage.setItem(RECORDING_INTENT_KEY, JSON.stringify(intent));
+  await startRecording();
+}
+
+function readRecordingIntent() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(RECORDING_INTENT_KEY) || 'null');
+    return value?.schema === HUMAN_VOCAL_WORKFLOW_SCHEMA ? value : null;
+  } catch { return null; }
+}
+
+function clearRecordingIntent() { try { sessionStorage.removeItem(RECORDING_INTENT_KEY); } catch {} }
 
 async function togglePlayback() {
   if (engine.playing) {
@@ -609,6 +642,7 @@ document.addEventListener('click', (event) => {
   else if (action === 'new-project') { state.modal = 'new'; render(); }
   else if (action === 'import') picker.click();
   else if (action === 'record') withBusy('record', startRecording);
+  else if (action === 'record-next-section') withBusy('record-next-section', recordNextSection);
   else if (action === 'stop-record') withBusy('stop-record', stopRecording);
   else if (action === 'cancel-record') withBusy('cancel-record', cancelRecording);
   else if (action === 'play') withBusy('play', togglePlayback);
@@ -711,6 +745,8 @@ async function boot() {
     else render();
     history.replaceState({ route: state.route }, '', state.route === 'home' ? '#/' : `#/${state.route}`);
     if (globalThis.PabloVoiceAndroid?.pendingImportSize?.() > 0) await consumeAndroidImport();
+    const guidedIntent = readRecordingIntent();
+    if (guidedIntent && state.project?.id === guidedIntent.projectId) requestAnimationFrame(() => startRecording().catch((error) => toast(error.message, 'error')));
     if ('serviceWorker' in navigator && location.protocol !== 'file:' && recorder.platform !== 'android') {
       window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(console.warn), { once: true });
     }

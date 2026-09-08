@@ -1,4 +1,5 @@
 import { encodePcmWav, midiToHz, renderInstrumentPcm } from './instrument-engine.mjs';
+import { normalizeSingerProfile } from './singer-profile.mjs';
 
 export const SONG_CREATION_SCHEMA = 'pablovoice_song_creation_v1';
 const SAMPLE_RATE = 24000;
@@ -32,7 +33,8 @@ export function createSongCreationPlan(input = {}) {
   const progression = defaults.progression;
   const scale = mode === 'major' ? MAJOR : MINOR;
   const harmonic = buildHarmonicNotes({ sections, progression, scale, rootMidi, seed });
-  const guide = buildGuideNotes({ lyrics: input.lyrics, sections, scale, rootMidi, seed, genre });
+  const singerProfile = normalizeSingerProfile(input.singerProfile);
+  const guide = buildGuideNotes({ lyrics: input.lyrics, sections, scale, rootMidi, seed, genre, singerProfile });
   const drums = buildDrumEvents({ sections, bpm, genre, groove: defaults.groove, seed });
   return Object.freeze({
     schema: SONG_CREATION_SCHEMA,
@@ -52,6 +54,7 @@ export function createSongCreationPlan(input = {}) {
     accentNotes: harmonic.accentNotes,
     guideNotes: guide.notes,
     guideLines: guide.lines,
+    singerProfile,
     drumEvents: drums,
     seed,
     createdAt: Date.now(),
@@ -123,7 +126,7 @@ function buildHarmonicNotes({ sections, progression, scale, rootMidi, seed }) {
   return { padNotes, bassNotes, accentNotes };
 }
 
-function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre }) {
+function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre, singerProfile }) {
   const lyricLines = String(lyrics || '').split(/\r?\n/).map((text) => text.trim()).filter((text) => text && !/^\[.*\]$/.test(text) && !/^(verso|refr[aã]o|ponte|bridge|chorus|pre)/i.test(text));
   const contentSections = sections.filter((section) => !['intro', 'outro'].includes(section.id));
   const startBeat = contentSections[0]?.startBeat ?? 0;
@@ -147,8 +150,9 @@ function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre }) {
       const midi = rootMidi + 24 + scale[contour % 7] + lift + (contour >= 7 ? 12 : 0);
       const start = lineStart + n * phraseStep;
       const duration = Math.max(0.18, phraseStep * 0.74);
-      notes.push(note(clamp(midi, 55, 84), 88 + ((index + n + seed) % 18), start, duration));
-      phraseNotes.push({ midi: clamp(midi, 55, 84), startBeat: start, durationBeats: duration });
+      const singerMidi = clamp(midi, singerProfile.lowMidi, singerProfile.highMidi);
+      notes.push(note(singerMidi, 88 + ((index + n + seed) % 18), start, duration));
+      phraseNotes.push({ midi: singerMidi, startBeat: start, durationBeats: duration });
     }
     mapped.push(Object.freeze({ index, text: lines[index], startBeat: lineStart, endBeat: lineEnd, sectionId: section?.id || null, notes: phraseNotes }));
   }

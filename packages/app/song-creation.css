@@ -178,3 +178,10 @@
     flex-direction: column;
   }
 }
+.pv-song-vocal-profile{border:1px solid rgba(181,118,255,.28);border-radius:18px;padding:16px;display:grid;gap:12px;background:rgba(124,58,237,.07)}
+.pv-song-vocal-profile legend{padding:0 8px;font-weight:800;color:#eadcff}.pv-song-vocal-profile p{margin:0;color:var(--muted)}
+.pv-song-human-vocal{margin-top:18px;padding-top:18px;border-top:1px solid rgba(255,255,255,.09)}
+.pv-song-record-sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.pv-song-record-section{min-height:92px;text-align:left;border:1px solid rgba(181,118,255,.28);background:rgba(14,12,23,.78);color:inherit;border-radius:16px;padding:13px;display:grid;grid-template-columns:auto 1fr;column-gap:9px;cursor:pointer}
+.pv-song-record-section span{color:#ff5e8a}.pv-song-record-section b{align-self:center}.pv-song-record-section small{grid-column:1/-1;margin-top:8px;color:var(--muted);line-height:1.35}
+.pv-song-record-section:hover,.pv-song-record-section:focus-visible{border-color:#b576ff;transform:translateY(-1px)}
