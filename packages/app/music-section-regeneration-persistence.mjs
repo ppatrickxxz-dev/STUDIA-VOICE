@@ -1,4 +1,4 @@
-import { createId, createTrack, snapshotProject } from './core/src/project.mjs';
+import { createId, createTrack, snapshotProject } from '../core/src/project.mjs';
 import { saveAudioAsset, saveProject } from './storage.mjs';
 import { MUSIC_SECTION_REGEN_SCHEMA } from './music-section-regeneration.mjs';
 
