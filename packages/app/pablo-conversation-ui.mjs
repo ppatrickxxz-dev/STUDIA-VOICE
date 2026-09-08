@@ -8,6 +8,7 @@ import { analyzeMusicalAudio } from './audio/src/analyzers/pipeline.mjs';
 import { replaceBreathAutomation } from './audio/src/voice/breath-intelligence.mjs';
 import { buildProjectMixState } from './audio/src/mix/mix-intelligence-graph.mjs';
 import { createPabloVoiceAudioToolRuntime } from './providers/src/pablovoice-audio-tools.mjs';
+import { buildUnifiedProjectContext } from './project-context.mjs';
 import { clearPmiPendingDraft, executePabloAudioMessage } from './pablo-conversation-audio.mjs';
 import {
   clearPmiDraftApplyState,
@@ -150,6 +151,9 @@ async function generateMusicDraft(request) {
   if (!health?.available) throw new Error('O Composer online não está disponível agora. Seu projeto local continua intacto.');
   const linked = await remoteAuth.ensureRemoteProject(project);
   if (!linked?.ok || !linked.project?.id) throw new Error('Não consegui ligar este projeto ao Composer agora.');
+  const unified = await buildUnifiedProjectContext(project, {
+    pendingDraft: request?.contextPack?.pendingDraft || null,
+  });
 
   const result = await remoteAuth.agentTurn({
     command: request.command,
@@ -157,6 +161,7 @@ async function generateMusicDraft(request) {
     task: String(request.task || '').slice(0, 4000),
     context_pack: {
       ...(request.contextPack || {}),
+      ...(unified?.contextPack ? { music_graph: unified.contextPack } : {}),
       local_project_id: project.id,
       project_title: project.name,
       preset: project.preset,
@@ -197,6 +202,7 @@ async function contextForMessage() {
   const other = project?.tracks?.find((track) => track.id !== active?.id) || null;
   const lyrics = String(project?.lyrics || '').slice(0, 12000);
   const pendingDraft = project?.id ? await loadPmiComposerState(project.id, lyrics) : null;
+  const unified = project ? await buildUnifiedProjectContext(project, { pendingDraft }) : null;
   return {
     projectId: project?.id || null,
     trackId: active?.id || null,
@@ -208,10 +214,14 @@ async function contextForMessage() {
     preset: project?.preset || null,
     authorialMemory: project?.authorialMemory ? structuredClone(project.authorialMemory) : null,
     pendingDraft,
+    musicGraph: unified?.graph || null,
+    projectContext: unified?.contextPack || null,
   };
 }
 
-function remoteContextPack(project) {
+async function remoteContextPack(project) {
+  const unified = await buildUnifiedProjectContext(project);
+  if (unified?.contextPack) return unified.contextPack;
   const tracks = Array.isArray(project?.tracks) ? project.tracks : [];
   return {
     source: 'pablovoice-unified-local-first',
@@ -249,7 +259,7 @@ async function tryRemoteReasoning(message) {
     project_id: linked.project.id,
     message,
     intent: { mode: 'advice_only', destructive_actions: false, source: 'unified_pablo_chat' },
-    context_pack: remoteContextPack(project),
+    context_pack: await remoteContextPack(project),
     tools: [],
   });
   if (!result?.ok || !String(result.reply || '').trim()) return null;
