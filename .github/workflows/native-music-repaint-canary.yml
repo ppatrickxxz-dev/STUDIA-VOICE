@@ -1,0 +1,157 @@
+name: Native music repaint physical canary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-music-repaint-canary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  SOURCE_ASSET_ID: bb104cd2-6eec-400e-8a38-7e50bdb6ecd8
+  SOURCE_AUDIO_SHA256: 4655510630cfd7e80d72c773436a2d0df32e120142d220838dbc589af70a4fd4
+  NATIVE_MUSIC_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/compute-kaggle-v58
+
+jobs:
+  repaint-roundtrip:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire OIDC-backed PabloVoice user session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          SESSION="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
+          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Dispatch authenticated native repaint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/native-repaint
+          BODY="$(jq -nc \
+            --arg project "$PROJECT_ID" \
+            --arg source "$SOURCE_ASSET_ID" \
+            '{action:"repaint",project_id:$project,source_asset_id:$source,duration_ms:10000,section:{start_ms:2000,end_ms:5000,text:"[Instrumental]",positive_styles:["refined modern pop R&B variation","preserve groove and arrangement outside the selected range"],negative_styles:["tempo drift","global arrangement change"]}}')"
+          HTTP_CODE="$(curl --silent --show-error --max-time 45 \
+            -o test-results/native-repaint/dispatch.json \
+            -w '%{http_code}' \
+            -X POST "$NATIVE_MUSIC_URL" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          test "$HTTP_CODE" = '200' || { cat test-results/native-repaint/dispatch.json; exit 1; }
+          JOB_ID="$(jq -er '.job_id' test-results/native-repaint/dispatch.json)"
+          jq -e '.ok == true and .job_type == "music_repaint" and .provider == "native_music" and .fallback_allowed == false' test-results/native-repaint/dispatch.json >/dev/null
+          echo "PV_REPAINT_JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for physical repaint completion
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="$SUPABASE_URL/rest/v1/render_jobs?id=eq.$PV_REPAINT_JOB_ID&select=id,status,progress,current_stage,finished_at,proof,parameters,output_asset_ids,error_code,error_message"
+          for attempt in $(seq 1 90); do
+            curl --fail-with-body --silent --show-error \
+              "$API" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              -H 'accept: application/json' \
+              > test-results/native-repaint/job.json
+            STATUS="$(jq -r '.[0].status // empty' test-results/native-repaint/job.json)"
+            if [ "$STATUS" = 'completed' ]; then break; fi
+            if [ "$STATUS" = 'error' ] || [ "$STATUS" = 'failed' ]; then cat test-results/native-repaint/job.json; exit 1; fi
+            sleep 10
+          done
+          jq -e 'length == 1 and .[0].status == "completed" and .[0].progress == 100' test-results/native-repaint/job.json >/dev/null
+
+      - name: Verify outside-range preservation proof and output asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e --arg source_sha "$SOURCE_AUDIO_SHA256" '
+            .[0].proof.verified == true and
+            .[0].proof.model == "acestep-v15-turbo" and
+            .[0].proof.model_revision == "ca1e85fe9430179831e6bc6be790c332190a3866" and
+            .[0].proof.preserved_outside_verified == true and
+            .[0].proof.source_audio_sha256 == $source_sha and
+            .[0].proof.repaint_start_seconds == 2 and
+            .[0].proof.repaint_end_seconds == 5 and
+            (.[0].proof.audio_sha256 | test("^[0-9a-f]{64}$")) and
+            .[0].proof.audio_size_bytes > 4096 and
+            .[0].proof.duration_seconds == 10 and
+            (.[0].output_asset_ids | length) == 1
+          ' test-results/native-repaint/job.json >/dev/null
+          OUTPUT_ASSET_ID="$(jq -er '.[0].output_asset_ids[0]' test-results/native-repaint/job.json)"
+          curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/rest/v1/audio_assets?id=eq.$OUTPUT_ASSET_ID&select=id,kind,project_id,size_bytes,duration_seconds,sample_rate,channels,sha256,metadata" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'accept: application/json' \
+            > test-results/native-repaint/asset.json
+          jq -e --arg project "$PROJECT_ID" '
+            length == 1 and
+            .[0].project_id == $project and
+            .[0].kind == "full_mix" and
+            .[0].size_bytes > 4096 and
+            .[0].duration_seconds == 10 and
+            .[0].sample_rate > 0 and
+            .[0].channels > 0 and
+            (.[0].sha256 | test("^[0-9a-f]{64}$"))
+          ' test-results/native-repaint/asset.json >/dev/null
+
+      - name: Verify readiness now advertises repaint capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error "$NATIVE_MUSIC_URL" > test-results/native-repaint/readiness.json
+          jq -e --arg source_sha "$SOURCE_AUDIO_SHA256" '
+            .ok == true and
+            .configured == true and .runnable == true and
+            .capabilities.generation == true and
+            .capabilities.repaint == true and
+            .repaint_canary.verified == true and
+            .repaint_canary.preserved_outside_verified == true and
+            .repaint_canary.start_seconds == 2 and
+            .repaint_canary.end_seconds == 5 and
+            .repaint_canary.source_audio_sha256 == $source_sha and
+            (.repaint_canary.audio_sha256 | test("^[0-9a-f]{64}$"))
+          ' test-results/native-repaint/readiness.json >/dev/null
+          jq '{service,provider,engine,model,model_revision,capabilities,physical_canary,repaint_canary}' test-results/native-repaint/readiness.json > test-results/native-repaint/evidence.json
+          jq '.' test-results/native-repaint/evidence.json
+
+      - name: Retain physical repaint evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-repaint-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/native-repaint/dispatch.json
+            test-results/native-repaint/job.json
+            test-results/native-repaint/asset.json
+            test-results/native-repaint/evidence.json
+          if-no-files-found: warn
+          retention-days: 30
