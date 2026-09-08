@@ -7,6 +7,7 @@ const cors={
 }
 const json=(b:any,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...cors,'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})
 const isUuid=(v:any)=>/^[0-9a-f-]{36}$/i.test(String(v||''))
+const isSha=(v:any)=>/^[0-9a-f]{64}$/i.test(String(v||''))
 const ACE_REPO='https://github.com/ace-step/ACE-Step-1.5.git'
 const ACE_REVISION='ca1e85fe9430179831e6bc6be790c332190a3866'
 const ACE_MODEL='acestep-v15-turbo'
@@ -42,6 +43,13 @@ function captionFromPlan(plan:any,negativeStyles:any[]){
   if(avoid.length)parts.push(`Avoid: ${avoid.join(', ')}`)
   return parts.join('. ').slice(0,500)
 }
+function repaintCaption(sourceTake:any,section:any){
+  const positives=(Array.isArray(section?.positive_styles)?section.positive_styles:[]).map((v:any)=>clean(v,180)).filter(Boolean).slice(0,12)
+  const negatives=(Array.isArray(section?.negative_styles)?section.negative_styles:[]).map((v:any)=>clean(v,120)).filter(Boolean).slice(0,12)
+  const parts=[...positives,clean(sourceTake?.brief,500),clean(sourceTake?.genre,80),clean(sourceTake?.mood,120)].filter(Boolean)
+  if(negatives.length)parts.push(`Avoid: ${negatives.join(', ')}`)
+  return Array.from(new Set(parts)).join('. ').slice(0,500)
+}
 async function kaggleRpc(token:string,method:string,payload:any){
   const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Music/1.0'},body:JSON.stringify(payload)})
   const text=await r.text();let out:any={};try{out=JSON.parse(text)}catch{out={raw:text.slice(0,1600)}}
@@ -61,34 +69,24 @@ function envClients(){
 async function readiness(){
   const env=envClients()
   if(!env)return json({ok:false,error:'server_configuration_error'},500)
-  const {data:rows,error}=await env.admin.from('render_jobs').select('finished_at,proof,engine,provider').eq('job_type','music_generation').eq('status','completed').order('finished_at',{ascending:false}).limit(1)
+  const {data:rows,error}=await env.admin.from('render_jobs').select('job_type,finished_at,proof,engine,provider').in('job_type',['music_generation','music_repaint']).eq('status','completed').order('finished_at',{ascending:false}).limit(20)
   if(error)return json({ok:false,error:'readiness_query_failed'},500)
-  const row=rows?.[0]||null
-  const proof=row?.proof&&typeof row.proof==='object'?row.proof:{}
-  const verified=proof?.verified===true&&proof?.model===ACE_MODEL&&proof?.model_revision===ACE_REVISION&&Number(proof?.audio_size_bytes)>4096&&Number(proof?.duration_seconds)>1&&Number(proof?.sample_rate)>0&&Number(proof?.channels)>0&&/^[0-9a-f]{64}$/i.test(String(proof?.audio_sha256||''))
+  const generation=rows?.find((row:any)=>row.job_type==='music_generation')||null
+  const repaint=rows?.find((row:any)=>row.job_type==='music_repaint')||null
+  const verifiedProof=(row:any,task:string)=>{
+    const proof=row?.proof&&typeof row.proof==='object'?row.proof:{}
+    const base=proof?.verified===true&&proof?.model===ACE_MODEL&&proof?.model_revision===ACE_REVISION&&Number(proof?.audio_size_bytes)>4096&&Number(proof?.duration_seconds)>1&&Number(proof?.sample_rate)>0&&Number(proof?.channels)>0&&isSha(proof?.audio_sha256)
+    return task==='repaint'?base&&proof?.task_type==='repaint'&&isUuid(proof?.source_asset_id)&&isSha(proof?.source_audio_sha256)&&Number(proof?.repainting_end)>Number(proof?.repainting_start):base
+  }
+  const generationVerified=verifiedProof(generation,'generation')
+  const repaintVerified=verifiedProof(repaint,'repaint')
+  const proof=generation?.proof||{}
+  const repaintProof=repaint?.proof||{}
   return json({
-    ok:true,
-    service:'pablovoice-native-music',
-    provider:'kaggle',
-    engine:'ACE-Step 1.5',
-    model:ACE_MODEL,
-    model_revision:ACE_REVISION,
-    worker:WORKER_SLUG,
-    callback:COMPLETE_SLUG,
-    auth_for_generation:'required',
-    credential_exposed:false,
-    configured:verified,
-    runnable:verified,
-    physical_canary:verified?{
-      verified:true,
-      finished_at:row.finished_at,
-      duration_seconds:Number(proof.duration_seconds),
-      sample_rate:Number(proof.sample_rate),
-      channels:Number(proof.channels),
-      audio_size_bytes:Number(proof.audio_size_bytes),
-      audio_sha256:String(proof.audio_sha256),
-      generation_seed:Number.isFinite(Number(proof.generation_seed))?Number(proof.generation_seed):null,
-    }:{verified:false},
+    ok:true,service:'pablovoice-native-music',provider:'kaggle',engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,worker:WORKER_SLUG,callback:COMPLETE_SLUG,
+    auth_for_generation:'required',credential_exposed:false,configured:generationVerified,runnable:generationVerified,
+    physical_canary:generationVerified?{verified:true,finished_at:generation.finished_at,duration_seconds:Number(proof.duration_seconds),sample_rate:Number(proof.sample_rate),channels:Number(proof.channels),audio_size_bytes:Number(proof.audio_size_bytes),audio_sha256:String(proof.audio_sha256),generation_seed:Number.isFinite(Number(proof.generation_seed))?Number(proof.generation_seed):null}:{verified:false},
+    selective_repaint:{configured:true,runnable:generationVerified,physical_canary:repaintVerified?{verified:true,finished_at:repaint.finished_at,duration_seconds:Number(repaintProof.duration_seconds),audio_size_bytes:Number(repaintProof.audio_size_bytes),audio_sha256:String(repaintProof.audio_sha256),source_asset_id:String(repaintProof.source_asset_id),source_audio_sha256:String(repaintProof.source_audio_sha256),repainting_start:Number(repaintProof.repainting_start),repainting_end:Number(repaintProof.repainting_end)}:{verified:false}}
   })
 }
 
@@ -112,53 +110,90 @@ Deno.serve(async(req:Request)=>{
     const body=await req.json().catch(()=>({}))
     const projectId=String(body.project_id||'')
     if(!isUuid(projectId))return json({ok:false,error:'invalid_project_id'},400)
-    const plan=body.plan||{}
-    if(plan?.schema!=='pablovoice_song_creation_v1'||!Array.isArray(plan?.sections)||!plan.sections.length)return json({ok:false,error:'invalid_music_plan'},400)
     const {data:project}=await admin.from('projects').select('id,title').eq('id',projectId).eq('user_id',user.id).maybeSingle()
     if(!project)return json({ok:false,error:'project_not_found'},404)
     const {data:connRows,error:connErr}=await admin.rpc('admin_get_compute_connection',{p_user_id:user.id,p_provider:'kaggle'})
     if(connErr)throw connErr
     const conn=Array.isArray(connRows)?connRows[0]:null
     if(!conn?.secret||!conn?.handle)return json({ok:false,error:'kaggle_not_connected',fallback_allowed:false},409)
-
     const {data:versionRows}=await admin.from('project_versions').select('id').eq('project_id',projectId).eq('user_id',user.id).order('version_number',{ascending:false}).limit(1)
     const versionId=versionRows?.[0]?.id||null
-    const instrumental=Boolean(body.instrumental)
-    const duration=clamp(Math.round(Number(plan.durationSeconds)||120),10,600)
-    const bpm=clamp(Math.round(Number(plan.bpm)||112),30,300)
-    const key=clean(plan.key,8), mode=String(plan.mode||'minor')==='major'?'Major':'Minor'
-    const generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:'unknown',duration,seed:Number.isFinite(Number(plan.seed))?Math.abs(Math.trunc(Number(plan.seed)))%2147483647:42,inference_steps:8}
-    if(!generation.caption)return json({ok:false,error:'music_caption_required'},400)
+
+    const operation=String(body.operation||'generate')==='repaint'?'repaint':'generate'
+    let generation:any
+    let sourceAsset:any=null
+    let sourceSignedUrl:string|null=null
+    let repaint:any=null
+    let jobType='music_generation'
+
+    if(operation==='repaint'){
+      jobType='music_repaint'
+      const sourceAssetId=String(body.source_asset_id||'')
+      if(!isUuid(sourceAssetId))return json({ok:false,error:'invalid_source_asset_id',fallback_allowed:false},400)
+      const {data:asset,error:assetErr}=await admin.from('audio_assets').select('id,project_id,user_id,kind,storage_bucket,storage_path,mime_type,size_bytes,duration_seconds,sample_rate,channels,sha256,metadata').eq('id',sourceAssetId).eq('project_id',projectId).eq('user_id',user.id).maybeSingle()
+      if(assetErr)throw assetErr
+      if(!asset)return json({ok:false,error:'source_asset_not_found',fallback_allowed:false},404)
+      if(asset.kind!=='full_mix'||asset.storage_bucket!=='audio-private'||!asset.storage_path||!isSha(asset.sha256))return json({ok:false,error:'source_asset_not_repaintable',fallback_allowed:false},409)
+      const duration=Number(asset.duration_seconds)
+      if(!Number.isFinite(duration)||duration<=1||duration>610)return json({ok:false,error:'source_duration_invalid',fallback_allowed:false},409)
+      const section=body.section||{}
+      const startMs=Math.round(Number(section.start_ms)),endMs=Math.round(Number(section.end_ms))
+      if(!Number.isFinite(startMs)||!Number.isFinite(endMs)||startMs<0||endMs<=startMs||endMs>Math.round(duration*1000)+250)return json({ok:false,error:'invalid_repaint_range',fallback_allowed:false},400)
+      const sourceTake=body.source_take||{}
+      const instrumental=Boolean(sourceTake.instrumental)
+      const bpm=clamp(Math.round(Number(sourceTake.bpm)||112),30,300)
+      const key=clean(sourceTake.key,8),mode=String(sourceTake.mode||'minor')==='major'?'Major':'Minor'
+      const caption=repaintCaption(sourceTake,section)
+      if(!caption)return json({ok:false,error:'repaint_caption_required',fallback_allowed:false},400)
+      const lyrics=instrumental?'[Instrumental]':clean(section.text,4096)||'[Instrumental]'
+      const {data:signed,error:signedErr}=await admin.storage.from('audio-private').createSignedUrl(asset.storage_path,3600)
+      if(signedErr||!signed?.signedUrl)throw new Error('source_signed_url_failed')
+      sourceAsset=asset
+      sourceSignedUrl=signed.signedUrl
+      repaint={source_asset_id:asset.id,source_audio_sha256:String(asset.sha256).toLowerCase(),source_audio_size_bytes:Number(asset.size_bytes)||null,source_mime_type:asset.mime_type||'audio/flac',source_duration_seconds:duration,repainting_start:startMs/1000,repainting_end:endMs/1000,chunk_mask_mode:'explicit'}
+      generation={caption,lyrics,instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:'unknown',duration,seed:Number.isFinite(Number(body.seed))?Math.abs(Math.trunc(Number(body.seed)))%2147483647:42,inference_steps:8,shift:3}
+    }else{
+      const plan=body.plan||{}
+      if(plan?.schema!=='pablovoice_song_creation_v1'||!Array.isArray(plan?.sections)||!plan.sections.length)return json({ok:false,error:'invalid_music_plan'},400)
+      const instrumental=Boolean(body.instrumental)
+      const duration=clamp(Math.round(Number(plan.durationSeconds)||120),10,600)
+      const bpm=clamp(Math.round(Number(plan.bpm)||112),30,300)
+      const key=clean(plan.key,8),mode=String(plan.mode||'minor')==='major'?'Major':'Minor'
+      generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:'unknown',duration,seed:Number.isFinite(Number(plan.seed))?Math.abs(Math.trunc(Number(plan.seed)))%2147483647:42,inference_steps:8}
+      if(!generation.caption)return json({ok:false,error:'music_caption_required'},400)
+    }
 
     jobId=crypto.randomUUID()
     const expiresAt=Math.floor(Date.now()/1000)+5400
     const callbackToken=randomToken(32),callbackHash=await sha256Text(callbackToken)
-    const outputPath=`${user.id}/${projectId}/music/${jobId}-full-mix.flac`
+    const suffix=operation==='repaint'?'repaint':'full-mix'
+    const outputPath=`${user.id}/${projectId}/music/${jobId}-${suffix}.flac`
     const {data:upload,error:uploadErr}=await admin.storage.from('audio-private').createSignedUploadUrl(outputPath)
     if(uploadErr||!upload?.token)throw new Error('signed_upload_failed')
-    const ticket={version:1,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
-    const params={client:'pablovoice_native_music_v1',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental}
-    const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:'music_generation',engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:[],output_asset_ids:[],parameters:params,proof:{required:true},provider:'kaggle',current_stage:'dispatch',human_message:'Preparando a geração musical',started_at:new Date().toISOString()})
+    const ticket={version:2,job_type:jobType,job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,repaint:repaint?{...repaint,source_audio_url:sourceSignedUrl}:null,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
+    const params:any={client:operation==='repaint'?'pablovoice_native_repaint_v1':'pablovoice_native_music_v1',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:Number(generation.duration),bpm:Number(generation.bpm),keyscale:generation.keyscale,instrumental:Boolean(generation.instrumental),task_type:operation==='repaint'?'repaint':'text2music'}
+    if(repaint)Object.assign(params,{source_asset_id:sourceAsset.id,source_audio_sha256:repaint.source_audio_sha256,source_audio_size_bytes:repaint.source_audio_size_bytes,repainting_start:repaint.repainting_start,repainting_end:repaint.repainting_end,chunk_mask_mode:'explicit'})
+    const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:jobType,engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:sourceAsset?[sourceAsset.id]:[],output_asset_ids:[],parameters:params,proof:{required:true},provider:'kaggle',current_stage:'dispatch',human_message:operation==='repaint'?'Preparando edição seletiva':'Preparando a geração musical',started_at:new Date().toISOString()})
     if(jobErr)throw new Error(`job_insert_failed: ${jobErr.message}`)
 
-    const short=jobId.replace(/-/g,'').slice(0,10),owner=String(conn.handle),slug=`pablovoice-music-${short}`,full=`${owner}/${slug}`
+    const short=jobId.replace(/-/g,'').slice(0,10),owner=String(conn.handle),slug=`pablovoice-${operation==='repaint'?'repaint':'music'}-${short}`,full=`${owner}/${slug}`
     const workerUrl=`${url}/functions/v1/${WORKER_SLUG}`
     const bootstrap=`import requests,base64\nTICKET_B64='${b64(JSON.stringify(ticket))}'\nr=requests.get('${workerUrl}',timeout=60);r.raise_for_status()\nexec(compile(r.text,'pablovoice_music_worker.py','exec'),globals(),globals())\n`
-    const payload={slug:full,newTitle:`PabloVoice Music ${short}`,text:bootstrap,language:'python',kernelType:'script',isPrivate:true,enableGpu:true,enableInternet:true,machineShape:'NvidiaTeslaT4',kernelExecutionType:'SAVE_AND_RUN_ALL',datasetDataSources:[],competitionDataSources:[],kernelDataSources:[],modelDataSources:[],sessionTimeoutSeconds:3600}
+    const payload={slug:full,newTitle:`PabloVoice ${operation==='repaint'?'Repaint':'Music'} ${short}`,text:bootstrap,language:'python',kernelType:'script',isPrivate:true,enableGpu:true,enableInternet:true,machineShape:'NvidiaTeslaT4',kernelExecutionType:'SAVE_AND_RUN_ALL',datasetDataSources:[],competitionDataSources:[],kernelDataSources:[],modelDataSources:[],sessionTimeoutSeconds:3600}
     let push:any
     try{push=await kaggleRpc(conn.secret,'SaveKernel',payload)}catch(e){
       const msg=String(e instanceof Error?e.message:e).slice(0,1200)
-      await admin.from('render_jobs').update({status:'error',progress:0,current_stage:'dispatch_failed',error_code:'kaggle_dispatch_failed',error_message:'Falha ao iniciar a GPU para criar a música.',technical_error:msg,finished_at:new Date().toISOString()}).eq('id',jobId).eq('user_id',user.id)
+      await admin.from('render_jobs').update({status:'error',progress:0,current_stage:'dispatch_failed',error_code:'kaggle_dispatch_failed',error_message:operation==='repaint'?'Falha ao iniciar a GPU para refazer a seção.':'Falha ao iniciar a GPU para criar a música.',technical_error:msg,finished_at:new Date().toISOString()}).eq('id',jobId).eq('user_id',user.id)
       return json({ok:false,error:'kaggle_dispatch_failed',detail:msg,job_id:jobId,fallback_allowed:false},502)
     }
     const rejected=!!push?.hasError||!!push?.error||!Number(push?.kernelId)||!String(push?.ref||'')
     if(rejected){
       const msg=String(push?.error||'Kaggle recusou a criação do kernel.').slice(0,1200)
-      await admin.from('render_jobs').update({status:'error',progress:0,current_stage:'dispatch_rejected',error_code:'kaggle_dispatch_rejected',error_message:'A GPU recusou a geração musical.',technical_error:msg,finished_at:new Date().toISOString()}).eq('id',jobId).eq('user_id',user.id)
+      await admin.from('render_jobs').update({status:'error',progress:0,current_stage:'dispatch_rejected',error_code:'kaggle_dispatch_rejected',error_message:'A GPU recusou a operação musical.',technical_error:msg,finished_at:new Date().toISOString()}).eq('id',jobId).eq('user_id',user.id)
       return json({ok:false,error:'kaggle_dispatch_rejected',detail:msg,job_id:jobId,fallback_allowed:false},409)
     }
     const now=new Date().toISOString()
-    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v1',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
-    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,fallback_allowed:false})
+    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:operation==='repaint'?'Refazendo a seção na GPU':'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:`compute-kaggle-v58:${operation==='repaint'?'native-repaint-v1':'native-music-v1'}`,worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
+    return json({ok:true,job_id:jobId,job_type:jobType,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,fallback_allowed:false})
   }catch(e){return json({ok:false,error:String(e instanceof Error?e.message:e).slice(0,1400),job_id:jobId||null,fallback_allowed:false},500)}
 })

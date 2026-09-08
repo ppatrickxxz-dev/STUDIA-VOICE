@@ -1,10 +1,11 @@
 import { compileMusicalOperation } from './musical-operation-compiler.mjs';
 import { MusicGenerationClient } from './music-generation-client.mjs';
+import { NativeMusicSectionRepaintClient } from './native-music-section-repaint-client.mjs';
 import { latestInpaintableSongTake, resolveSectionRegeneration } from './music-section-regeneration.mjs';
 import { validateMusicalPlanReview } from './pablo-musical-plan-review.mjs';
 import { readStudioPlayhead } from './studio-playhead-context.mjs';
 
-export const REVIEWED_MUSIC_GENERATION_SCHEMA = 'pablovoice_reviewed_music_generation_v1';
+export const REVIEWED_MUSIC_GENERATION_SCHEMA = 'pablovoice_reviewed_music_generation_v2';
 
 export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
   playhead = null,
@@ -22,9 +23,7 @@ export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
   if (!plan?.ok || plan.executor !== 'music_generation' || plan.action !== 'regenerate_section') {
     return blocked(plan?.reason || 'section_regeneration_plan_required', { plan });
   }
-  if (plan.args?.preserveUnselected === false) {
-    return blocked('preserve_unselected_required', { plan });
-  }
+  if (plan.args?.preserveUnselected === false) return blocked('preserve_unselected_required', { plan });
 
   const take = latestInpaintableSongTake(project);
   if (!take) return blocked('inpainting_source_missing', { plan });
@@ -51,7 +50,9 @@ export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
     targetSection: Object.freeze({ ...resolvedTarget.section }),
     targetSource: resolvedTarget.source,
     sourceTakeId: take.id,
-    sourceSongId: providerPlan.sourceSongId,
+    sourceType: providerPlan.sourceType,
+    sourceAssetId: providerPlan.sourceAssetId || null,
+    sourceSongId: providerPlan.sourceSongId || null,
     providerPlan,
     executionPlan: plan,
     preserveUnselected: true,
@@ -67,15 +68,26 @@ export async function executeReviewedSectionRegeneration(review = {}, project = 
   const prepared = prepareReviewedSectionRegeneration(review, project, { playhead, now });
   if (!prepared.ok) return Object.freeze({ ok: false, mutated: false, reason: prepared.reason, prepared });
 
-  const runtime = client || new MusicGenerationClient();
+  const runtime = client || (prepared.sourceType === 'native_asset' ? new NativeMusicSectionRepaintClient() : new MusicGenerationClient());
   let result;
   try {
-    result = await runtime.regenerateSection({
-      localProject: project,
-      sourceSongId: prepared.providerPlan.sourceSongId,
-      durationMs: prepared.providerPlan.durationMs,
-      section: prepared.providerPlan.section,
-    });
+    if (prepared.sourceType === 'native_asset') {
+      if (typeof runtime.repaintSection !== 'function') throw new Error('native_repaint_client_required');
+      result = await runtime.repaintSection({
+        localProject: project,
+        sourceAssetId: prepared.providerPlan.sourceAssetId,
+        sourceTake: prepared.providerPlan.sourceTake,
+        section: prepared.providerPlan.section,
+      });
+    } else {
+      if (typeof runtime.regenerateSection !== 'function') throw new Error('legacy_regeneration_client_required');
+      result = await runtime.regenerateSection({
+        localProject: project,
+        sourceSongId: prepared.providerPlan.sourceSongId,
+        durationMs: prepared.providerPlan.durationMs,
+        section: prepared.providerPlan.section,
+      });
+    }
   } catch (error) {
     return Object.freeze({
       ok: false,
@@ -101,14 +113,7 @@ export async function executeReviewedSectionRegeneration(review = {}, project = 
     const persistRuntime = persist || await loadSectionPersistence();
     persisted = await persistRuntime(project, prepared.providerPlan, result);
   } catch (error) {
-    return Object.freeze({
-      ok: false,
-      mutated: false,
-      reason: 'section_regeneration_persist_failed',
-      detail: String(error?.message || '').slice(0, 500) || null,
-      requestId: result?.requestId || null,
-      prepared,
-    });
+    return Object.freeze({ ok: false, mutated: false, reason: 'section_regeneration_persist_failed', detail: String(error?.message || '').slice(0, 500) || null, requestId: result?.requestId || null, prepared });
   }
 
   return Object.freeze({
@@ -121,6 +126,7 @@ export async function executeReviewedSectionRegeneration(review = {}, project = 
     takeNumber: persisted.takeNumber,
     section: prepared.targetSection,
     targetSource: prepared.targetSource,
+    sourceType: prepared.sourceType,
     provider: result.provider || null,
     model: result.model || null,
     requestId: result.requestId || null,
@@ -148,9 +154,7 @@ export function resolveSectionTarget(project = {}, sectionKind = '', {
   const position = Number(playhead?.seconds);
   if (playhead?.ok && Number.isFinite(position)) {
     const atPlayhead = candidates.filter((candidate) => containsPlayhead(sections, candidate, position, takeDurationSeconds));
-    if (atPlayhead.length === 1) {
-      return Object.freeze({ ok: true, section: atPlayhead[0], source: 'recent_studio_playhead', matches: candidates.length });
-    }
+    if (atPlayhead.length === 1) return Object.freeze({ ok: true, section: atPlayhead[0], source: 'recent_studio_playhead', matches: candidates.length });
   }
 
   return Object.freeze({ ok: false, reason: 'section_ambiguous', matches: candidates.length });
@@ -160,11 +164,16 @@ export function humanizeReviewedGenerationError(reason = '') {
   const messages = {
     section_regeneration_plan_required: 'Esse pedido não terminou em uma edição de seção executável.',
     preserve_unselected_required: 'Não vou refazer a música inteira quando o pedido é local. O restante precisa permanecer preservado.',
-    inpainting_source_missing: 'Ainda não existe um take conectado com continuidade para refazer só essa seção.',
+    inpainting_source_missing: 'Ainda não existe um take conectado editável para refazer só essa seção.',
     section_mapping_required: 'Essa seção ainda não está confirmada no mapa da música.',
     section_ambiguous: 'Há mais de uma seção desse tipo e o playhead não identifica qual delas você quis alterar.',
     section_regeneration_prepare_failed: 'Não consegui montar o intervalo seguro dessa seção.',
     auth_required: 'Reconheça este aparelho para criar a nova versão; o take atual foi preservado.',
+    source_asset_required: 'O mix conectado que serviria de fonte não está disponível para repaint.',
+    invalid_repaint_range: 'O intervalo selecionado não é válido para repaint.',
+    music_repaint_proof_missing: 'A GPU respondeu sem prova de repaint; não apliquei a versão.',
+    music_sha256_mismatch: 'O áudio retornou, mas falhou na verificação de integridade; nada foi aplicado.',
+    music_size_mismatch: 'O tamanho do áudio retornado divergiu da prova; nada foi aplicado.',
     provider_unavailable: 'A produção conectada não está disponível agora; o take atual foi preservado.',
     provider_rate_limited: 'A produção conectada atingiu o limite temporário; o take atual foi preservado.',
     provider_auth_failed: 'A credencial da produção conectada precisa ser corrigida no backend; nada foi substituído.',
@@ -196,6 +205,11 @@ function containsPlayhead(allSections, candidate, seconds, takeDurationSeconds) 
 function classifyGenerationError(value = '') {
   const text = String(value || '').toLowerCase();
   if (text.includes('auth_required')) return 'auth_required';
+  if (text.includes('source_asset_required')) return 'source_asset_required';
+  if (text.includes('invalid_repaint_range')) return 'invalid_repaint_range';
+  if (text.includes('music_repaint_proof_missing')) return 'music_repaint_proof_missing';
+  if (text.includes('music_sha256_mismatch')) return 'music_sha256_mismatch';
+  if (text.includes('music_size_mismatch')) return 'music_size_mismatch';
   if (text.includes('rate_limited') || text.includes('429')) return 'provider_rate_limited';
   if (text.includes('auth_failed') || text.includes('(401)') || text.includes('(403)')) return 'provider_auth_failed';
   if (text.includes('request_rejected') || /\(4\d\d\)/.test(text)) return 'provider_request_rejected';
