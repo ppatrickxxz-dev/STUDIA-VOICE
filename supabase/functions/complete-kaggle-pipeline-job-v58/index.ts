@@ -5,6 +5,7 @@ const isSha=(v:any)=>/^[0-9a-f]{64}$/i.test(String(v||''))
 const ACE_REVISION='ca1e85fe9430179831e6bc6be790c332190a3866'
 const ACE_MODEL='acestep-v15-turbo'
 const MUSIC_JOB_TYPES=new Set(['music_generation','music_repaint'])
+const CALLBACK_STATES=new Set(['waiting_kaggle','stalled'])
 async function sha256Text(value:string){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('')}
 
 Deno.serve(async(req:Request)=>{
@@ -40,7 +41,8 @@ Deno.serve(async(req:Request)=>{
     const {data:job}=await admin.from('render_jobs').select('*').eq('id',jobId).maybeSingle()
     if(!job)return json({ok:false,error:'job_not_found'},404)
     const jobType=String(job.job_type||'')
-    if(!MUSIC_JOB_TYPES.has(jobType)||job.status!=='waiting_kaggle')return json({ok:false,error:'job_not_waiting_music'},409)
+    const callbackState=String(job.status||'')
+    if(!MUSIC_JOB_TYPES.has(jobType)||!CALLBACK_STATES.has(callbackState))return json({ok:false,error:'job_not_waiting_music'},409)
     const p=job.parameters||{}
     const expiresAt=Number(p.kaggle_expires_at||0)
     if(!expiresAt||Math.floor(Date.now()/1000)>expiresAt)return json({ok:false,error:'callback_token_expired'},410)
@@ -68,7 +70,7 @@ Deno.serve(async(req:Request)=>{
       repaintProof={source_asset_id:sourceAssetId,source_audio_sha256:sourceSha,source_duration_seconds:sourceDuration,repaint_start_seconds:start,repaint_end_seconds:end,preserved_outside_verified:true,outside_preservation:outside,repaint_mode:String(p.repaint_mode||'balanced'),repaint_strength:Number(p.repaint_strength)}
     }
 
-    const {data:claim}=await admin.from('render_jobs').update({status:'finalizing',progress:95,current_stage:'verifying',human_message:jobType==='music_repaint'?'Validando a seção e o restante da música':'Validando o áudio gerado'}).eq('id',jobId).eq('status','waiting_kaggle').select('id')
+    const {data:claim}=await admin.from('render_jobs').update({status:'finalizing',progress:95,current_stage:'verifying',human_message:jobType==='music_repaint'?'Validando a seção e o restante da música':'Validando o áudio gerado'}).eq('id',jobId).eq('status',callbackState).select('id')
     if(!claim?.length)return json({ok:false,error:'job_already_claimed'},409)
     claimed=true
     const purpose=jobType==='music_repaint'?'section_repaint_reference_mix':'generated_reference_mix'
@@ -82,7 +84,7 @@ Deno.serve(async(req:Request)=>{
     if(repaintProof)Object.assign(proof,repaintProof)
     const {error:finishErr}=await admin.from('render_jobs').update({status:'completed',progress:100,current_stage:'completed',human_message:jobType==='music_repaint'?'Nova versão da seção criada':'Música criada',engine:'ace_step_1_5_turbo',provider:'kaggle',output_asset_ids:[asset.id],proof,error_code:null,error_message:null,technical_error:null,finished_at:new Date().toISOString(),parameters:cleaned}).eq('id',jobId).eq('status','finalizing')
     if(finishErr)throw new Error(`job_finalize_failed: ${finishErr.message}`)
-    return json({ok:true,job_id:jobId,job_type:jobType,asset_id:asset.id,proof})
+    return json({ok:true,job_id:jobId,job_type:jobType,asset_id:asset.id,proof,recovered_from_stalled:callbackState==='stalled'})
   }catch(e){
     const message=String(e instanceof Error?e.message:e).slice(0,1200)
     if(claimed&&jobId)try{await admin.from('render_jobs').update({status:'error',progress:0,current_stage:'finalize_failed',error_code:'music_finalize_failed',error_message:'O processamento terminou, mas a validação final falhou.',technical_error:message,finished_at:new Date().toISOString()}).eq('id',jobId).eq('status','finalizing')}catch{}
