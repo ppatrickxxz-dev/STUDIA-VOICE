@@ -1,6 +1,7 @@
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
 const TERMINAL = new Set(['completed', 'error', 'failed', 'cancelled']);
+const MUSIC_JOB_TYPES = new Set(['music_generation', 'music_repaint']);
 
 function authHeaders(token = '') {
   const headers = { apikey: PUBLISHABLE_KEY };
@@ -20,7 +21,7 @@ async function sha256Blob(blob) {
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-export async function getNativeMusicJob({ token, jobId, fetchImpl = globalThis.fetch }) {
+export async function getNativeMusicJob({ token, jobId, expectedJobType = null, fetchImpl = globalThis.fetch }) {
   if (!token) throw new Error('auth_required');
   if (!jobId) throw new Error('job_id_required');
   const select = 'id,project_id,job_type,status,progress,engine,provider,external_job_id,output_asset_ids,parameters,proof,error_code,error_message,human_message,current_stage,created_at,started_at,finished_at';
@@ -28,19 +29,21 @@ export async function getNativeMusicJob({ token, jobId, fetchImpl = globalThis.f
   const rows = await readJson(await fetchImpl(url, { headers: authHeaders(token) }), 'job_lookup');
   const job = Array.isArray(rows) ? rows[0] : null;
   if (!job) throw new Error('job_not_found');
-  if (job.job_type !== 'music_generation') throw new Error('job_type_mismatch');
+  if (!MUSIC_JOB_TYPES.has(String(job.job_type))) throw new Error('job_type_mismatch');
+  if (expectedJobType && String(job.job_type) !== String(expectedJobType)) throw new Error('job_type_mismatch');
   return job;
 }
 
-export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 45 * 60 * 1000, onProgress = () => {} }) {
+export async function waitForNativeMusic({ token, jobId, expectedJobType = null, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 45 * 60 * 1000, onProgress = () => {} }) {
   const started = Date.now();
   for (;;) {
-    const job = await getNativeMusicJob({ token, jobId, fetchImpl });
+    const job = await getNativeMusicJob({ token, jobId, expectedJobType, fetchImpl });
     onProgress(job);
     if (TERMINAL.has(String(job.status))) {
       if (job.status !== 'completed') throw new Error(job.error_message || job.error_code || `music_job_${job.status}`);
       if (!Array.isArray(job.output_asset_ids) || job.output_asset_ids.length !== 1) throw new Error('music_output_incomplete');
       if (job.proof?.verified !== true) throw new Error('music_proof_missing');
+      if (job.job_type === 'music_repaint' && job.proof?.task_type !== 'repaint') throw new Error('music_repaint_proof_missing');
       return job;
     }
     if (Date.now() - started >= maxWaitMs) throw new Error('music_job_timeout');
@@ -89,12 +92,13 @@ export async function resolveNativeMusicResult({ token, job, fetchImpl = globalT
     modelRevision: job.proof?.model_revision || asset.metadata?.model_revision || null,
     requestId: job.id,
     remoteProjectId: job.project_id,
+    source: job.job_type === 'music_repaint' ? 'pablovoice_native_music_repaint_v1' : 'pablovoice_native_music_v1',
   };
 }
 
 export const NATIVE_MUSIC_RESULT_RUNTIME = Object.freeze({
-  schema: 'pablovoice_native_music_result_v1',
-  jobType: 'music_generation',
+  schema: 'pablovoice_native_music_result_v2',
+  jobTypes: [...MUSIC_JOB_TYPES],
   outputKind: 'full_mix',
   bucket: 'audio-private',
   terminalStates: [...TERMINAL],
