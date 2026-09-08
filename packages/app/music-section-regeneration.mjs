@@ -1,8 +1,32 @@
-export const MUSIC_SECTION_REGEN_SCHEMA = 'pablovoice_music_section_regeneration_v1';
+export const MUSIC_SECTION_REGEN_SCHEMA = 'pablovoice_music_section_regeneration_v2';
 
 export function latestInpaintableSongTake(project = {}) {
   const takes = Array.isArray(project?.songCreation?.takes) ? project.songCreation.takes : [];
-  return [...takes].reverse().find((take) => String(take?.providerSongId || take?.render?.songId || '').trim()) || null;
+  return [...takes].reverse().find((take) => nativeSourceAssetId(take) || providerSongId(take)) || null;
+}
+
+export function regenerationSourceForTake(take = {}) {
+  const sourceAssetId = nativeSourceAssetId(take);
+  if (sourceAssetId) {
+    return Object.freeze({
+      type: 'native_asset',
+      sourceAssetId,
+      sourceSongId: null,
+      provider: String(take?.render?.provider || 'kaggle'),
+      model: String(take?.render?.model || 'acestep-v15-turbo'),
+    });
+  }
+  const sourceSongId = providerSongId(take);
+  if (sourceSongId) {
+    return Object.freeze({
+      type: 'provider_song_id',
+      sourceAssetId: null,
+      sourceSongId,
+      provider: String(take?.render?.provider || 'elevenmusic'),
+      model: String(take?.render?.model || 'music_v2'),
+    });
+  }
+  return null;
 }
 
 export function resolveSectionRegeneration(project = {}, sectionId = '', {
@@ -12,6 +36,8 @@ export function resolveSectionRegeneration(project = {}, sectionId = '', {
 } = {}) {
   const take = latestInpaintableSongTake(project);
   if (!take) return Object.freeze({ ok: false, error: 'inpainting_source_missing' });
+  const source = regenerationSourceForTake(take);
+  if (!source) return Object.freeze({ ok: false, error: 'inpainting_source_missing' });
 
   const sections = Array.isArray(project?.arrangementMap?.sections)
     ? [...project.arrangementMap.sections].sort((a, b) => Number(a.startSeconds) - Number(b.startSeconds))
@@ -50,8 +76,21 @@ export function resolveSectionRegeneration(project = {}, sectionId = '', {
     ok: true,
     schema: MUSIC_SECTION_REGEN_SCHEMA,
     sourceTakeId: take.id,
-    sourceSongId: String(take.providerSongId || take.render?.songId),
+    sourceType: source.type,
+    sourceAssetId: source.sourceAssetId,
+    sourceSongId: source.sourceSongId,
+    sourceProvider: source.provider,
+    sourceModel: source.model,
     durationMs: Math.round(takeDuration * 1000),
+    sourceTake: Object.freeze({
+      brief: String(take.brief || ''),
+      genre: String(take.genre || ''),
+      mood: String(take.mood || ''),
+      bpm: Number(take.bpm) || null,
+      key: String(take.key || ''),
+      mode: take.mode === 'major' ? 'major' : 'minor',
+      intelligence: take.intelligence ? structuredClone(take.intelligence) : null,
+    }),
     section: Object.freeze({
       id: section.id,
       label,
@@ -63,6 +102,18 @@ export function resolveSectionRegeneration(project = {}, sectionId = '', {
       contextAdherence: 'high',
     }),
   });
+}
+
+function providerSongId(take = {}) {
+  return String(take?.providerSongId || take?.render?.songId || '').trim() || null;
+}
+
+function nativeSourceAssetId(take = {}) {
+  const id = String(take?.remoteAssetId || take?.render?.remoteAssetId || '').trim();
+  const source = String(take?.render?.provider || take?.provider || '').toLowerCase();
+  const model = String(take?.render?.model || '').toLowerCase();
+  const looksNative = source === 'kaggle' || model.includes('acestep') || String(take?.render?.modelRevision || '').length >= 12;
+  return id && looksNative ? id : null;
 }
 
 function lyricsForRange(guideLines = [], startSeconds, endSeconds, bpm) {
