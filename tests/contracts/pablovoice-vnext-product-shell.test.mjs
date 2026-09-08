@@ -5,17 +5,30 @@ import { readFile } from 'node:fs/promises';
 const preboot = await readFile(new URL('../../packages/app/preboot.mjs', import.meta.url), 'utf8');
 const index = await readFile(new URL('../../packages/app/index.html', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../../packages/app/pablovoice-vnext-ui.mjs', import.meta.url), 'utf8');
+const routeCompat = await readFile(new URL('../../packages/app/pablovoice-vnext-route-compat.mjs', import.meta.url), 'utf8');
 const css = await readFile(new URL('../../packages/app/pablovoice-vnext-ui.css', import.meta.url), 'utf8');
+const compatCss = await readFile(new URL('../../packages/app/pablovoice-vnext-compat.css', import.meta.url), 'utf8');
 const sw = await readFile(new URL('../../packages/app/service-worker.js', import.meta.url), 'utf8');
 
 test('vNext product shell is part of the canonical boot and offline shell', () => {
   assert.match(preboot, /import\('\.\/pablovoice-vnext-ui\.mjs'\)/);
   assert.match(preboot, /installPabloVoiceVNextUI\(\)/);
+  assert.match(preboot, /import\('\.\/pablovoice-vnext-route-compat\.mjs'\)/);
+  assert.match(preboot, /installPabloVoiceVNextRouteCompat\(\)/);
   assert.match(index, /pablovoice-vnext-ui\.css/);
   assert.match(index, /pablovoice-vnext-compat\.css/);
   assert.match(sw, /pablovoice-vnext-ui\.mjs/);
+  assert.match(sw, /pablovoice-vnext-route-compat\.mjs/);
   assert.match(sw, /pablovoice-vnext-ui\.css/);
   assert.match(sw, /pablovoice-vnext-compat\.css/);
+});
+
+test('vNext is the visible canonical route surface while legacy route DOM is retired', () => {
+  assert.match(routeCompat, /nav\.classList\.add\('pv-nav'\)/);
+  assert.match(routeCompat, /button\.dataset\.route = route/);
+  assert.match(routeCompat, /legacyNavHidden:\s*true/);
+  assert.match(compatCss, /pv-vnext-shell \+ \.pv-nav\[data-pv-legacy-nav\]/);
+  assert.match(compatCss, /display:none !important/);
 });
 
 test('vNext derives project state from the unified Music Graph instead of a parallel project model', () => {
@@ -56,4 +69,5 @@ test('the pocket device is a playback visualizer with preserved companion meanin
   assert.match(ui, /clareza · timbre · equilíbrio/);
   assert.match(ui, /textura · impacto · balanço/);
   assert.match(ui, /faísca · ousadia · direção/);
+  assert.match(compatCss, /Keep the visualizer alive on mobile/);
 });
