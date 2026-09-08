@@ -1,5 +1,7 @@
 import { MUSICAL_OPERATION_ROUTE_SCHEMA } from '../music-intelligence/src/operation-router.mjs';
 
+// Section timing reaches executors only after resolution against the canonical
+// project Music Graph; this compiler never persists a second musical state.
 export const MUSICAL_EXECUTION_PLAN_SCHEMA = 'pablovoice_musical_execution_plan_v1';
 
 export function compileMusicalOperation(route = {}, project = {}) {
