@@ -12,8 +12,8 @@ html[data-pv-experience-vnext] .pv-intimate-stage .pv-companion-dock {
 }
 html[data-pv-experience-vnext] .pv-intimate-actions { min-width:0; }
 
-/* vNext is the visible canonical navigation. The old nav stays mounted only as legacy DOM state. */
-html[data-pv-experience-vnext] .pv-vnext-shell + .pv-nav[data-pv-legacy-nav] {
+/* vNext is the single visible canonical navigation. */
+html[data-pv-experience-vnext] .pv-vnext-shell + .pv-legacy-nav[data-pv-legacy-nav] {
   display:none !important;
 }
 html[data-pv-experience-vnext] .pv-vnext-sidebar .pv-vnext-nav.pv-nav {
