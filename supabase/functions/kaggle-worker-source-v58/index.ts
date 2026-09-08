@@ -1,10 +1,11 @@
-const PY = String.raw`import sys, subprocess, tempfile, shutil, hashlib, json, os
+const PY = String.raw`import sys, subprocess, tempfile, shutil, hashlib, json, os, threading, time
 from pathlib import Path
 import requests
 
 TICKET = json.loads(__import__('base64').b64decode(TICKET_B64).decode('utf-8'))
 ACE_REVISION = 'ca1e85fe9430179831e6bc6be790c332190a3866'
 ACE_MODEL = 'acestep-v15-turbo'
+PROGRESS_SLUG = 'progress-kaggle-pipeline-job-v58'
 
 
 def sha256_file(path):
@@ -20,6 +21,23 @@ def pcm_hash_range(path,start,end):
     raw=subprocess.check_output(cmd)
     if not raw: raise RuntimeError('outside_pcm_empty')
     return hashlib.sha256(raw).hexdigest()
+
+
+def progress_url(ticket):
+    return str(ticket['supabase_url']).rstrip('/') + '/functions/v1/' + PROGRESS_SLUG
+
+
+def send_heartbeat(ticket):
+    try:
+        requests.post(progress_url(ticket),json={'job_id':ticket['job_id'],'callback_token':ticket['callback_token'],'stage':'heartbeat'},timeout=20)
+    except Exception:
+        pass
+
+
+def heartbeat_loop(ticket,stop):
+    send_heartbeat(ticket)
+    while not stop.wait(45):
+        send_heartbeat(ticket)
 
 
 def upload_signed(ticket, output, file_path):
@@ -123,6 +141,7 @@ def run():
     if job_type not in ('music_generation','music_repaint'): raise RuntimeError('invalid_job_type')
     engine=TICKET.get('engine') or {}
     if engine.get('source_revision')!=ACE_REVISION or engine.get('model')!=ACE_MODEL: raise RuntimeError('engine_identity_mismatch')
+    stop=threading.Event(); heartbeat=threading.Thread(target=heartbeat_loop,args=(TICKET,stop),daemon=True); heartbeat.start()
     tmp=Path(tempfile.mkdtemp(prefix='pv-music-'))
     try:
         repo=prepare_repo(tmp); source_path=None;source_digest=None;source_meta=None
@@ -144,12 +163,13 @@ def run():
         output=TICKET['outputs']['full_mix'];upload_signed(TICKET,output,generated);digest=sha256_file(generated)
         result=post_callback(TICKET,{'audio_sha256':digest,'audio_size_bytes':generated.stat().st_size,'duration_seconds':meta['duration_seconds'],'sample_rate':meta['sample_rate'],'channels':meta['channels'],'mime_type':'audio/flac','ace_revision':ACE_REVISION,'ace_model':ACE_MODEL,'generation_seed':int(TICKET['generation']['seed']),**callback_extra})
         print('PABLOVOICE_NATIVE_MUSIC_OK',json.dumps(result,ensure_ascii=False))
-    finally: shutil.rmtree(tmp,ignore_errors=True)
+    finally:
+        stop.set(); heartbeat.join(timeout=2); shutil.rmtree(tmp,ignore_errors=True)
 
 run()
 `;
 
 Deno.serve((req: Request) => {
   if (req.method !== 'GET') return new Response('method_not_allowed', { status: 405 });
-  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v2' } });
+  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v3' } });
 });
