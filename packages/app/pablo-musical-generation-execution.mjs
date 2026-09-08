@@ -191,13 +191,17 @@ function validateGraphSectionBinding(graph, plan, section) {
   if (!current) return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
   const plannedId = String(plan.args?.sectionId || '');
   if (plannedId && plannedId !== String(current.id || '')) return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
-  const plannedStart = Number(plan.args?.sectionStartSeconds);
-  const plannedEnd = Number(plan.args?.sectionEndSeconds);
-  if (Number.isFinite(plannedStart) && Math.abs(plannedStart - Number(current.startSeconds)) > 0.001) {
-    return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+  if (plan.args?.sectionStartSeconds != null) {
+    const plannedStart = Number(plan.args.sectionStartSeconds);
+    if (!Number.isFinite(plannedStart) || Math.abs(plannedStart - Number(current.startSeconds)) > 0.001) {
+      return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+    }
   }
-  if (Number.isFinite(plannedEnd) && Math.abs(plannedEnd - Number(current.endSeconds)) > 0.001) {
-    return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+  if (plan.args?.sectionEndSeconds != null) {
+    const plannedEnd = Number(plan.args.sectionEndSeconds);
+    if (!Number.isFinite(plannedEnd) || Math.abs(plannedEnd - Number(current.endSeconds)) > 0.001) {
+      return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+    }
   }
   return Object.freeze({ ok: true, reason: null });
 }
