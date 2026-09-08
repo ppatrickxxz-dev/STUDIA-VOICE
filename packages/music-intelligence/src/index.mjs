@@ -43,6 +43,7 @@ export {
   buildProjectMusicGraph,
   musicGraphContextPack,
   resolveMusicGraphScope,
+  validateMusicGraphAssets,
 } from './project-music-graph.mjs';
 export {
   MUSICAL_OPERATION_ROUTE_SCHEMA,
