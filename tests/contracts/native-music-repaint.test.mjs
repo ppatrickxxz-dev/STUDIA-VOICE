@@ -20,7 +20,7 @@ test('dispatcher resolves an owned private full_mix source and signs it only for
   assert.doesNotMatch(text, /service_role[^\n]*ticket/i);
 });
 
-test('worker pins repaint to explicit interval and proves unchanged PCM outside it', async () => {
+test('worker pins repaint to explicit interval, heartbeats during long GPU startup, and proves unchanged PCM outside it', async () => {
   const text = await read('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, /task_type='repaint'/);
   assert.match(text, /src_audio=src/);
@@ -32,6 +32,10 @@ test('worker pins repaint to explicit interval and proves unchanged PCM outside 
   assert.match(text, /repaint_latent_crossfade_frames/);
   assert.match(text, /repaint_wav_crossfade_sec/);
   assert.match(text, /enable_normalization=False/);
+  assert.match(text, /PROGRESS_SLUG = 'progress-kaggle-pipeline-job-v58'/);
+  assert.match(text, /'stage':'heartbeat'/);
+  assert.match(text, /while not stop\.wait\(45\)/);
+  assert.match(text, /threading\.Thread\(target=heartbeat_loop/);
   assert.match(text, /repaint_source_sha256_mismatch/);
   assert.match(text, /pcm_hash_range/);
   assert.match(text, /repaint_outside_changed_/);
@@ -39,9 +43,11 @@ test('worker pins repaint to explicit interval and proves unchanged PCM outside 
   assert.match(text, new RegExp(REVISION));
 });
 
-test('callback refuses repaint unless source identity, duration, range and outside PCM proof all agree', async () => {
+test('callback refuses repaint unless source identity, duration, range and outside PCM proof all agree, including stalled recovery', async () => {
   const text = await read('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /MUSIC_JOB_TYPES=new Set\(\['music_generation','music_repaint'\]\)/);
+  assert.match(text, /CALLBACK_STATES=new Set\(\['waiting_kaggle','stalled'\]\)/);
+  assert.match(text, /\.eq\('status',callbackState\)/);
   assert.match(text, /repaint_source_job_mismatch/);
   assert.match(text, /repaint_source_sha_mismatch/);
   assert.match(text, /repaint_duration_mismatch/);
@@ -50,6 +56,7 @@ test('callback refuses repaint unless source identity, duration, range and outsi
   assert.match(text, /source_pcm_sha256===w\.output_pcm_sha256/);
   assert.match(text, /purpose=jobType==='music_repaint'\?'section_repaint_reference_mix'/);
   assert.match(text, /preserved_outside_verified:true/);
+  assert.match(text, /recovered_from_stalled:callbackState==='stalled'/);
 });
 
 test('app is native-first but retains old song-id projects without silent local fallback', async () => {
