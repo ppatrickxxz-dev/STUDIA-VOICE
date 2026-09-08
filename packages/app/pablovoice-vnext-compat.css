@@ -1,0 +1,88 @@
+/* vNext compatibility layer: keep real legacy engines mounted while avoiding duplicate product chrome. */
+html[data-pv-experience-vnext] .pv-intimate-diagnostics { display:none !important; }
+
+/* The new pocket visualizer is the single recorder/companion object in vNext. */
+html[data-pv-experience-vnext] .pv-intimate-stage {
+  grid-template-columns:minmax(0,1fr) !important;
+  gap:0 !important;
+}
+html[data-pv-experience-vnext] .pv-intimate-stage > .pv-pocket-recorder,
+html[data-pv-experience-vnext] .pv-intimate-stage .pv-companion-dock {
+  display:none !important;
+}
+html[data-pv-experience-vnext] .pv-intimate-actions { min-width:0; }
+
+/* vNext is the single visible canonical navigation. */
+html[data-pv-experience-vnext] .pv-vnext-shell + .pv-legacy-nav[data-pv-legacy-nav] {
+  display:none !important;
+}
+html[data-pv-experience-vnext] .pv-vnext-sidebar .pv-vnext-nav.pv-nav {
+  position:relative !important;
+  inset:auto !important;
+  z-index:auto !important;
+  width:auto !important;
+  min-height:0 !important;
+  grid-template-columns:1fr !important;
+  margin:0 !important;
+  padding:12px 0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+html[data-pv-experience-vnext] .pv-vnext-sidebar .pv-vnext-nav.pv-nav button {
+  min-width:0 !important;
+  min-height:37px !important;
+  padding:0 8px !important;
+}
+
+/* Preserve specialist modals above the shell rails. */
+html[data-pv-experience-vnext] [class*="pv-beat-overlay"],
+html[data-pv-experience-vnext] [class*="pv-instrument-overlay"],
+html[data-pv-experience-vnext] [class*="pv-piano"],
+html[data-pv-experience-vnext] [class*="pv-sampler"],
+html[data-pv-experience-vnext] [data-section-map-modal],
+html[data-pv-experience-vnext] [data-section-regeneration-modal] {
+  z-index:1000;
+}
+
+/* Make existing product cards read as one mature workspace without altering functional hooks. */
+html[data-pv-experience-vnext] .pv-card,
+html[data-pv-experience-vnext] .pv-song-card,
+html[data-pv-experience-vnext] .pv-chat-shell .pv-card {
+  border-color:rgba(183,153,255,.13);
+  background:linear-gradient(180deg,rgba(16,20,32,.94),rgba(8,10,17,.96));
+}
+html[data-pv-experience-vnext] .pv-intimate-home-hero,
+html[data-pv-experience-vnext] .pv-intimate-compose-hero { padding-top:12px; }
+html[data-pv-experience-vnext] .pv-intimate-home-hero .pv-title,
+html[data-pv-experience-vnext] .pv-intimate-compose-hero .pv-title { letter-spacing:-.045em; }
+
+/* Current companion board remains the single canonical pixel source. */
+html[data-pv-experience-vnext] .pv-canon-companion-sprite { image-rendering:auto; }
+
+@media (max-width:980px) {
+  /* Keep the visualizer alive on mobile instead of falling back to the retired static recorder. */
+  html[data-pv-experience-vnext] .pv-vnext-visualizer {
+    display:block !important;
+    width:min(360px,100%);
+    margin:8px auto 2px !important;
+  }
+  html[data-pv-experience-vnext] .pv-vnext-device-screen {
+    aspect-ratio:1.65 !important;
+    max-height:176px;
+  }
+  html[data-pv-experience-vnext] .pv-vnext-device-screen > .pv-canon-companion-sprite {
+    width:82px;
+    height:82px;
+  }
+  html[data-pv-experience-vnext] .pv-vnext-sidebar .pv-vnext-nav.pv-nav {
+    display:flex !important;
+    overflow-x:auto;
+    grid-template-columns:none !important;
+    padding:7px 0 4px !important;
+    scrollbar-width:none;
+  }
+  html[data-pv-experience-vnext] .pv-vnext-sidebar .pv-vnext-nav.pv-nav::-webkit-scrollbar { display:none; }
+  html[data-pv-experience-vnext] .pv-vnext-sidebar .pv-vnext-nav.pv-nav button { min-width:88px !important; }
+}
