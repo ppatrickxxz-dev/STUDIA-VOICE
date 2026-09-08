@@ -1,4 +1,9 @@
 import { MUSICAL_INTENT_SCHEMA } from './musical-intent.mjs';
+import {
+  PROJECT_MUSIC_GRAPH_SCHEMA,
+  buildProjectMusicGraph,
+  resolveMusicGraphScope,
+} from './project-music-graph.mjs';
 
 export const MUSICAL_OPERATION_ROUTE_SCHEMA = 'pmi_musical_operation_route_v1';
 
@@ -8,6 +13,16 @@ export function routeMusicalIntent(intent = {}, context = {}) {
   }
 
   const route = resolveRoute(intent);
+  const graph = resolveProjectGraph(context);
+  const graphScope = graph ? resolveMusicGraphScope(graph, {
+    trackId: context.trackId || intent.context?.trackId || null,
+    target: intent.scope?.target || null,
+    section: intent.scope?.section || null,
+    occurrence: intent.scope?.occurrence || 1,
+  }) : null;
+  const resolvedSection = graphScope?.section || null;
+  const resolvedTrack = graphScope?.track || null;
+
   return Object.freeze({
     schema: MUSICAL_OPERATION_ROUTE_SCHEMA,
     intentSchema: intent.schema,
@@ -17,7 +32,11 @@ export function routeMusicalIntent(intent = {}, context = {}) {
     fallback: Object.freeze([...route.fallback]),
     scope: Object.freeze({
       section: intent.scope?.section || null,
+      sectionId: resolvedSection?.id || null,
+      sectionStartSeconds: finite(resolvedSection?.startSeconds),
+      sectionEndSeconds: finite(resolvedSection?.endSeconds),
       target: intent.scope?.target || null,
+      resolvedTrackId: resolvedTrack?.id || null,
       preserveUnselected: intent.scope?.preserveUnselected !== false,
     }),
     constraints: Object.freeze({
@@ -34,8 +53,9 @@ export function routeMusicalIntent(intent = {}, context = {}) {
       versionReference: intent.versionReference || null,
     }),
     context: Object.freeze({
-      projectId: String(context.projectId || intent.context?.projectId || '') || null,
-      trackId: String(context.trackId || intent.context?.trackId || '') || null,
+      projectId: String(context.projectId || graph?.project?.id || intent.context?.projectId || '') || null,
+      trackId: String(context.trackId || resolvedTrack?.id || intent.context?.trackId || '') || null,
+      musicGraphSchema: graph?.schema || null,
     }),
   });
 }
@@ -71,6 +91,18 @@ function resolveRoute(intent) {
   return route('review_only', 'clarify_execution_target', 'review_only', []);
 }
 
+function resolveProjectGraph(context = {}) {
+  if (context?.musicGraph?.schema === PROJECT_MUSIC_GRAPH_SCHEMA) return context.musicGraph;
+  if (context?.project && typeof context.project === 'object') {
+    return buildProjectMusicGraph(context.project, {
+      pendingDraft: context.pendingDraft || null,
+      pmiSession: context.pmiSession || null,
+      mixState: context.mixState || null,
+    });
+  }
+  return null;
+}
+
 function hasStyleDirection(intent) {
   return Boolean(
     intent.style?.positive?.length
@@ -81,4 +113,9 @@ function hasStyleDirection(intent) {
 
 function route(executor, action, strategy, fallback) {
   return { executor, action, strategy, fallback };
+}
+
+function finite(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
