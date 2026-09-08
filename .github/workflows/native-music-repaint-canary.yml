@@ -83,7 +83,7 @@ jobs:
               > test-results/native-repaint/job.json
             STATUS="$(jq -r '.[0].status // empty' test-results/native-repaint/job.json)"
             if [ "$STATUS" = 'completed' ]; then break; fi
-            if [ "$STATUS" = 'error' ] || [ "$STATUS" = 'failed' ]; then cat test-results/native-repaint/job.json; exit 1; fi
+            if [ "$STATUS" = 'error' ] || [ "$STATUS" = 'failed' ] || [ "$STATUS" = 'stalled' ]; then cat test-results/native-repaint/job.json; exit 1; fi
             sleep 10
           done
           jq -e 'length == 1 and .[0].status == "completed" and .[0].progress == 100' test-results/native-repaint/job.json >/dev/null
