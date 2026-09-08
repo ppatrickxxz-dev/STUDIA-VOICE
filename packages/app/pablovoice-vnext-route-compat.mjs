@@ -36,8 +36,10 @@ function sync() {
 
   const legacy = shell.nextElementSibling;
   if (legacy?.classList?.contains('pv-nav')) {
-    legacy.dataset.pvLegacyNav = 'true';
     const activeRoute = legacy.querySelector('[data-route].active')?.dataset.route || null;
+    legacy.dataset.pvLegacyNav = 'true';
+    legacy.classList.remove('pv-nav');
+    legacy.classList.add('pv-legacy-nav');
     nav.querySelectorAll('[data-route]').forEach((button) => button.classList.toggle('route-active', button.dataset.route === activeRoute));
   }
 }
@@ -66,6 +68,7 @@ function stopDuplicateLegacyRouting(event) {
 
 export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   canonicalVisibleNav: true,
+  singlePvNav: true,
   includesStudioAndProjects: true,
   specialistCommandsAreNotFakeRoutes: true,
   legacyNavHidden: true,
