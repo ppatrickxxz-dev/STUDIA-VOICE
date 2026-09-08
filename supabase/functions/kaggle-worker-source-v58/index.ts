@@ -55,46 +55,79 @@ def prepare_repo(tmp):
     return repo
 
 
+def download_repaint_source(tmp):
+    repaint=TICKET.get('repaint') or {}
+    url=repaint.get('source_audio_url')
+    expected=repaint.get('source_audio_sha256')
+    if not url or not expected: raise RuntimeError('repaint_source_missing')
+    target=tmp/'source-audio.flac'
+    with requests.get(url,stream=True,timeout=180) as r:
+        r.raise_for_status()
+        with open(target,'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024*1024):
+                if chunk: f.write(chunk)
+    if target.stat().st_size<=4096: raise RuntimeError('repaint_source_too_small')
+    actual=sha256_file(target)
+    if actual.lower()!=str(expected).lower(): raise RuntimeError('repaint_source_sha256_mismatch')
+    meta=probe_audio(target)
+    expected_duration=float(repaint.get('source_duration_seconds') or 0)
+    if meta['duration_seconds']<=1 or abs(meta['duration_seconds']-expected_duration)>0.35: raise RuntimeError('repaint_source_duration_mismatch')
+    return target,meta,actual
+
+
 def write_generation_script(repo,tmp):
     generation=TICKET['generation']
+    repaint=TICKET.get('repaint') or None
     script=tmp/'generate_once.py'
     payload=json.dumps(generation,ensure_ascii=False)
+    repaint_payload=json.dumps(repaint,ensure_ascii=False) if repaint else 'null'
     script.write_text("""import json, os
 from pathlib import Path
 from acestep.handler import AceStepHandler
 from acestep.inference import GenerationParams, GenerationConfig, generate_music
 
 g=json.loads(os.environ['PV_GENERATION_JSON'])
+repaint=json.loads(os.environ.get('PV_REPAINT_JSON','null'))
 repo=Path(os.environ['PV_ACE_REPO'])
 out=Path(os.environ['PV_OUTPUT_DIR']); out.mkdir(parents=True,exist_ok=True)
 handler=AceStepHandler()
 status,ok=handler.initialize_service(project_root=str(repo),config_path='acestep-v15-turbo',device='cuda',use_flash_attention=False,compile_model=False,offload_to_cpu=False,offload_dit_to_cpu=False,prefer_source='modelscope')
 if not ok: raise RuntimeError('ace_init_failed: '+str(status))
-params=GenerationParams(caption=g['caption'],lyrics=g['lyrics'],instrumental=bool(g['instrumental']),bpm=int(g['bpm']),keyscale=g.get('keyscale',''),timesignature=g.get('timesignature','4'),vocal_language=g.get('vocal_language','unknown'),duration=float(g['duration']),thinking=False,use_cot_metas=False,use_cot_caption=False,use_cot_language=False,use_constrained_decoding=False,inference_steps=int(g.get('inference_steps',8)),seed=int(g['seed']),task_type='text2music',dcw_enabled=False)
+kwargs=dict(caption=g['caption'],lyrics=g['lyrics'],instrumental=bool(g['instrumental']),bpm=int(g['bpm']),keyscale=g.get('keyscale',''),timesignature=g.get('timesignature','4'),vocal_language=g.get('vocal_language','unknown'),duration=float(g['duration']),thinking=False,use_cot_metas=False,use_cot_caption=False,use_cot_language=False,use_constrained_decoding=False,inference_steps=int(g.get('inference_steps',8)),seed=int(g['seed']),dcw_enabled=False)
+if repaint:
+    kwargs.update(task_type='repaint',src_audio=os.environ['PV_SOURCE_AUDIO'],repainting_start=float(repaint['repainting_start']),repainting_end=float(repaint['repainting_end']),chunk_mask_mode=repaint.get('chunk_mask_mode','explicit'),shift=float(g.get('shift',3.0)))
+else:
+    kwargs.update(task_type='text2music')
+params=GenerationParams(**kwargs)
 config=GenerationConfig(batch_size=1,seeds=[int(g['seed'])],use_random_seed=False,audio_format='flac')
 result=generate_music(handler,None,params,config,save_dir=str(out))
 if not result.success: raise RuntimeError('ace_generation_failed: '+str(result.error or result.status_message))
 if not result.audios or not result.audios[0].get('path'): raise RuntimeError('ace_output_missing')
 print('PV_OUTPUT_PATH='+str(result.audios[0]['path']))
 """,encoding='utf-8')
-    return script,payload
+    return script,payload,repaint_payload
 
 
 def run():
-    if TICKET.get('job_type')!='music_generation': raise RuntimeError('invalid_job_type')
+    if TICKET.get('job_type') not in ('music_generation','music_repaint'): raise RuntimeError('invalid_job_type')
     engine=TICKET.get('engine') or {}
     if engine.get('source_revision')!=ACE_REVISION or engine.get('model')!=ACE_MODEL: raise RuntimeError('engine_identity_mismatch')
     tmp=Path(tempfile.mkdtemp(prefix='pv-music-'))
     try:
         repo=prepare_repo(tmp)
-        script,payload=write_generation_script(repo,tmp)
+        source_path=None;source_meta=None;source_sha=None
+        if TICKET.get('job_type')=='music_repaint':
+            source_path,source_meta,source_sha=download_repaint_source(tmp)
+        script,payload,repaint_payload=write_generation_script(repo,tmp)
         outdir=tmp/'generated'
         env=os.environ.copy()
         env['PV_GENERATION_JSON']=payload
+        env['PV_REPAINT_JSON']=repaint_payload
         env['PV_ACE_REPO']=str(repo)
         env['PV_OUTPUT_DIR']=str(outdir)
         env['ACESTEP_CONFIG_PATH']=ACE_MODEL
         env['ACESTEP_DOWNLOAD_SOURCE']='modelscope'
+        if source_path: env['PV_SOURCE_AUDIO']=str(source_path)
         completed=subprocess.run(['uv','run','python',str(script)],cwd=repo,env=env,check=True,text=True,capture_output=True)
         output_line=next((line for line in completed.stdout.splitlines() if line.startswith('PV_OUTPUT_PATH=')),None)
         if not output_line: raise RuntimeError('ace_output_path_missing '+completed.stdout[-1200:])
@@ -103,10 +136,11 @@ def run():
         if generated.stat().st_size<=4096: raise RuntimeError('generated_file_too_small')
         meta=probe_audio(generated)
         if meta['duration_seconds']<=1 or meta['sample_rate']<=0 or meta['channels']<=0: raise RuntimeError('generated_audio_probe_failed')
+        if source_meta and abs(meta['duration_seconds']-source_meta['duration_seconds'])>0.35: raise RuntimeError('repaint_output_duration_mismatch')
         output=TICKET['outputs']['full_mix']
         upload_signed(TICKET,output,generated)
         digest=sha256_file(generated)
-        result=post_callback(TICKET,{
+        callback={
             'audio_sha256':digest,
             'audio_size_bytes':generated.stat().st_size,
             'duration_seconds':meta['duration_seconds'],
@@ -116,7 +150,18 @@ def run():
             'ace_revision':ACE_REVISION,
             'ace_model':ACE_MODEL,
             'generation_seed':int(TICKET['generation']['seed']),
-        })
+            'task_type':'repaint' if source_path else 'text2music',
+        }
+        if source_path:
+            repaint=TICKET['repaint']
+            callback.update({
+                'source_asset_id':repaint['source_asset_id'],
+                'source_audio_sha256':source_sha,
+                'repainting_start':float(repaint['repainting_start']),
+                'repainting_end':float(repaint['repainting_end']),
+                'source_duration_seconds':float(source_meta['duration_seconds']),
+            })
+        result=post_callback(TICKET,callback)
         print('PABLOVOICE_NATIVE_MUSIC_OK',json.dumps(result,ensure_ascii=False))
     finally:
         shutil.rmtree(tmp,ignore_errors=True)
@@ -126,5 +171,5 @@ run()
 
 Deno.serve((req: Request) => {
   if (req.method !== 'GET') return new Response('method_not_allowed', { status: 405 });
-  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v1' } });
+  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v2' } });
 });
