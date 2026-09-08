@@ -23,11 +23,16 @@ test('vNext product shell is part of the canonical boot and offline shell', () =
   assert.match(sw, /pablovoice-vnext-compat\.css/);
 });
 
-test('vNext is the visible canonical route surface while legacy route DOM is retired', () => {
+test('vNext is the single visible canonical route surface and includes real Studio and Projects routes', () => {
   assert.match(routeCompat, /nav\.classList\.add\('pv-nav'\)/);
   assert.match(routeCompat, /button\.dataset\.route = route/);
+  assert.match(routeCompat, /ensureCanonicalRoute\(nav, 'studio'/);
+  assert.match(routeCompat, /ensureCanonicalRoute\(nav, 'projects'/);
+  assert.match(routeCompat, /legacy\.classList\.remove\('pv-nav'\)/);
+  assert.match(routeCompat, /legacy\.classList\.add\('pv-legacy-nav'\)/);
+  assert.match(routeCompat, /singlePvNav:\s*true/);
   assert.match(routeCompat, /legacyNavHidden:\s*true/);
-  assert.match(compatCss, /pv-vnext-shell \+ \.pv-nav\[data-pv-legacy-nav\]/);
+  assert.match(compatCss, /pv-vnext-shell \+ \.pv-legacy-nav\[data-pv-legacy-nav\]/);
   assert.match(compatCss, /display:none !important/);
 });
 
