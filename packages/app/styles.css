@@ -272,4 +272,5 @@ button.pv-chip { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
-
+.pv-vocal-journey{display:grid;grid-template-columns:1fr minmax(140px,280px) auto;align-items:center;gap:14px;margin-bottom:14px}.pv-vocal-journey div{display:grid;gap:4px}.pv-vocal-journey span{color:var(--muted);font-size:.88rem}.pv-vocal-journey progress{width:100%;accent-color:#b576ff}.pv-record-guide{padding:13px;border:1px solid rgba(181,118,255,.3);background:rgba(124,58,237,.08);border-radius:14px;text-align:left}.pv-record-guide span{font-weight:800;color:#eadcff}.pv-record-guide p{line-height:1.55}.pv-record-guide small{color:var(--muted)}
+@media(max-width:720px){.pv-vocal-journey{grid-template-columns:1fr}.pv-vocal-journey .pv-btn{width:100%}}
