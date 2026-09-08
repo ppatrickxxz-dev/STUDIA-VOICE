@@ -10,7 +10,7 @@ let observer = null;
 export function installPabloVoiceVNextRouteCompat() {
   if (observer) return () => observer.disconnect();
   observer = new MutationObserver(sync);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
   document.addEventListener('click', stopDuplicateLegacyRouting, true);
   sync();
   return () => {
@@ -26,22 +26,40 @@ function sync() {
   if (!nav) return;
   nav.classList.add('pv-nav');
   nav.dataset.vnextCanonicalNav = 'true';
+
+  const createAnchor = nav.querySelector('[data-vnext-command="create"], [data-vnext-route-command="create"]');
   nav.querySelectorAll('[data-vnext-command]').forEach((button) => {
-    const route = ROUTES[button.dataset.vnextCommand];
-    if (route) button.dataset.route = route;
-    else button.removeAttribute('data-route');
+    const command = button.dataset.vnextCommand;
+    const route = ROUTES[command];
+    if (route) {
+      button.dataset.route = route;
+      button.dataset.vnextRouteCommand = command;
+      // High-level navigation must bubble once into the canonical app router.
+      // Removing the vNext command prevents runCommand -> forwardRoute -> same button recursion.
+      button.removeAttribute('data-vnext-command');
+    } else {
+      button.removeAttribute('data-route');
+    }
   });
-  ensureCanonicalRoute(nav, 'studio', '◉', 'Studio', nav.querySelector('[data-vnext-command="create"]'));
+
+  ensureCanonicalRoute(nav, 'studio', '◉', 'Studio', createAnchor);
   ensureCanonicalRoute(nav, 'projects', '▤', 'Projetos', nav.querySelector('[data-route="studio"]'));
 
   const legacy = shell.nextElementSibling;
   if (legacy?.classList?.contains('pv-nav')) {
-    const activeRoute = legacy.querySelector('[data-route].active')?.dataset.route || null;
     legacy.dataset.pvLegacyNav = 'true';
     legacy.classList.remove('pv-nav');
     legacy.classList.add('pv-legacy-nav');
-    nav.querySelectorAll('[data-route]').forEach((button) => button.classList.toggle('route-active', button.dataset.route === activeRoute));
   }
+
+  const activeRoute = legacy?.querySelector('[data-route].active')?.dataset.route
+    || shell.dataset.vnextRoute
+    || null;
+  nav.querySelectorAll('[data-route]').forEach((button) => {
+    const active = button.dataset.route === activeRoute;
+    button.classList.toggle('route-active', active);
+    button.classList.toggle('active', active);
+  });
 }
 
 function ensureCanonicalRoute(nav, route, icon, label, after) {
@@ -61,8 +79,8 @@ function ensureCanonicalRoute(nav, route, icon, label, after) {
 function stopDuplicateLegacyRouting(event) {
   const command = event.target.closest('[data-vnext-canonical-nav] [data-vnext-command]');
   if (!command) return;
-  // The vNext product shell already delegates specialist commands and high-level routes.
-  // Direct Studio/Projects buttons intentionally bubble into the canonical app router.
+  // Specialist buttons are delegated by the vNext shell and must not also be interpreted
+  // as routes. High-level route buttons have data-vnext-route-command instead and bubble.
   event.stopPropagation();
 }
 
@@ -71,6 +89,7 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   singlePvNav: true,
   includesStudioAndProjects: true,
   specialistCommandsAreNotFakeRoutes: true,
+  highLevelRoutesBubbleOnce: true,
   legacyNavHidden: true,
   delegatesToExistingRoutes: true,
 });
