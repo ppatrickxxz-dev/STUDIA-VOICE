@@ -1,4 +1,8 @@
-import { migrateProject } from './core/src/project.mjs';
+const { migrateProject } = await import(
+  globalThis.PabloVoiceAndroid
+    ? './core/src/project.mjs'
+    : '../core/src/project.mjs',
+);
 import { sortProjectsByContext } from './project-context.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';

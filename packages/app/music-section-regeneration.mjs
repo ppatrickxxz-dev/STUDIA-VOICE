@@ -1,8 +1,18 @@
 export const MUSIC_SECTION_REGEN_SCHEMA = 'pablovoice_music_section_regeneration_v1';
 
-export function latestInpaintableSongTake(project = {}) {
+export function latestEditableSongTake(project = {}) {
   const takes = Array.isArray(project?.songCreation?.takes) ? project.songCreation.takes : [];
-  return [...takes].reverse().find((take) => String(take?.providerSongId || take?.render?.songId || '').trim()) || null;
+  const reversed = [...takes].reverse();
+  const native = reversed.find((take) => String(take?.remoteAssetId || '').trim());
+  if (native) return native;
+  return reversed.find((take) => String(take?.providerSongId || take?.render?.songId || '').trim()) || null;
+}
+
+// Compatibility export for existing callers/tests. "Inpaintable" now means a
+// take that can be edited selectively by the native repaint path or, for older
+// projects, the legacy song-id path.
+export function latestInpaintableSongTake(project = {}) {
+  return latestEditableSongTake(project);
 }
 
 export function resolveSectionRegeneration(project = {}, sectionId = '', {
@@ -10,8 +20,13 @@ export function resolveSectionRegeneration(project = {}, sectionId = '', {
   lyrics = null,
   negativeStyles = [],
 } = {}) {
-  const take = latestInpaintableSongTake(project);
+  const take = latestEditableSongTake(project);
   if (!take) return Object.freeze({ ok: false, error: 'inpainting_source_missing' });
+
+  const sourceAssetId = String(take.remoteAssetId || '').trim();
+  const sourceSongId = String(take.providerSongId || take.render?.songId || '').trim();
+  const sourceProvider = sourceAssetId ? 'pablovoice_native_repaint' : sourceSongId ? 'elevenmusic_song_id' : '';
+  if (!sourceProvider) return Object.freeze({ ok: false, error: 'inpainting_source_missing' });
 
   const sections = Array.isArray(project?.arrangementMap?.sections)
     ? [...project.arrangementMap.sections].sort((a, b) => Number(a.startSeconds) - Number(b.startSeconds))
@@ -50,7 +65,9 @@ export function resolveSectionRegeneration(project = {}, sectionId = '', {
     ok: true,
     schema: MUSIC_SECTION_REGEN_SCHEMA,
     sourceTakeId: take.id,
-    sourceSongId: String(take.providerSongId || take.render?.songId),
+    sourceProvider,
+    sourceAssetId: sourceAssetId || null,
+    sourceSongId: sourceSongId || null,
     durationMs: Math.round(takeDuration * 1000),
     section: Object.freeze({
       id: section.id,

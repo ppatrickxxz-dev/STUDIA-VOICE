@@ -9,7 +9,9 @@ async function source(path) { return readFile(new URL(`../../${path}`, import.me
 
 test('native music dispatcher reuses private ticketed Kaggle v58 slot without exposing privileged credentials', async () => {
   const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
-  assert.match(text, /job_type:'music_generation'/);
+  assert.match(text, /jobType='music_generation'/);
+  assert.match(text, /if\(action==='repaint'\)/);
+  assert.match(text, /job_type:jobType/);
   assert.match(text, /engine:'ace_step_1_5_turbo'/);
   assert.match(text, /provider:'kaggle'/);
   assert.match(text, /machineShape:'NvidiaTeslaT4'/);
@@ -27,7 +29,7 @@ test('native music dispatcher reuses private ticketed Kaggle v58 slot without ex
   assert.match(text, /fallback_allowed:false/);
 });
 
-test('native music worker pins ACE-Step source identity and returns only signed output plus callback proof', async () => {
+test('native music worker pins ACE-Step source identity and supports generation plus repaint without credentials', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
@@ -36,6 +38,7 @@ test('native music worker pins ACE-Step source identity and returns only signed 
   assert.match(text, /prefer_source='modelscope'/);
   assert.match(text, /thinking=False/);
   assert.match(text, /task_type='text2music'/);
+  assert.match(text, /task_type='repaint'/);
   assert.match(text, /audio_format='flac'/);
   assert.match(text, /sha256_file/);
   assert.match(text, /ffprobe/);
@@ -44,32 +47,37 @@ test('native music worker pins ACE-Step source identity and returns only signed 
   assert.doesNotMatch(text, /KAGGLE_KEY|KAGGLE_USERNAME|service_role/i);
 });
 
-test('native music callback verifies identity, callback, storage and hash before asset persistence', async () => {
+test('native music callback verifies identity, callback, storage and an allowlisted music job type before persistence', async () => {
   const text = await source('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
-  assert.match(text, /job\.job_type!=='music_generation'/);
+  assert.match(text, /MUSIC_JOB_TYPES=new Set\(\['music_generation','music_repaint'\]\)/);
+  assert.match(text, /!MUSIC_JOB_TYPES\.has\(jobType\)/);
   assert.match(text, /sha256Text\(token\)/);
   assert.match(text, /callback_token_expired/);
   assert.match(text, /engine_identity_mismatch/);
   assert.match(text, /audio-private/);
   assert.match(text, /kind:'full_mix'/);
   assert.match(text, /sha256:audioSha/);
-  assert.match(text, /proof=\{verified:true/);
+  assert.match(text, /proof:any=\{verified:true/);
   assert.match(text, /status:'finalizing'/);
   assert.match(text, /status:'completed'/);
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
 });
 
-test('browser runtime can only address owned RLS job/asset rows and verifies downloaded bytes', async () => {
+test('browser runtime can only address owned RLS music jobs/assets and verifies exact downloaded bytes', async () => {
   const resultRuntime = await source('packages/app/native-music-result-runtime.mjs');
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(resultRuntime, /authorization = `Bearer \$\{token\}`/);
-  assert.match(resultRuntime, /job_type !== 'music_generation'/);
+  assert.match(resultRuntime, /MUSIC_JOB_TYPES = new Set\(\['music_generation', 'music_repaint'\]\)/);
+  assert.match(resultRuntime, /expectedJobType/);
+  assert.match(resultRuntime, /job_type_mismatch/);
   assert.match(resultRuntime, /asset\.kind !== 'full_mix'/);
   assert.match(resultRuntime, /asset\.storage_bucket !== 'audio-private'/);
   assert.match(resultRuntime, /music_sha256_mismatch/);
   assert.match(resultRuntime, /music_size_mismatch/);
   assert.match(client, /compute-kaggle-v58/);
+  assert.match(client, /expectedJobType: 'music_generation'/);
+  assert.match(client, /expectedJobType: 'music_repaint'/);
   assert.match(client, /ensureRemoteProject/);
   assert.match(client, /ensureSession/);
   assert.match(client, /fallback_allowed: false/);
