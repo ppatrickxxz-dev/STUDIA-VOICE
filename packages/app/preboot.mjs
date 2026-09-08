@@ -75,6 +75,7 @@ try {
   const { installMusicSectionRegenerationUI } = await import('./music-section-regeneration-ui.mjs');
   const { installPabloVoiceIntimateUI } = await import('./pablovoice-intimate-ui.mjs');
   const { installPabloLifeUI } = await import('./pablo-life-ui.mjs');
+  const { installPabloVoiceVNextUI } = await import('./pablovoice-vnext-ui.mjs');
   installPabloConversationUI();
   installPabloMusicalPlanUI();
   installPabloSectionHereAdapter();
@@ -113,6 +114,7 @@ try {
   installMusicSectionRegenerationUI();
   installPabloVoiceIntimateUI();
   installPabloLifeUI();
+  installPabloVoiceVNextUI();
   installPhysicalGateRuntime();
   fallbackShell();
 } catch (error) {
