@@ -14,13 +14,19 @@ export function routeMusicalIntent(intent = {}, context = {}) {
 
   const route = resolveRoute(intent);
   const graph = resolveProjectGraph(context);
+  const requestedSection = intent.scope?.section || null;
+  const requestedOccurrence = positiveInteger(intent.scope?.occurrence);
+  const sectionMatches = graph && requestedSection
+    ? (graph.structure?.sections || []).filter((section) => section.kind === requestedSection)
+    : [];
+  const sectionAmbiguous = Boolean(requestedSection && sectionMatches.length > 1 && !requestedOccurrence);
   const graphScope = graph ? resolveMusicGraphScope(graph, {
     trackId: context.trackId || intent.context?.trackId || null,
     target: intent.scope?.target || null,
-    section: intent.scope?.section || null,
-    occurrence: intent.scope?.occurrence || 1,
+    section: sectionAmbiguous ? null : requestedSection,
+    occurrence: requestedOccurrence || 1,
   }) : null;
-  const resolvedSection = graphScope?.section || null;
+  const resolvedSection = sectionAmbiguous ? null : graphScope?.section || null;
   const resolvedTrack = graphScope?.track || null;
 
   return Object.freeze({
@@ -31,10 +37,12 @@ export function routeMusicalIntent(intent = {}, context = {}) {
     strategy: route.strategy,
     fallback: Object.freeze([...route.fallback]),
     scope: Object.freeze({
-      section: intent.scope?.section || null,
+      section: requestedSection,
       sectionId: resolvedSection?.id || null,
       sectionStartSeconds: finite(resolvedSection?.startSeconds),
       sectionEndSeconds: finite(resolvedSection?.endSeconds),
+      sectionAmbiguous,
+      occurrence: requestedOccurrence,
       target: intent.scope?.target || null,
       resolvedTrackId: resolvedTrack?.id || null,
       preserveUnselected: intent.scope?.preserveUnselected !== false,
@@ -98,6 +106,7 @@ function resolveProjectGraph(context = {}) {
       pendingDraft: context.pendingDraft || null,
       pmiSession: context.pmiSession || null,
       mixState: context.mixState || null,
+      evidenceByTrack: context.evidenceByTrack || null,
     });
   }
   return null;
@@ -118,4 +127,9 @@ function route(executor, action, strategy, fallback) {
 function finite(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
