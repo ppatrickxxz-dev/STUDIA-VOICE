@@ -240,10 +240,12 @@ await installIsolated('music-section-regeneration', async () => {
   installMusicSectionRegenerationUI();
 });
 
-try {
-  installPhysicalGateRuntime?.();
-} catch (error) {
-  recordBootFailure('physical-gate-runtime', error);
+if (typeof installPhysicalGateRuntime === 'function') {
+  try {
+    installPhysicalGateRuntime();
+  } catch (error) {
+    recordBootFailure('physical-gate-runtime', error);
+  }
 }
 
 fallbackShell();
