@@ -1,53 +1,76 @@
-const ONLINE_STATUS_REWRITES = Object.freeze([
-  [/Conectando ao motor HQ para criar uma base sem letra…/g, 'Preparando a produção conectada para criar o instrumental…'],
-  [/Conectando ao motor musical de alta qualidade…/g, 'Preparando a produção conectada…'],
-  [/Criando guia melódica separada e salvando a nova versão…/g, 'Criando a guia separada e salvando o novo take…'],
-  [/Pronto\. Demo HQ e guia foram salvas como Take/g, 'Pronto. Versão conectada e guia foram salvas como Take'],
-  [/Conecte sua sessão do PabloVoice para usar a geração de alta qualidade\. O rascunho local continua disponível\./g, 'Reconheça este aparelho para usar a produção conectada. Seu projeto continua preservado.'],
-  [/O motor de alta qualidade não está configurado ou está indisponível agora\. Use o rascunho local sem perder o projeto\./g, 'A produção conectada está indisponível agora. Tente novamente; nenhum take existente foi alterado.'],
-  [/O motor de alta qualidade atingiu o limite temporário\. Seu projeto foi preservado\./g, 'A produção conectada atingiu um limite temporário. Seu projeto foi preservado.'],
-  [/A geração de alta qualidade não concluiu/g, 'A produção conectada não concluiu'],
-]);
+import { RemoteAuthAdapter } from './remote-auth.mjs';
 
-let observer = null;
-let queued = false;
+const runtime = {
+  observer: null,
+  queued: false,
+  applying: false,
+  running: false,
+  auth: new RemoteAuthAdapter(),
+};
 
 export function installCreatorOnlineLanguage() {
-  if (observer) return () => observer.disconnect();
-  observer = new MutationObserver(queueSync);
-  observer.observe(document.documentElement, {
+  if (runtime.observer) return () => disconnect();
+  runtime.observer = new MutationObserver(queueSync);
+  runtime.observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['disabled'],
+    attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy'],
   });
+  document.addEventListener('click', onUnifiedCreate, true);
   window.addEventListener('online', queueSync);
   window.addEventListener('offline', queueSync);
   queueSync();
-  return () => {
-    observer?.disconnect();
-    observer = null;
-    window.removeEventListener('online', queueSync);
-    window.removeEventListener('offline', queueSync);
-  };
+  return disconnect;
+}
+
+function disconnect() {
+  runtime.observer?.disconnect();
+  runtime.observer = null;
+  document.removeEventListener('click', onUnifiedCreate, true);
+  window.removeEventListener('online', queueSync);
+  window.removeEventListener('offline', queueSync);
 }
 
 function queueSync() {
-  if (queued) return;
-  queued = true;
+  if (runtime.queued) return;
+  runtime.queued = true;
   queueMicrotask(() => {
-    queued = false;
-    syncCreatorLanguage();
+    runtime.queued = false;
+    syncUnifiedStudio();
   });
 }
 
-function syncCreatorLanguage() {
-  const form = document.querySelector('[data-song-create-form]');
-  if (!form) return;
-  ensureCompleteDuration(form);
-  syncBusyButtons(form);
-  syncStatus();
-  syncResult();
+function syncUnifiedStudio() {
+  if (runtime.applying) return;
+  runtime.applying = true;
+  try {
+    const html = document.documentElement;
+    setDataset(html, 'pvStudioMode', 'unified');
+    setDataset(html, 'pvNetworkMode', 'adaptive');
+
+    const health = document.querySelector('.pv-health');
+    if (health) setHtml(health, '<span></span>STUDIO · PRONTO');
+
+    document.querySelectorAll('[data-pv-network-copy]').forEach((node) => {
+      setText(node, 'motor adaptativo · mesmo projeto');
+    });
+
+    const homeLead = document.querySelector('.pv-intimate-home-hero .pv-lead');
+    if (homeLead) {
+      setText(homeLead, 'Sua ideia ganha som. O PabloVoice escolhe o melhor motor disponível sem mudar seu fluxo, projeto ou ferramentas.');
+    }
+
+    const form = document.querySelector('[data-song-create-form]');
+    if (form) {
+      ensureCompleteDuration(form);
+      ensureUnifiedCreation(form);
+      normalizeCreationStatus(form);
+      normalizeCreationResult(form);
+    }
+  } finally {
+    runtime.applying = false;
+  }
 }
 
 function ensureCompleteDuration(form) {
@@ -63,55 +86,137 @@ function ensureCompleteDuration(form) {
   }
 }
 
-function syncBusyButtons(form) {
-  const online = navigator.onLine !== false;
-  const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
-  const connected = form.querySelector('[data-song-create-hq]');
+function ensureUnifiedCreation(form) {
   const local = form.querySelector('[data-song-create-button]');
+  const connected = form.querySelector('[data-song-create-hq]');
+  if (!local && !connected) return;
 
-  if (connected) {
-    connected.classList.toggle('busy', connected.disabled);
-    if (online && connected.disabled) {
-      setText(connected, instrumental ? '● Produzindo instrumental…' : '● Produzindo música…');
-    }
+  setDataset(form, 'pvNetworkPolicy', 'adaptive_unified');
+  setDataset(form, 'pvExecutionPolicy', 'best_available');
+
+  const localCard = local?.closest('.pv-song-mode-card');
+  const connectedCard = connected?.closest('.pv-song-mode-card');
+  if (localCard && !localCard.hidden) localCard.hidden = true;
+  if (connectedCard && !connectedCard.hidden) connectedCard.hidden = true;
+
+  let card = form.querySelector('[data-pv-unified-create-card]');
+  if (!card) {
+    card = document.createElement('section');
+    card.className = 'pv-song-mode-card pv-unified-create-card';
+    card.dataset.pvUnifiedCreateCard = 'true';
+    card.innerHTML = '<div><strong>Produzir no PabloVoice</strong><span>Um único fluxo. O Studio escolhe automaticamente o melhor executor disponível e mantém o mesmo projeto editável.</span></div><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir música</button>';
+    (localCard || connectedCard || form.firstElementChild)?.insertAdjacentElement('beforebegin', card);
+    if (!card.isConnected) form.appendChild(card);
   }
-  if (local) {
-    local.classList.toggle('busy', local.disabled);
-    if (!online && local.disabled) setText(local, '♫ Criando offline…');
+
+  const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
+  const button = card.querySelector('[data-pv-unified-create]');
+  if (button) {
+    const busy = Boolean(local?.disabled || connected?.disabled || runtime.running);
+    if (button.disabled !== busy) button.disabled = busy;
+    button.classList.toggle('busy', busy);
+    if (!busy) setText(button, instrumental ? '● Produzir instrumental' : '● Produzir música');
   }
 }
 
-function syncStatus() {
-  const status = document.querySelector('#pv-song-create-status');
-  if (!status || navigator.onLine === false) return;
+async function onUnifiedCreate(event) {
+  const button = event.target.closest('[data-pv-unified-create]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (runtime.running) return;
+
+  const form = button.closest('[data-song-create-form]');
+  if (!form) return;
+  const local = form.querySelector('[data-song-create-button]');
+  const connected = form.querySelector('[data-song-create-hq]');
+
+  runtime.running = true;
+  button.disabled = true;
+  button.classList.add('busy');
+  setText(button, '● Preparando produção…');
+  setStatus(form, 'Escolhendo o melhor executor disponível para esta criação…');
+
+  try {
+    let session = null;
+    if (navigator.onLine !== false && connected && !connected.disabled) {
+      session = await runtime.auth.ensureSession().catch(() => null);
+    }
+
+    if (session?.accessToken && connected && !connected.disabled) {
+      connected.dataset.pvAuthBypass = '1';
+      connected.click();
+      return;
+    }
+
+    if (local && !local.disabled) {
+      // The intimate layer historically redirected local submit to the connected
+      // button while online. Hiding the internal connected executor for this
+      // synchronous dispatch keeps fallback selection inside this unified router.
+      if (connected && !connected.hidden) connected.hidden = true;
+      local.click();
+      return;
+    }
+
+    setStatus(form, 'Nenhum executor está pronto para esta ação agora. O projeto continua aberto e editável.', 'error');
+  } finally {
+    runtime.running = false;
+    queueSync();
+  }
+}
+
+function normalizeCreationStatus(form) {
+  const status = form.querySelector('#pv-song-create-status, [data-song-create-status]');
+  if (!status) return;
   let text = String(status.textContent || '');
-  for (const [pattern, replacement] of ONLINE_STATUS_REWRITES) text = text.replace(pattern, replacement);
+  const replacements = [
+    [/produção completa conectada/gi, 'produção do PabloVoice'],
+    [/produção conectada/gi, 'produção do PabloVoice'],
+    [/cria(?:ção|r) offline/gi, 'criação no PabloVoice'],
+    [/sem rede[^.]*\.?/gi, 'O Studio continua disponível.'],
+    [/conecte sua sessão[^.]*\.?/gi, 'O Studio pode usar outro executor disponível.'],
+    [/reconheça este aparelho[^.]*\.?/gi, 'O Studio pode usar outro executor disponível.'],
+  ];
+  for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement);
   setText(status, text);
 }
 
-function syncResult() {
-  const result = document.querySelector('#pv-song-create-result .pv-song-result');
+function normalizeCreationResult(form) {
+  const result = form.closest('#pv-song-creator')?.querySelector('#pv-song-create-result .pv-song-result');
   if (!result) return;
-  const online = navigator.onLine !== false;
   const badge = result.querySelector('.pv-card-head .pv-tag');
-  if (badge?.textContent?.includes('HQ')) setText(badge, 'CONECTADO · SALVO');
-  else if (!online && badge?.textContent?.includes('LOCAL')) setText(badge, 'OFFLINE · SALVO');
+  if (badge && /HQ|CONECTADO|ONLINE|OFFLINE|LOCAL/i.test(badge.textContent || '')) setText(badge, 'SALVO · EDITÁVEL');
 
   result.querySelectorAll('.pv-song-audios label').forEach((card) => {
     const strong = card.querySelector('strong');
     const note = card.querySelector('small');
-    const label = String(strong?.textContent || '');
-    if (/Demo IA HQ · base/i.test(label)) setText(strong, 'Base conectada');
-    else if (/Demo IA HQ/i.test(label)) setText(strong, 'Versão conectada');
-
-    if (!note) return;
-    let copy = String(note.textContent || '');
-    copy = copy
-      .replace(/Geração HQ orientada como base instrumental/gi, 'Produção conectada orientada como base instrumental')
-      .replace(/Mix de referência de alta qualidade/gi, 'Mix de referência da produção conectada')
-      .replace(/Instrumental local editável\./gi, 'Instrumental criado no aparelho e totalmente editável.');
-    setText(note, copy);
+    if (strong) {
+      const label = String(strong.textContent || '')
+        .replace(/Demo IA HQ · base/gi, 'Base produzida')
+        .replace(/Demo IA HQ/gi, 'Versão produzida')
+        .replace(/Base conectada/gi, 'Base produzida')
+        .replace(/Versão conectada/gi, 'Versão produzida');
+      setText(strong, label);
+    }
+    if (note) {
+      const copy = String(note.textContent || '')
+        .replace(/produção conectada/gi, 'produção do PabloVoice')
+        .replace(/geração HQ/gi, 'produção')
+        .replace(/mix de referência de alta qualidade/gi, 'mix de referência');
+      setText(note, copy);
+    }
   });
+}
+
+function setStatus(form, message, kind = '') {
+  const status = form.querySelector('#pv-song-create-status, [data-song-create-status]');
+  if (!status) return;
+  setText(status, message);
+  status.classList.toggle('error', kind === 'error');
+}
+
+function setDataset(node, key, value) {
+  if (node?.dataset?.[key] !== value) node.dataset[key] = value;
 }
 
 function setText(node, value) {
@@ -119,11 +224,18 @@ function setText(node, value) {
   if (node && node.textContent !== text) node.textContent = text;
 }
 
+function setHtml(node, value) {
+  if (node && node.innerHTML !== value) node.innerHTML = value;
+}
+
 installCreatorOnlineLanguage();
 
-export const CREATOR_CONNECTED_LANGUAGE_POLICY = Object.freeze({
-  productLabel: 'Produção conectada',
+export const CREATOR_UNIFIED_EXECUTION_POLICY = Object.freeze({
+  productMode: 'unified',
+  executorSelection: 'best_available',
+  connectivityIsImplementationDetail: true,
   providerBrandHiddenFromPrimaryUI: true,
-  busyStateNeverLooksIdle: true,
-  localLanguageOnlyWhenOffline: true,
+  fallbackBeforeRemoteDispatchWhenSupported: true,
+  remoteFailureNeverFabricatesSuccess: true,
+  remoteOnlyFailureScope: 'action-only',
 });
