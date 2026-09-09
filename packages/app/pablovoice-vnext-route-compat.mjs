@@ -46,6 +46,23 @@ function ensureReactionMotionCompatibility() {
       28% { transform:translate(-50%,-56%) scale(1.065) rotate(1.5deg); }
       58% { transform:translate(-50%,-48%) scale(1.025) rotate(-.5deg); }
     }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button {
+      animation:pvCompanionGroupBeat var(--pv-companion-beat-ms, 600ms) ease-in-out infinite;
+      transform-origin:50% 80%;
+    }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button:nth-child(2) { animation-delay:-.08s; }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button:nth-child(3) { animation-delay:-.16s; }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button:nth-child(4) { animation-delay:-.24s; }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button:nth-child(5) { animation-delay:-.32s; }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button:nth-child(6) { animation-delay:-.40s; }
+    .pv-vnext-shell:has(.pv-vnext-visualizer[data-vnext-reactive="music-graph"].playing) .pv-vnext-companion-dock button.music-reacting {
+      animation:pvCompanionDockBeat var(--pv-companion-beat-ms, 600ms) ease-in-out infinite;
+    }
+    @keyframes pvCompanionGroupBeat {
+      0%,100% { transform:translateY(0) rotate(0); }
+      36% { transform:translateY(-2px) rotate(-.7deg); }
+      64% { transform:translateY(1px) rotate(.5deg); }
+    }
   `;
   document.head.appendChild(style);
 }
@@ -91,6 +108,11 @@ function sync() {
     button.classList.toggle('active', active);
   });
 
+  const visualizer = shell.querySelector('[data-vnext-visualizer]');
+  const beatMs = visualizer?.style.getPropertyValue('--pv-companion-beat-ms');
+  if (beatMs) shell.style.setProperty('--pv-companion-beat-ms', beatMs);
+  else shell.style.removeProperty('--pv-companion-beat-ms');
+
   // Connectivity is an executor detail, never a second PabloVoice product mode.
   shell.querySelectorAll('[data-vnext-online], [data-vnext-network]').forEach((node) => {
     if (node.textContent !== 'STUDIO') node.textContent = 'STUDIO';
@@ -131,4 +153,5 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   unifiedConnectivityLanguage: true,
   musicGraphCompanionReactor: true,
   browserSafeBeatMotion: true,
+  fullDockMovesWithTempo: true,
 });
