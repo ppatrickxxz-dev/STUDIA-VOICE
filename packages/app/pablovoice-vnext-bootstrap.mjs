@@ -118,18 +118,16 @@ async function install(label, modulePath, exportName, { structuralObserver = fal
   }
 }
 
-// Canonical app boot and Android Open-With/import own the first interactive slice.
-// vNext mounts only after the core declares readiness and any pending native import
-// has been consumed, so presentation/reactivity can never starve the bridge.
+// Core boot and Android Open-With/import always own the first interactive slice.
 document.documentElement.dataset.pvVnextBoot = 'waiting-core';
 await waitForCanonicalCore();
 await prioritizeAndroidImport();
 document.documentElement.dataset.pvVnextBoot = 'mounting';
 
-// Every vNext observer is bounded to element-level structural changes outside vNext rails.
-// The route layer installs the Companion Reactor, so applying the same observer wrapper
-// there also prevents playback/readout text changes from becoming background DOM churn.
-await install('ui', './pablovoice-vnext-ui.mjs', 'installPabloVoiceVNextUI', { structuralObserver: true });
+// The vNext surface is strict-CSP: geometry uses SVG attributes and musical motion
+// uses Web Animations API. Its observers are limited to structural changes outside
+// the vNext-owned rails, while the Companion Reactor uses no MutationObserver.
+await install('ui', './pablovoice-vnext-ui-safe.mjs', 'installPabloVoiceVNextUI', { structuralObserver: true });
 await install('route', './pablovoice-vnext-route-compat.mjs', 'installPabloVoiceVNextRouteCompat', { structuralObserver: true });
 
 document.documentElement.dataset.pvVnextBoot = failures.length ? 'degraded' : 'ready';
@@ -145,6 +143,8 @@ export const PABLOVOICE_VNEXT_BOOT_POLICY = Object.freeze({
   prioritizesPendingAndroidImport: true,
   ignoresTextOnlyObserverFeedback: true,
   ignoresVnextOwnedObserverFeedback: true,
-  boundedRouteAndCompanionObservers: true,
+  boundedSurfaceObservers: true,
+  companionReactorObserverFree: true,
+  strictCspNoUnsafeInline: true,
   androidImportBridgeResponsive: true,
 });
