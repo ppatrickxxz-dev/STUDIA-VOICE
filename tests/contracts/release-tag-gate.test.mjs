@@ -23,7 +23,7 @@ test('manual release tag must exactly match the package version', async () => {
   assert.match(workflow, /Validate release tag intent/);
   assert.match(workflow, /EXPECTED_TAG="v\$\{PACKAGE_VERSION\}"/);
   assert.match(workflow, /RELEASE_TAG_MISMATCH/);
-  assert.equal(`v${pkg.version}`, 'v2.4.0-rc.1');
+  assert.equal(`v${pkg.version}`, 'v2.4.0');
 });
 
 test('release tag is created only after signed artifacts are uploaded', async () => {

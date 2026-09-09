@@ -13,7 +13,7 @@ import { RecordingAdapter } from './recording.mjs';
 import { PabloAudioEngine } from './audio-engine.mjs';
 import { attachHumanVocalTake, createSectionRecordingIntent, HUMAN_VOCAL_WORKFLOW_SCHEMA, vocalWorkflowProgress } from './core/src/human-vocal-workflow.mjs';
 
-const VERSION = '2.4.0-rc.1';
+const VERSION = '2.4.0';
 const MAX_FILE_BYTES = 300 * 1024 * 1024;
 const RECORDING_INTENT_KEY = 'pablovoice.humanVocal.recordingIntent';
 const app = document.querySelector('#app');
