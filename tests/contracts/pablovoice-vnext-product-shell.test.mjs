@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const index = await readFile(new URL('../../packages/app/index.html', import.meta.url), 'utf8');
 const headers = await readFile(new URL('../../packages/app/_headers', import.meta.url), 'utf8');
 const boot = await readFile(new URL('../../packages/app/pablovoice-vnext-bootstrap.mjs', import.meta.url), 'utf8');
-const ui = await readFile(new URL('../../packages/app/pablovoice-vnext-ui.mjs', import.meta.url), 'utf8');
+const ui = await readFile(new URL('../../packages/app/pablovoice-vnext-ui-safe.mjs', import.meta.url), 'utf8');
 const routeCompat = await readFile(new URL('../../packages/app/pablovoice-vnext-route-compat.mjs', import.meta.url), 'utf8');
 const css = await readFile(new URL('../../packages/app/pablovoice-vnext-ui.css', import.meta.url), 'utf8');
 const unifiedCss = await readFile(new URL('../../packages/app/pablovoice-vnext-unified.css', import.meta.url), 'utf8');
@@ -15,6 +15,7 @@ const sw = await readFile(new URL('../../packages/app/service-worker.js', import
 test('vNext is an additive surface over the proven unified core boot', () => {
   assert.match(index, /creator-unified-runtime\.mjs/);
   assert.match(index, /pablovoice-vnext-bootstrap\.mjs/);
+  assert.match(boot, /pablovoice-vnext-ui-safe\.mjs/);
   assert.match(boot, /installPabloVoiceVNextUI/);
   assert.match(boot, /installPabloVoiceVNextRouteCompat/);
   assert.match(boot, /coreBootIndependent:\s*true/);
@@ -25,7 +26,7 @@ test('vNext is an additive surface over the proven unified core boot', () => {
   assert.match(index, /pablovoice-vnext-release-fixes\.css/);
   for (const asset of [
     'pablovoice-vnext-bootstrap.mjs',
-    'pablovoice-vnext-ui.mjs',
+    'pablovoice-vnext-ui-safe.mjs',
     'pablovoice-vnext-route-compat.mjs',
     'pablovoice-companion-reactor-safe.mjs',
     'pablovoice-vnext-release-fixes.css',
@@ -51,9 +52,11 @@ test('vNext uses the unified Music Graph and canonical character sources', () =>
 
 test('connectivity never appears as a second vNext product mode', () => {
   assert.match(routeCompat, /unifiedConnectivityLanguage:\s*true/);
+  assert.match(routeCompat, /connectivityEventsNeverChangeProductMode:\s*true/);
   assert.match(routeCompat, /node\.textContent = 'STUDIO'/);
+  assert.match(ui, /data-vnext-network data-pv-connectivity-hidden="true">STUDIO/);
+  assert.match(ui, /data-vnext-online data-pv-connectivity-hidden="true">STUDIO/);
   assert.match(unifiedCss, /data-vnext-network/);
-  assert.match(unifiedCss, /visibility:hidden/);
 });
 
 test('vNext yields first interaction to canonical boot and Android import/Open-With', () => {
@@ -65,17 +68,30 @@ test('vNext yields first interaction to canonical boot and Android import/Open-W
   assert.match(boot, /waitsForCanonicalCore:\s*true/);
 });
 
-test('vNext observation is bounded and the Companion runtime does not inject CSP-blocked style elements', () => {
+test('vNext keeps the repository strict CSP and uses SVG/Web Animations instead of inline styles', () => {
+  assert.doesNotMatch(index, /unsafe-inline/);
+  assert.doesNotMatch(headers, /unsafe-inline/);
+  assert.match(index, /style-src 'self'/);
+  assert.match(headers, /style-src 'self'/);
+  assert.match(ui, /pv-vnext-lane-svg/);
+  assert.match(ui, /setAttribute\('x1'/);
+  assert.doesNotMatch(ui, /style="/);
+  assert.doesNotMatch(ui, /\.style\./);
+  assert.match(boot, /strictCspNoUnsafeInline:\s*true/);
+  assert.match(boot, /companionReactorObserverFree:\s*true/);
+  assert.match(routeCompat, /cspSafeReactionStyles:\s*true/);
+  assert.doesNotMatch(routeCompat, /createElement\('style'\)/);
+  assert.match(releaseCss, /pv-vnext-playhead-svg/);
+});
+
+test('vNext observation is bounded outside its own rails', () => {
   assert.match(boot, /isElementStructuralMutation/);
   assert.match(boot, /node\.nodeType === Node\.ELEMENT_NODE/);
   assert.match(boot, /VNEXT_OWNED_SELECTOR/);
   assert.match(boot, /isVnextOwnedMutation/);
   assert.match(routeCompat, /observer\.observe\(document\.documentElement, \{ childList: true, subtree: true \}\)/);
-  assert.match(routeCompat, /cspSafeReactionStyles:\s*true/);
-  assert.doesNotMatch(routeCompat, /createElement\('style'\)/);
-  assert.match(index, /style-src-elem 'self'; style-src-attr 'unsafe-inline'/);
-  assert.match(headers, /style-src-elem 'self'; style-src-attr 'unsafe-inline'/);
   assert.match(boot, /ignoresTextOnlyObserverFeedback:\s*true/);
   assert.match(boot, /ignoresVnextOwnedObserverFeedback:\s*true/);
+  assert.match(boot, /boundedSurfaceObservers:\s*true/);
   assert.match(boot, /androidImportBridgeResponsive:\s*true/);
 });
