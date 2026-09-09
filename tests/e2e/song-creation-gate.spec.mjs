@@ -25,7 +25,7 @@ test('SONG CREATION GATE: unified Studio creates editable music and drives the r
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible();
 
-  await page.locator('.pv-nav [data-route="compose"]').click();
+  await page.locator('.pv-vnext-nav [data-vnext-route-command="create"]').click();
   await expect(page.locator('#lyrics')).toBeVisible();
   await page.locator('#lyrics').fill('Quando a cidade apaga eu vejo você\nChega mais perto, deixa acontecer\nHoje eu não prometo o que vem depois\nQuando amanhecer, amanhã a gente vê');
 
