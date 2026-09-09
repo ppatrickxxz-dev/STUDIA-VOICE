@@ -274,7 +274,9 @@ function applyCreatorNetworkMode() {
   const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
   const onlineLabel = instrumental ? '● Produzir instrumental' : '● Produzir música';
 
-  localCard.hidden = online;
+  // Keep the complete creation surface available at all times. Network state
+  // changes execution, never which controls the artist is allowed to see.
+  localCard.hidden = false;
   onlineCard.hidden = !online;
   form.dataset.pvNetworkPolicy = online ? 'online_full' : 'offline_local';
 
@@ -421,7 +423,7 @@ async function authorizeAndContinue(button) {
   document.dispatchEvent(new CustomEvent('pablovoice:request-online-auth', {
     detail: { reason: button.closest('form')?.dataset.pvCreationKind === 'instrumental' ? 'Produzir instrumental' : 'Produzir música' },
   }));
-  setPabloState('listening', 'Só falta reconhecer este aparelho. Depois a criação online fica no fluxo normal.');
+  setPabloState('listening', 'Seu estúdio continua aberto. A produção máxima pode ser conectada nas configurações.');
 }
 
 function onRemoteAuthenticated() {

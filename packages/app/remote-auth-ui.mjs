@@ -42,7 +42,7 @@ async function injectPairing() {
   const card = document.createElement('article');
   card.id = 'pv-remote-pairing';
   card.className = 'pv-card chrome pv-online-activation';
-  card.hidden = true;
+  card.hidden = false;
   card.innerHTML = `<div class="pv-card-head"><div><h3>Entrar como proprietário</h3><p>Use seu e-mail para liberar a produção completa neste aparelho. Sem código de ativação.</p></div><span class="pv-tag">ACESSO TOTAL</span></div>
     <form class="pv-compose-row" data-remote-pair-form>
       <input class="pv-field" name="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="Seu e-mail" aria-label="E-mail do proprietário do PabloVoice">
@@ -55,25 +55,13 @@ async function injectPairing() {
 }
 
 function findHost() {
-  const creator = document.querySelector('#pv-song-creator');
-  if (creator) return creator.querySelector('#pv-song-create-result') || creator;
-  const composer = document.querySelector('#pv-ai-composer');
-  if (composer) return composer;
-  const voice = document.querySelector('#pv-ai-voice-harmony');
-  if (voice) return voice;
-  const capability = [...document.querySelectorAll('.pv-card')].find((card) => card.querySelector('h3')?.textContent?.trim() === 'Capacidades');
-  return capability || null;
+  return document.querySelector('.pv-modal.wide .pv-cap-table');
 }
 
 async function handleRequest(event) {
   requestedReason = String(event.detail?.reason || 'Este recurso').slice(0, 120);
-  const card = await injectPairing();
-  if (!card) return;
-  card.hidden = false;
-  card.dataset.pvUserVisible = 'true';
-  syncCard(card);
-  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setTimeout(() => card.querySelector('input[name="email"]')?.focus(), 180);
+  const status = document.querySelector('#pv-song-create-status');
+  setText(status, `${requestedReason} máxima: conecte seu e-mail nas configurações. Todo o estúdio e a criação local continuam disponíveis.`);
 }
 
 function syncCard(card) {
@@ -131,5 +119,6 @@ export const REMOTE_PAIRING_POLICY = Object.freeze({
   noProviderSecretInClient: true,
   noPasswordStoredInApp: true,
   demandDrivenUI: true,
+  blocksCreativeInterface: false,
   noSilentOfflineFallback: true,
 });

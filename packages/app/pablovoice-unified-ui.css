@@ -1,0 +1,14 @@
+/* PabloVoice unified product surface. Connectivity selects an executor; it never selects a product mode. */
+.pv-health[data-pv-unified-health="ready"] { font-size: 0 !important; }
+.pv-health[data-pv-unified-health="ready"]::after { content: 'STUDIO · PRONTO'; font-size: .72rem; letter-spacing: .08em; }
+[data-pv-network-copy][data-pv-unified-copy="true"] { font-size: 0 !important; }
+[data-pv-network-copy][data-pv-unified-copy="true"]::after { content: 'motor adaptativo · mesmo projeto'; font-size: .68rem; letter-spacing: .04em; }
+.pv-intimate-home-hero .pv-lead[data-pv-unified-lead="true"] { font-size: 0 !important; }
+.pv-intimate-home-hero .pv-lead[data-pv-unified-lead="true"]::after { content: 'Sua ideia ganha som. O PabloVoice escolhe o melhor motor disponível sem mudar seu fluxo, projeto ou ferramentas.'; font-size: 1rem; line-height: 1.55; }
+.pv-intimate-creator .pv-local-fallback-card,
+.pv-intimate-creator .pv-online-primary-card { display: none !important; }
+.pv-unified-create-card { display: grid !important; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; }
+.pv-unified-create-card > div { display: grid; gap: 5px; }
+.pv-unified-create-card strong { font-size: 1rem; }
+.pv-unified-create-card span { opacity: .72; line-height: 1.45; }
+@media (max-width: 720px) { .pv-unified-create-card { grid-template-columns: 1fr; } .pv-unified-create-card .pv-btn { width: 100%; } }

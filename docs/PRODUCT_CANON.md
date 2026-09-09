@@ -19,8 +19,12 @@ The same core can also support voice-over, podcast, narration, video audio, rest
 - Pablo AI should understand the current project/session and act through real tools/contracts.
 - PMI/Wave intelligence should explain what Pablo understood, what will change, what will be preserved and how to undo it.
 
-## Connectivity policy
-PabloVoice is **online-first and offline-safe**. When a network exists, full connected production is the normal path. Local generation is the automatic fallback only when the device is genuinely offline. Authentication/provider failures while online are surfaced honestly and must not silently downgrade to local or fabricate success. Local project editing, original media and saved work remain available during network loss.
+## Unified execution policy
+PabloVoice has **one Studio, one project model and one creative flow**. Online/offline are not product modes and are never choices the artist has to make. Connectivity, authentication and provider availability are execution details resolved behind the same interface.
+
+For each action, PabloVoice selects the best currently usable executor while preserving the same project, history, takes and editing surface. When a connected executor is not immediately usable and a real local/compatible executor exists, the action may use that executor without changing the UI into another mode. If an action truly requires a remote capability that is unavailable, only that action fails honestly; the Studio, project and all unrelated tools remain available.
+
+Security, authentication, ownership and evidence gates remain fail-closed. Once a remote execution has started, a provider failure must not be silently replaced by a different result or fabricated as success. This is a unified experience, not a weakening of runtime safety.
 
 ## Definition of done
 A feature is not done because code compiles or a button exists. Done requires:
@@ -48,4 +52,5 @@ A feature is not done because code compiles or a button exists. Done requires:
 - Do not promote benchmark scope beyond what was actually validated.
 - Do not let gamification reduce meaningful music creation.
 - Do not expose provider/model branding as the product architecture.
-- Do not make users choose “local vs online” when connectivity can select the correct path automatically.
+- Do not expose “local vs online” as product modes, status identities or separate creative paths.
+- Do not block the entire Studio because one executor, provider, authentication path or network capability is unavailable.

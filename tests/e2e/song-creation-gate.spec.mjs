@@ -8,7 +8,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('SONG CREATION GATE: offline fallback persists instrumental + guide, PMI evidence and exportable Studio mix', async ({ page, context }) => {
+test('SONG CREATION GATE: unified Studio selects local executor and persists editable music', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -16,6 +16,8 @@ test('SONG CREATION GATE: offline fallback persists instrumental + guide, PMI ev
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
 
   await page.locator('[data-action="new-project"]').first().click();
   await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Criação Musical');
@@ -28,6 +30,7 @@ test('SONG CREATION GATE: offline fallback persists instrumental + guide, PMI ev
 
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
   await form.locator('input[name="brief"]').fill('Pop R&B noturno, synths suaves, grave redondo e refrão aberto');
   await form.locator('.pv-intimate-advanced > summary').click();
   await form.locator('select[name="genre"]').selectOption('rnb');
@@ -36,13 +39,15 @@ test('SONG CREATION GATE: offline fallback persists instrumental + guide, PMI ev
   await form.locator('select[name="key"]').selectOption('A');
   await form.locator('input[name="mood"]').fill('íntimo, elegante, noturno');
 
-  // The deterministic local renderer is now explicitly the no-network fallback.
-  // Load the app first, then take the browser offline so the local engine remains
-  // fully available without blocking the already-loaded canonical shell.
+  // Remove network only to force coverage of the real local executor. The product
+  // remains the same unified Studio and exposes no local/remote selector.
   await context.setOffline(true);
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'offline');
-  await expect(form.locator('.pv-local-fallback-card')).toBeVisible();
-  await form.locator('[data-song-create-button]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
+  await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
+  await expect(form.locator('[data-song-create-button]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
+  await expect(form.locator('[data-song-create-hq]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
+  await form.locator('[data-pv-unified-create]').click();
 
   await expect(page.locator('#pv-song-create-status')).toContainText('Pronto.', { timeout: 45_000 });
   await expect(page.locator('#pv-song-create-result audio')).toHaveCount(2);
@@ -98,9 +103,8 @@ test('SONG CREATION GATE: offline fallback persists instrumental + guide, PMI ev
   expect(evidence.sections).toBeGreaterThanOrEqual(6);
   expect(evidence.confirmedSections).toBeGreaterThanOrEqual(6);
 
-  // Restore network before the app reload used to reopen the persisted Studio.
   await context.setOffline(false);
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
   await page.locator('[data-song-open-studio]').click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible({ timeout: 20_000 });
   await page.getByRole('tab', { name: 'Mixer' }).click();

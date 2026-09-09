@@ -8,16 +8,16 @@ const runtime = {
   auth: new RemoteAuthAdapter(),
 };
 
-export function installCreatorOnlineLanguage() {
+export function installCreatorUnifiedRuntime() {
   if (runtime.observer) return () => disconnect();
   runtime.observer = new MutationObserver(queueSync);
   runtime.observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy'],
+    attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-experience', 'data-pv-ready'],
   });
-  document.addEventListener('click', onUnifiedCreate, true);
+  document.addEventListener('click', onClick, true);
   window.addEventListener('online', queueSync);
   window.addEventListener('offline', queueSync);
   queueSync();
@@ -27,7 +27,7 @@ export function installCreatorOnlineLanguage() {
 function disconnect() {
   runtime.observer?.disconnect();
   runtime.observer = null;
-  document.removeEventListener('click', onUnifiedCreate, true);
+  document.removeEventListener('click', onClick, true);
   window.removeEventListener('online', queueSync);
   window.removeEventListener('offline', queueSync);
 }
@@ -50,24 +50,18 @@ function syncUnifiedStudio() {
     setDataset(html, 'pvNetworkMode', 'adaptive');
 
     const health = document.querySelector('.pv-health');
-    if (health) setHtml(health, '<span></span>STUDIO · PRONTO');
-
-    document.querySelectorAll('[data-pv-network-copy]').forEach((node) => {
-      setText(node, 'motor adaptativo · mesmo projeto');
-    });
-
-    const homeLead = document.querySelector('.pv-intimate-home-hero .pv-lead');
-    if (homeLead) {
-      setText(homeLead, 'Sua ideia ganha som. O PabloVoice escolhe o melhor motor disponível sem mudar seu fluxo, projeto ou ferramentas.');
+    if (health) {
+      setDataset(health, 'pvUnifiedHealth', 'ready');
+      health.setAttribute('aria-label', 'Studio pronto');
     }
+    document.querySelectorAll('[data-pv-network-copy]').forEach((node) => setDataset(node, 'pvUnifiedCopy', 'true'));
+    const homeLead = document.querySelector('.pv-intimate-home-hero .pv-lead');
+    if (homeLead) setDataset(homeLead, 'pvUnifiedLead', 'true');
 
     const form = document.querySelector('[data-song-create-form]');
-    if (form) {
-      ensureCompleteDuration(form);
-      ensureUnifiedCreation(form);
-      normalizeCreationStatus(form);
-      normalizeCreationResult(form);
-    }
+    if (!form) return;
+    ensureCompleteDuration(form);
+    ensureUnifiedCreation(form);
   } finally {
     runtime.applying = false;
   }
@@ -75,11 +69,13 @@ function syncUnifiedStudio() {
 
 function ensureCompleteDuration(form) {
   const duration = form.elements.duration;
-  if (!(duration instanceof HTMLSelectElement) || duration.querySelector('option[value="200"]')) return;
-  const option = document.createElement('option');
-  option.value = '200';
-  option.textContent = '3:20 · completa';
-  duration.appendChild(option);
+  if (!(duration instanceof HTMLSelectElement)) return;
+  if (!duration.querySelector('option[value="200"]')) {
+    const option = document.createElement('option');
+    option.value = '200';
+    option.textContent = '3:20 · completa';
+    duration.appendChild(option);
+  }
   for (const item of duration.options) {
     if (item.value === '60' && /rascunho/i.test(item.textContent)) item.textContent = '1:00 · curta';
     if (item.value === '120' && /demo/i.test(item.textContent)) item.textContent = '2:00 · média';
@@ -105,21 +101,25 @@ function ensureUnifiedCreation(form) {
     card.className = 'pv-song-mode-card pv-unified-create-card';
     card.dataset.pvUnifiedCreateCard = 'true';
     card.innerHTML = '<div><strong>Produzir no PabloVoice</strong><span>Um único fluxo. O Studio escolhe automaticamente o melhor executor disponível e mantém o mesmo projeto editável.</span></div><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir música</button>';
-    (localCard || connectedCard || form.firstElementChild)?.insertAdjacentElement('beforebegin', card);
-    if (!card.isConnected) form.appendChild(card);
+    const anchor = localCard || connectedCard || form.firstElementChild;
+    if (anchor) anchor.insertAdjacentElement('beforebegin', card);
+    else form.appendChild(card);
   }
 
   const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
   const button = card.querySelector('[data-pv-unified-create]');
-  if (button) {
-    const busy = Boolean(local?.disabled || connected?.disabled || runtime.running);
-    if (button.disabled !== busy) button.disabled = busy;
-    button.classList.toggle('busy', busy);
-    if (!busy) setText(button, instrumental ? '● Produzir instrumental' : '● Produzir música');
-  }
+  if (!button) return;
+  const available = Boolean((local && !local.disabled) || (connected && !connected.disabled));
+  const busy = runtime.running || !available;
+  if (button.disabled !== busy) button.disabled = busy;
+  button.classList.toggle('busy', runtime.running);
+  if (!runtime.running) setText(button, instrumental ? '● Produzir instrumental' : '● Produzir música');
 }
 
-async function onUnifiedCreate(event) {
+async function onClick(event) {
+  const kindButton = event.target.closest('[data-pv-kind]');
+  if (kindButton) return queueMicrotask(queueSync);
+
   const button = event.target.closest('[data-pv-unified-create]');
   if (!button) return;
   event.preventDefault();
@@ -135,7 +135,6 @@ async function onUnifiedCreate(event) {
   button.disabled = true;
   button.classList.add('busy');
   setText(button, '● Preparando produção…');
-  setStatus(form, 'Escolhendo o melhor executor disponível para esta criação…');
 
   try {
     let session = null;
@@ -150,69 +149,20 @@ async function onUnifiedCreate(event) {
     }
 
     if (local && !local.disabled) {
-      // The intimate layer historically redirected local submit to the connected
-      // button while online. Hiding the internal connected executor for this
-      // synchronous dispatch keeps fallback selection inside this unified router.
-      if (connected && !connected.hidden) connected.hidden = true;
+      if (connected) connected.hidden = true;
       local.click();
       return;
     }
 
-    setStatus(form, 'Nenhum executor está pronto para esta ação agora. O projeto continua aberto e editável.', 'error');
+    const status = form.querySelector('#pv-song-create-status, [data-song-create-status]');
+    if (status) {
+      setText(status, 'Nenhum executor está pronto para esta ação agora. O projeto continua aberto e editável.');
+      status.classList.add('error');
+    }
   } finally {
     runtime.running = false;
     queueSync();
   }
-}
-
-function normalizeCreationStatus(form) {
-  const status = form.querySelector('#pv-song-create-status, [data-song-create-status]');
-  if (!status) return;
-  let text = String(status.textContent || '');
-  const replacements = [
-    [/produção completa conectada/gi, 'produção do PabloVoice'],
-    [/produção conectada/gi, 'produção do PabloVoice'],
-    [/cria(?:ção|r) offline/gi, 'criação no PabloVoice'],
-    [/sem rede[^.]*\.?/gi, 'O Studio continua disponível.'],
-    [/conecte sua sessão[^.]*\.?/gi, 'O Studio pode usar outro executor disponível.'],
-    [/reconheça este aparelho[^.]*\.?/gi, 'O Studio pode usar outro executor disponível.'],
-  ];
-  for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement);
-  setText(status, text);
-}
-
-function normalizeCreationResult(form) {
-  const result = form.closest('#pv-song-creator')?.querySelector('#pv-song-create-result .pv-song-result');
-  if (!result) return;
-  const badge = result.querySelector('.pv-card-head .pv-tag');
-  if (badge && /HQ|CONECTADO|ONLINE|OFFLINE|LOCAL/i.test(badge.textContent || '')) setText(badge, 'SALVO · EDITÁVEL');
-
-  result.querySelectorAll('.pv-song-audios label').forEach((card) => {
-    const strong = card.querySelector('strong');
-    const note = card.querySelector('small');
-    if (strong) {
-      const label = String(strong.textContent || '')
-        .replace(/Demo IA HQ · base/gi, 'Base produzida')
-        .replace(/Demo IA HQ/gi, 'Versão produzida')
-        .replace(/Base conectada/gi, 'Base produzida')
-        .replace(/Versão conectada/gi, 'Versão produzida');
-      setText(strong, label);
-    }
-    if (note) {
-      const copy = String(note.textContent || '')
-        .replace(/produção conectada/gi, 'produção do PabloVoice')
-        .replace(/geração HQ/gi, 'produção')
-        .replace(/mix de referência de alta qualidade/gi, 'mix de referência');
-      setText(note, copy);
-    }
-  });
-}
-
-function setStatus(form, message, kind = '') {
-  const status = form.querySelector('#pv-song-create-status, [data-song-create-status]');
-  if (!status) return;
-  setText(status, message);
-  status.classList.toggle('error', kind === 'error');
 }
 
 function setDataset(node, key, value) {
@@ -224,11 +174,7 @@ function setText(node, value) {
   if (node && node.textContent !== text) node.textContent = text;
 }
 
-function setHtml(node, value) {
-  if (node && node.innerHTML !== value) node.innerHTML = value;
-}
-
-installCreatorOnlineLanguage();
+installCreatorUnifiedRuntime();
 
 export const CREATOR_UNIFIED_EXECUTION_POLICY = Object.freeze({
   productMode: 'unified',
