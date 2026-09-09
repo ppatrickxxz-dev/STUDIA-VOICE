@@ -36,9 +36,12 @@ test('All six canonical Companions have contextual musical roles', () => {
   }
 });
 
-test('vNext installs the reactor and hides connectivity as a product mode', () => {
+test('vNext installs the reactor, moves the complete dock with tempo and hides connectivity as a product mode', () => {
   assert.match(routeCompat, /installPabloVoiceCompanionReactor/);
   assert.match(routeCompat, /musicGraphCompanionReactor:\s*true/);
+  assert.match(routeCompat, /fullDockMovesWithTempo:\s*true/);
+  assert.match(routeCompat, /--pv-companion-beat-ms/);
+  assert.match(routeCompat, /pvCompanionGroupBeat/);
   assert.match(routeCompat, /unifiedConnectivityLanguage:\s*true/);
   assert.match(routeCompat, /\[data-vnext-online\], \[data-vnext-network\]/);
   assert.match(routeCompat, /node\.textContent = 'STUDIO'/);
