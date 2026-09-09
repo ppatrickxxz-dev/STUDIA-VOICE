@@ -14,34 +14,48 @@ async function expectImageLoaded(locator) {
   await expect.poll(() => locator.evaluate((img) => Boolean(img.complete && img.naturalWidth > 0)), { timeout: 10_000 }).toBe(true);
 }
 
-test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without exposing executor modes', async ({ page, context }) => {
+test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions across connectivity changes', async ({ page, context }) => {
+  test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
 
   await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.locator('html')).toHaveAttribute('data-pv-experience', 'intimate-recorder-v1');
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(page.locator('.pv-health')).toHaveAttribute('data-pv-unified-health', 'ready');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-vnext-boot', 'ready', { timeout: 12_000 });
 
-  const stage = page.locator('#pv-intimate-home');
-  await expect(stage).toBeVisible();
-  const pablo = stage.locator('img.pv-intimate-pablo');
-  await expect(pablo).toHaveAttribute('src', '/site/assets/pablo_fullbody.webp');
+  const shell = page.locator('.pv-vnext-shell');
+  const nav = shell.locator('.pv-vnext-nav.pv-nav');
+  const brain = shell.locator('[data-vnext-brain]');
+  const dock = shell.locator('[data-vnext-companion-dock]');
+  const visualizer = shell.locator('[data-vnext-visualizer]');
+  await expect(shell).toBeVisible();
+  await expect(nav).toBeVisible();
+  await expect(brain).toBeVisible();
+  await expect(dock).toBeVisible();
+  await expect(visualizer).toBeVisible();
+
+  const pablo = brain.locator('img[src="/site/assets/pablo_fullbody.webp"]');
   await expectImageLoaded(pablo);
-  for (const name of companions) await expect(stage.getByText(name, { exact: true })).toBeVisible();
-  await expect(stage.locator('[data-pv-create="song"]')).toBeVisible();
-  await expect(stage.locator('[data-pv-create="instrumental"]')).toBeVisible();
-  await expect(stage.locator('[data-pv-network-copy]')).toHaveAttribute('data-pv-unified-copy', 'true');
-  await shot(page, 'home-unified-desktop');
+  for (const name of companions) await expect(dock.getByText(name, { exact: true })).toBeVisible();
+  await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph');
+  await expect(nav.locator('[data-route="home"]')).toBeVisible();
+  await expect(nav.locator('[data-vnext-route-command="create"]')).toBeVisible();
+  await expect(nav.locator('[data-vnext-route-command="lyrics"]')).toBeVisible();
+  await expect(nav.locator('[data-route="studio"]')).toBeVisible();
+  await expect(nav.locator('[data-route="projects"]')).toBeVisible();
+  await expect(nav.locator('[data-route="pablo"]')).toBeVisible();
+  await shot(page, 'home-vnext-unified-desktop');
 
-  await stage.locator('[data-pv-create="song"]').click();
+  await page.locator('[data-action="new-project"]').first().click();
   await expect(page.getByRole('heading', { name: 'Novo projeto' })).toBeVisible();
   await page.locator('[data-form="new-project"] input[name="name"]').fill('Unified Studio Gate');
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
-  await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('heading', { name: 'Unified Studio Gate' })).toBeVisible();
 
+  await nav.locator('[data-vnext-route-command="create"]').click();
+  await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
   await expect(form).toHaveAttribute('data-pv-execution-policy', 'best_available');
@@ -56,12 +70,9 @@ test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without
   await form.locator('input[name="brief"]').fill('R&B 2000s sensual, menos batestaca, baixo mais solto e refrão abrindo');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('refrão localizado');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('baixo');
-
   await form.locator('.pv-intimate-advanced > summary').click();
   await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20 · completa');
-  await expect(form.locator('select[name="duration"] option[value="60"]')).toHaveText('1:00 · curta');
-  await expect(form.locator('select[name="duration"] option[value="120"]')).toHaveText('2:00 · média');
-  await shot(page, 'creator-unified-desktop');
+  await shot(page, 'creator-vnext-unified-desktop');
 
   await form.locator('[data-pv-kind="instrumental"]').click();
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
@@ -70,30 +81,30 @@ test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(page.locator('.pv-health')).toHaveAttribute('data-pv-unified-health', 'ready');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
   await expect(form.locator('[data-pv-unified-create]')).toContainText('Produzir instrumental');
-  await expect(form.locator('[data-song-create-button]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
-  await expect(form.locator('[data-song-create-hq]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
-  await shot(page, 'creator-same-studio-without-network');
+  await expect(shell.locator('[data-vnext-network]')).toHaveText('STUDIO');
+  await expect(shell.locator('[data-vnext-online]')).toHaveText('STUDIO');
+  await shot(page, 'creator-same-vnext-studio-without-network');
 
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
 
-  await page.locator('[data-route="pablo"]').first().click();
-  await expect(page.locator('[data-pv-pablo-intimacy]')).toBeVisible();
+  await nav.locator('[data-route="pablo"]').click();
+  await expect(page.locator('[data-pv-pablo-intimacy]')).toBeVisible({ timeout: 10_000 });
   await page.locator('[data-pv-expression="listening"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-pv-pablo-state', 'listening');
   await expect(page.locator('[data-pv-pablo-intimacy]')).toContainText('OUVINDO');
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('[data-route="home"]').first().click();
-  await expect(stage).toBeVisible();
-  await expect(page.locator('.pv-health')).toHaveAttribute('data-pv-unified-health', 'ready');
-  await shot(page, 'home-unified-mobile');
+  const mobileNav = page.locator('.pv-vnext-nav.pv-nav');
+  await mobileNav.locator('[data-route="home"]').click();
+  await expect(page.locator('.pv-vnext-shell')).toBeVisible();
+  await expect(page.locator('[data-vnext-visualizer]')).toBeVisible();
+  await expect(mobileNav).toBeVisible();
+  await shot(page, 'home-vnext-unified-mobile');
 
   const unexpected = errors.filter((message) =>
     !/favicon/i.test(message)

@@ -1,10 +1,14 @@
-const CACHE = 'pablovoice-shell-v2.4.0-r10';
+const CACHE = 'pablovoice-shell-v2.4.0-r13';
 const SHELL = [
   './', './index.html', './styles.css', './preboot.mjs', './app.js', './storage.mjs', './recording.mjs',
   './audio-engine.mjs', './manifest.webmanifest', './core/src/project.mjs',
   './audio/src/presets.mjs', './audio/src/automation/region-restoration.mjs',
   './audio/src/analyzers/vocal-restoration.mjs', './songwriting/src/analyzer.mjs',
   './creator-unified-runtime.mjs', './pablovoice-unified-ui.css',
+  './pablovoice-vnext-bootstrap.mjs', './pablovoice-vnext-ui-safe.mjs', './pablovoice-vnext-route-compat.mjs',
+  './pablovoice-companion-reactor-safe.mjs',
+  './pablovoice-vnext-ui.css', './pablovoice-vnext-compat.css', './pablovoice-vnext-unified.css', './pablovoice-vnext-release-fixes.css',
+  './project-context.mjs', './music-intelligence/src/project-music-graph.mjs', './music-intelligence/src/operation-router.mjs',
 ];
 
 self.addEventListener('install', (event) => {

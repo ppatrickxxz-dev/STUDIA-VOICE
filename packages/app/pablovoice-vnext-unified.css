@@ -1,0 +1,8 @@
+/* vNext inherits the single-Studio policy. Connectivity is never a product mode. */
+html[data-pv-studio-mode="unified"] [data-vnext-network]:not([data-pv-connectivity-hidden="true"]),
+html[data-pv-studio-mode="unified"] [data-vnext-online]:not([data-pv-connectivity-hidden="true"]) { visibility:hidden !important; }
+html[data-pv-studio-mode="unified"] [data-vnext-network][data-pv-connectivity-hidden="true"],
+html[data-pv-studio-mode="unified"] [data-vnext-online][data-pv-connectivity-hidden="true"] { visibility:visible !important; }
+html[data-pv-experience-vnext] .pv-vnext-brand small { letter-spacing:.09em; opacity:.66; }
+html[data-pv-experience-vnext] .pv-vnext-visualizer { isolation:isolate; }
+html[data-pv-experience-vnext] .pv-vnext-visualizer[data-vnext-reaction-state="playing"] { box-shadow:0 18px 46px rgba(35,20,73,.36), inset 0 0 0 1px rgba(191,157,255,.12); }
