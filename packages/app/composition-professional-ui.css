@@ -1,0 +1,95 @@
+:root{--pv-keyboard-inset:0px}
+
+.pv-compose-pro{padding-bottom:calc(92px + var(--pv-keyboard-inset));scroll-padding-bottom:calc(100px + var(--pv-keyboard-inset))}
+.pv-compose-pro .pv-card{border-radius:20px}
+.pv-compose-pro .pv-card.chrome{background:linear-gradient(180deg,rgba(17,18,29,.94),rgba(10,11,18,.94))}
+.pv-compose-pro .pv-card-head{gap:12px;align-items:flex-start}
+.pv-compose-pro .pv-card-head h3{font-size:clamp(1.08rem,3vw,1.3rem);letter-spacing:-.02em}
+.pv-compose-pro .pv-card-head p{max-width:52ch;line-height:1.45}
+.pv-compose-pro .pv-btn{min-height:44px;padding:10px 15px;border-radius:13px;font-weight:750;line-height:1.15}
+.pv-compose-pro .pv-btn.primary{background:linear-gradient(180deg,#a77aff,#8355ef);border-color:rgba(205,184,255,.52);color:#0b0713;box-shadow:0 8px 24px rgba(119,73,221,.18)}
+.pv-compose-pro .pv-btn.primary:hover,.pv-compose-pro .pv-btn.primary:focus-visible{filter:brightness(1.06)}
+.pv-compose-pro .pv-btn:disabled{opacity:.46;filter:saturate(.35);color:rgba(235,231,244,.68);background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.08);box-shadow:none}
+
+.pv-lyrics-workspace{position:relative;overflow:visible!important}
+.pv-lyrics-workspace .pv-text-label{display:flex;align-items:center;justify-content:space-between}
+.pv-lyrics-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 10px;padding:9px 10px;border:1px solid rgba(255,255,255,.075);border-radius:14px;background:rgba(255,255,255,.025)}
+.pv-lyrics-toolbar-copy{display:grid;gap:1px;min-width:125px}
+.pv-lyrics-toolbar-copy b{font-size:.78rem;color:#ece9f5}
+.pv-lyrics-toolbar-copy span{font-size:.68rem;color:#9296a8;white-space:nowrap}
+.pv-lyrics-section-actions{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}
+.pv-lyrics-section-actions::-webkit-scrollbar{display:none}
+.pv-compose-chip,.pv-compose-disclosure{appearance:none;border:1px solid rgba(199,167,255,.18);background:rgba(199,167,255,.055);color:#ded7ec;border-radius:999px;min-height:36px;padding:7px 11px;font:inherit;font-size:.73rem;font-weight:720;cursor:pointer;white-space:nowrap}
+.pv-compose-chip:focus-visible,.pv-compose-disclosure:focus-visible{outline:2px solid #b995ff;outline-offset:2px}
+.pv-compose-pro #lyrics{min-height:clamp(280px,45vh,560px);resize:vertical;font-size:16px!important;line-height:1.65;letter-spacing:.005em;padding:16px 17px;caret-color:#c7a7ff;scroll-margin-block:18vh;overscroll-behavior:contain}
+.pv-compose-pro #lyrics:focus{border-color:rgba(185,149,255,.65);box-shadow:0 0 0 3px rgba(149,93,255,.10),0 20px 55px rgba(0,0,0,.20)}
+
+#pv-ai-composer.pv-ai-composer-pro{margin-top:14px;padding:16px 17px;transition:border-color .16s ease}
+#pv-ai-composer.pv-ai-composer-pro .pv-card-head{margin-bottom:0}
+#pv-ai-composer.pv-ai-composer-pro .pv-tag{display:none}
+#pv-ai-composer.pv-ai-composer-pro .pv-compose-disclosure{margin-left:auto;flex:0 0 auto}
+#pv-ai-composer.pv-ai-composer-pro.is-collapsed>[data-ai-compose-form],#pv-ai-composer.pv-ai-composer-pro.is-collapsed>.pv-tips,#pv-ai-composer.pv-ai-composer-pro.is-collapsed>.pv-actions{display:none!important}
+#pv-ai-composer.pv-ai-composer-pro:not(.is-collapsed){border-color:rgba(167,122,255,.28)}
+#pv-ai-composer.pv-ai-composer-pro [data-ai-compose-form]{margin-top:14px}
+#pv-ai-composer.pv-ai-composer-pro .pv-compose-row{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(0,2fr) auto;gap:8px;align-items:stretch}
+#pv-ai-composer.pv-ai-composer-pro .pv-compose-row .pv-field{min-height:44px}
+#pv-ai-composer.pv-ai-composer-pro #pv-ai-compose-result{min-height:0;padding:12px 13px;line-height:1.5}
+#pv-ai-composer.pv-ai-composer-pro .pv-actions{gap:8px;margin-top:10px}
+
+#pv-song-creator.pv-song-creator-pro{margin-top:14px;padding:17px}
+#pv-song-creator.pv-song-creator-pro>.pv-card-head{margin-bottom:12px}
+#pv-song-creator.pv-song-creator-pro>.pv-card-head .pv-tag{opacity:.65}
+#pv-song-creator.pv-song-creator-pro [data-song-create-form]{gap:12px}
+.pv-create-kind{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px;border:1px solid rgba(255,255,255,.08);border-radius:15px;background:rgba(0,0,0,.16)}
+.pv-create-kind>span{padding-left:8px;color:#9fa3b4;font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.pv-create-kind>div{display:grid;grid-template-columns:1fr 1fr;gap:4px;min-width:min(340px,62%)}
+.pv-create-kind button{appearance:none;min-height:40px;border:1px solid transparent;border-radius:10px;background:transparent;color:#a9adbb;padding:8px 11px;font:inherit;font-size:.78rem;font-weight:760;cursor:pointer}
+.pv-create-kind button.active{background:rgba(167,122,255,.15);border-color:rgba(180,146,255,.28);color:#f3eeff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025)}
+#pv-song-creator.pv-song-creator-pro .pv-song-fields{grid-template-columns:2fr 1fr 1.25fr 1.15fr;gap:8px}
+#pv-song-creator.pv-song-creator-pro .pv-field{min-height:44px;border-radius:12px}
+#pv-song-creator.pv-song-creator-pro .pv-song-start-mode{padding:11px 12px;margin:0}
+.pv-creation-advanced{border:1px solid rgba(255,255,255,.075);border-radius:14px;background:rgba(255,255,255,.018);overflow:hidden}
+.pv-creation-advanced>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:9px 12px;cursor:pointer;font-size:.82rem;font-weight:760;color:#d8d9e2}
+.pv-creation-advanced>summary::-webkit-details-marker{display:none}
+.pv-creation-advanced>summary:after{content:'+';font-size:1rem;color:#a987ef}
+.pv-creation-advanced[open]>summary:after{content:'–'}
+.pv-creation-advanced>summary span{margin-left:auto;font-size:.7rem;font-weight:500;color:#838797}
+.pv-creation-advanced>[data-pv-advanced-body]{display:grid;gap:11px;padding:0 12px 12px}
+#pv-song-creator.pv-song-creator-pro .pv-song-vocal-profile{border-radius:14px;padding:13px;background:rgba(124,58,237,.035)}
+#pv-song-creator.pv-song-creator-pro .pv-song-mode-grid{grid-template-columns:1fr!important;gap:8px}
+#pv-song-creator.pv-song-creator-pro .pv-song-mode-card[hidden]{display:none!important}
+#pv-song-creator.pv-song-creator-pro .pv-unified-create-card,#pv-song-creator.pv-song-creator-pro [data-pv-unified-create-card]{display:flex!important;align-items:center;justify-content:space-between;gap:14px;padding:12px 13px;min-height:auto;border-radius:15px}
+#pv-song-creator.pv-song-creator-pro .pv-unified-create-card>div{display:grid;gap:2px;min-width:0}
+#pv-song-creator.pv-song-creator-pro .pv-unified-create-card strong{font-size:.88rem}
+#pv-song-creator.pv-song-creator-pro .pv-unified-create-card span{min-height:0;font-size:.72rem;line-height:1.35;color:#9296a7}
+#pv-song-creator.pv-song-creator-pro [data-pv-unified-create]{flex:0 0 auto;white-space:nowrap}
+#pv-song-creator.pv-song-creator-pro .pv-create-kind-legacy{min-height:44px!important}
+
+html.pv-keyboard-open .pv-vnext-companion-dock,html.pv-keyboard-open .pv-nav{visibility:hidden;pointer-events:none}
+html.pv-keyboard-open .pv-compose-pro #lyrics{min-height:42vh}
+
+@media(max-width:760px){
+  .pv-compose-pro{padding-inline:0}
+  .pv-compose-pro>.pv-hero{margin-bottom:12px}
+  .pv-compose-pro>.pv-hero .pv-lead{font-size:.88rem;line-height:1.45}
+  .pv-compose-pro .pv-grid{gap:10px}
+  .pv-lyrics-toolbar{align-items:flex-start;flex-direction:column}
+  .pv-lyrics-section-actions{width:100%}
+  .pv-compose-chip{flex:0 0 auto}
+  #pv-ai-composer.pv-ai-composer-pro .pv-compose-row{grid-template-columns:1fr 1.8fr}
+  #pv-ai-composer.pv-ai-composer-pro .pv-compose-row .pv-btn{grid-column:1/-1;width:100%}
+  #pv-song-creator.pv-song-creator-pro .pv-song-fields{grid-template-columns:1fr 1fr}
+  .pv-create-kind{align-items:stretch;flex-direction:column}
+  .pv-create-kind>span{padding:2px 4px 0}
+  .pv-create-kind>div{width:100%;min-width:0}
+  #pv-song-creator.pv-song-creator-pro .pv-unified-create-card,#pv-song-creator.pv-song-creator-pro [data-pv-unified-create-card]{align-items:stretch;flex-direction:column}
+  #pv-song-creator.pv-song-creator-pro [data-pv-unified-create]{width:100%}
+}
+
+@media(max-width:520px){
+  #pv-ai-composer.pv-ai-composer-pro,#pv-song-creator.pv-song-creator-pro{padding:14px;border-radius:18px}
+  #pv-ai-composer.pv-ai-composer-pro .pv-compose-row{grid-template-columns:1fr}
+  #pv-ai-composer.pv-ai-composer-pro .pv-compose-row .pv-btn{grid-column:auto}
+  #pv-song-creator.pv-song-creator-pro .pv-song-fields{grid-template-columns:1fr 1fr!important}
+  .pv-creation-advanced>summary span{display:none}
+}
