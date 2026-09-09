@@ -15,7 +15,7 @@ test('remote auth exposes passwordless owner email without client secrets', () =
   assert.doesNotMatch(authSource, /OPENAI_API_KEY|GROQ_API_KEY|AI_GATEWAY_API_KEY/);
 });
 
-test('owner access UI is installed by preboot, demand-driven and secret-free', () => {
+test('owner access stays in settings and never blocks the creative interface', () => {
   assert.match(prebootSource, /installRemoteAuthUI/);
   assert.match(uiSource, /pablovoice:request-online-auth/);
   assert.match(uiSource, /Entrar como proprietário/);
@@ -26,7 +26,9 @@ test('owner access UI is installed by preboot, demand-driven and secret-free', (
   assert.match(uiSource, /noProviderSecretInClient:\s*true/);
   assert.match(uiSource, /demandDrivenUI:\s*true/);
   assert.match(uiSource, /noSilentOfflineFallback:\s*true/);
-  assert.match(uiSource, /card\.hidden = true/);
+  assert.match(uiSource, /\.pv-modal\.wide \.pv-cap-table/);
+  assert.match(uiSource, /blocksCreativeInterface:\s*false/);
+  assert.doesNotMatch(uiSource, /scrollIntoView/);
 });
 
 test('canonical device-auth contract requires hash-only single-use codes', () => {

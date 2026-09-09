@@ -24,6 +24,7 @@
 
 html[data-pv-experience="intimate-recorder-v1"] { background: #030405; }
 html[data-pv-experience="intimate-recorder-v1"] body {
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 74% -8%, rgba(220,225,229,.055), transparent 30%),
     radial-gradient(circle at 12% 44%, rgba(255,255,255,.018), transparent 24%),
@@ -232,10 +233,15 @@ html[data-pv-network-mode="offline"] .pv-intimate-creator{border-color:rgba(203,
 
 /* Desktop: more like hardware workbench; mobile keeps thumb navigation. */
 @media (min-width:1050px){
-  html[data-pv-experience="intimate-recorder-v1"] .pv-shell{width:min(1280px,calc(100% - 112px));margin-left:94px;margin-right:auto;padding-bottom:38px}
-  html[data-pv-experience="intimate-recorder-v1"] .pv-nav{left:15px;right:auto;top:50%;bottom:auto;width:66px;height:auto;display:flex;flex-direction:column;gap:5px;padding:8px 5px;transform:translateY(-50%);border-radius:21px;background:rgba(5,6,7,.93);box-shadow:0 22px 70px rgba(0,0,0,.5);backdrop-filter:blur(20px)}
-  html[data-pv-experience="intimate-recorder-v1"] .pv-nav button{width:100%;min-width:0;min-height:57px;flex:none;padding:6px 3px;border-radius:13px}
-  html[data-pv-experience="intimate-recorder-v1"] .pv-nav button span{font-size:7px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-shell{width:min(1260px,calc(100% - 138px));margin-left:118px;margin-right:auto;padding-bottom:38px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-nav{left:18px!important;right:auto!important;top:50%;bottom:auto;width:82px;height:auto;display:flex;flex-direction:column;gap:6px;padding:9px 7px;transform:translateY(-50%)!important;border-radius:22px;background:rgba(5,6,7,.96);box-shadow:0 22px 70px rgba(0,0,0,.5);backdrop-filter:blur(20px)}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-nav button{width:100%;min-width:0;min-height:62px;flex:none;padding:7px 4px;border-radius:13px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-nav button b{font-size:18px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-nav button span{font-size:10px;font-weight:700}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-companion-crystals b{font-size:10px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-companion-crystals small{font-size:8px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-recorder-head span{font-size:11px}
+  html[data-pv-experience="intimate-recorder-v1"] .pv-recorder-head b{font-size:9px}
 }
 
 @media (max-width:900px){
