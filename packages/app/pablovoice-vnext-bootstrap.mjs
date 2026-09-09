@@ -126,11 +126,11 @@ await waitForCanonicalCore();
 await prioritizeAndroidImport();
 document.documentElement.dataset.pvVnextBoot = 'mounting';
 
-// The vNext shell observes only structural mutations outside its own rails.
-// Its own brain/readout/companion updates are intentionally excluded so UI feedback
-// cannot create observer feedback loops on WebView or Chromium.
+// Every vNext observer is bounded to element-level structural changes outside vNext rails.
+// The route layer installs the Companion Reactor, so applying the same observer wrapper
+// there also prevents playback/readout text changes from becoming background DOM churn.
 await install('ui', './pablovoice-vnext-ui.mjs', 'installPabloVoiceVNextUI', { structuralObserver: true });
-await install('route', './pablovoice-vnext-route-compat.mjs', 'installPabloVoiceVNextRouteCompat');
+await install('route', './pablovoice-vnext-route-compat.mjs', 'installPabloVoiceVNextRouteCompat', { structuralObserver: true });
 
 document.documentElement.dataset.pvVnextBoot = failures.length ? 'degraded' : 'ready';
 if (failures.length) document.documentElement.dataset.pvVnextFailures = failures.join(',');
@@ -145,5 +145,6 @@ export const PABLOVOICE_VNEXT_BOOT_POLICY = Object.freeze({
   prioritizesPendingAndroidImport: true,
   ignoresTextOnlyObserverFeedback: true,
   ignoresVnextOwnedObserverFeedback: true,
+  boundedRouteAndCompanionObservers: true,
   androidImportBridgeResponsive: true,
 });
