@@ -20,6 +20,7 @@ export function installPabloVoiceVNextRouteCompat() {
   } catch (error) {
     console.error('PABLOVOICE_COMPANION_REACTOR_INSTALL_FAILED', error);
   }
+  ensureReactionMotionCompatibility();
   sync();
   return teardown;
 }
@@ -30,6 +31,23 @@ function teardown() {
   document.removeEventListener('click', stopDuplicateLegacyRouting, true);
   reactorCleanup?.();
   reactorCleanup = null;
+}
+
+function ensureReactionMotionCompatibility() {
+  if (document.querySelector('style[data-pv-companion-motion-compat]')) return;
+  const style = document.createElement('style');
+  style.dataset.pvCompanionMotionCompat = 'true';
+  style.textContent = `
+    .pv-vnext-visualizer[data-vnext-reactive="music-graph"].section-hit .pv-vnext-device-screen {
+      animation: pvCompanionSectionHit var(--pv-companion-beat-ms) ease-out 1 !important;
+    }
+    @keyframes pvCompanionMusicBeat {
+      0%,100% { transform:translate(-50%,-50%) scale(.99) rotate(-1deg); }
+      28% { transform:translate(-50%,-56%) scale(1.065) rotate(1.5deg); }
+      58% { transform:translate(-50%,-48%) scale(1.025) rotate(-.5deg); }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 function sync() {
@@ -112,4 +130,5 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   delegatesToExistingRoutes: true,
   unifiedConnectivityLanguage: true,
   musicGraphCompanionReactor: true,
+  browserSafeBeatMotion: true,
 });
