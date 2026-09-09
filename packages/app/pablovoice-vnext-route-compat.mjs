@@ -61,6 +61,7 @@ function sync() {
     nav.dataset.vnextCanonicalNav = 'true';
 
     const createAnchor = nav.querySelector('[data-vnext-command="create"], [data-vnext-route-command="create"]');
+    normalizeCanonicalCreateLabel(createAnchor);
     nav.querySelectorAll('[data-vnext-command]').forEach((button) => {
       const command = button.dataset.vnextCommand;
       const route = ROUTES[command];
@@ -106,6 +107,13 @@ function sync() {
   }
 }
 
+function normalizeCanonicalCreateLabel(button) {
+  if (!button || button.dataset.pvCompositionLabel === 'true') return;
+  const label = button.querySelector('b');
+  if (label) label.textContent = 'Criar · Composição';
+  button.dataset.pvCompositionLabel = 'true';
+}
+
 function normalizeHiddenLegacyLabels(legacy) {
   const compose = legacy.querySelector('[data-route="compose"]');
   if (!compose || compose.dataset.pvLegacyLabelNormalized === 'true') return;
@@ -143,6 +151,7 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   highLevelRoutesBubbleOnce: true,
   legacyNavHidden: true,
   hiddenLegacyLabelsDoNotShadowVisibleRouteContent: true,
+  canonicalCreateExposesCompositionContext: true,
   delegatesToExistingRoutes: true,
   unifiedConnectivityLanguage: true,
   connectivityEventsNeverChangeProductMode: true,
