@@ -7,20 +7,21 @@ const uiSource = fs.readFileSync('packages/app/remote-auth-ui.mjs', 'utf8');
 const prebootSource = fs.readFileSync('packages/app/preboot.mjs', 'utf8');
 const contract = fs.readFileSync('supabase/functions/device-auth/README.md', 'utf8');
 
-test('remote auth exposes one-time bootstrap pairing without client secrets', () => {
-  assert.match(authSource, /loginWithBootstrapCode\(code\)/);
-  assert.match(authSource, /action:\s*'bootstrap'/);
-  assert.match(authSource, /setDeviceToken\(data\.device_token\)/);
+test('remote auth exposes passwordless owner email without client secrets', () => {
+  assert.match(authSource, /loginWithEmail\(email\)/);
+  assert.match(authSource, /auth\/v1\/otp/);
+  assert.match(authSource, /emailRedirectTo/);
   assert.doesNotMatch(authSource, /service[_-]?role/i);
   assert.doesNotMatch(authSource, /OPENAI_API_KEY|GROQ_API_KEY|AI_GATEWAY_API_KEY/);
 });
 
-test('activation UI is installed by preboot, demand-driven, one-time and secret-free', () => {
+test('owner access UI is installed by preboot, demand-driven and secret-free', () => {
   assert.match(prebootSource, /installRemoteAuthUI/);
   assert.match(uiSource, /pablovoice:request-online-auth/);
-  assert.match(uiSource, /Reconhecer este aparelho/);
-  assert.match(uiSource, /one-time-code/);
-  assert.match(uiSource, /Código de ativação/);
+  assert.match(uiSource, /Entrar como proprietário/);
+  assert.match(uiSource, /autocomplete="email"/);
+  assert.match(uiSource, /Sem código de ativação/);
+  assert.match(uiSource, /activationCodeRequired:\s*false/);
   assert.match(uiSource, /rotatingDeviceToken:\s*true/);
   assert.match(uiSource, /noProviderSecretInClient:\s*true/);
   assert.match(uiSource, /demandDrivenUI:\s*true/);

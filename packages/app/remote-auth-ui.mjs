@@ -43,12 +43,12 @@ async function injectPairing() {
   card.id = 'pv-remote-pairing';
   card.className = 'pv-card chrome pv-online-activation';
   card.hidden = true;
-  card.innerHTML = `<div class="pv-card-head"><div><h3>Reconhecer este aparelho</h3><p>Os recursos conectados ficam ativos no fluxo normal. Faça este vínculo uma vez.</p></div><span class="pv-tag">1 VEZ</span></div>
+  card.innerHTML = `<div class="pv-card-head"><div><h3>Entrar como proprietário</h3><p>Use seu e-mail para liberar a produção completa neste aparelho. Sem código de ativação.</p></div><span class="pv-tag">ACESSO TOTAL</span></div>
     <form class="pv-compose-row" data-remote-pair-form>
-      <input class="pv-field" name="code" inputmode="text" autocomplete="one-time-code" maxlength="64" placeholder="Código de ativação" aria-label="Código de ativação do PabloVoice">
-      <button class="pv-btn primary" type="submit">Conectar</button>
+      <input class="pv-field" name="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="Seu e-mail" aria-label="E-mail do proprietário do PabloVoice">
+      <button class="pv-btn primary" type="submit">Entrar</button>
     </form>
-    <div class="pv-note" data-remote-pair-status>Este passo só aparece quando uma função online precisa reconhecer o aparelho.</div>`;
+    <div class="pv-note" data-remote-pair-status>Você receberá um link seguro. Depois do primeiro acesso, este aparelho permanece conectado.</div>`;
   host.insertAdjacentElement('beforebegin', card);
   syncCard(card);
   return card;
@@ -73,14 +73,14 @@ async function handleRequest(event) {
   card.dataset.pvUserVisible = 'true';
   syncCard(card);
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setTimeout(() => card.querySelector('input[name="code"]')?.focus(), 180);
+  setTimeout(() => card.querySelector('input[name="email"]')?.focus(), 180);
 }
 
 function syncCard(card) {
   if (!card) return;
   const status = card.querySelector('[data-remote-pair-status]');
   if (requestedReason && card.dataset.pvUserVisible === 'true') {
-    setText(status, `${requestedReason} usa a produção conectada. Cole seu código uma vez; depois este aparelho fica reconhecido.`);
+    setText(status, `${requestedReason} usa a produção conectada. Entre com seu e-mail para liberar todos os recursos.`);
   }
 }
 
@@ -89,29 +89,26 @@ async function handleSubmit(event) {
   if (!form) return;
   event.preventDefault();
   if (busy) return;
-  const code = String(form.elements.code?.value || '').trim();
+  const email = String(form.elements.email?.value || '').trim();
   const card = form.closest('#pv-remote-pairing');
   const status = card?.querySelector('[data-remote-pair-status]');
   const button = form.querySelector('button[type="submit"]');
-  if (!code) {
-    setText(status, 'Cole o código de ativação.');
+  if (!email) {
+    setText(status, 'Digite seu e-mail.');
     return;
   }
   busy = true;
-  if (button) { button.disabled = true; button.textContent = 'Conectando…'; }
-  setText(status, 'Reconhecendo este aparelho…');
+  if (button) { button.disabled = true; button.textContent = 'Enviando…'; }
+  setText(status, 'Preparando seu acesso seguro…');
   try {
-    await auth.loginWithBootstrapCode(code);
-    setText(status, 'Pronto. O PabloVoice conectado está ativo neste aparelho.');
-    form.remove();
-    requestedReason = null;
-    document.dispatchEvent(new CustomEvent('pablovoice:remote-authenticated'));
-    setTimeout(() => card?.remove(), 700);
+    await auth.loginWithEmail(email);
+    setText(status, 'Link enviado. Abra o e-mail neste aparelho para entrar e produzir com qualidade máxima.');
+    form.hidden = true;
   } catch (error) {
     setText(status, humanError(error));
   } finally {
     busy = false;
-    if (button?.isConnected) { button.disabled = false; button.textContent = 'Conectar'; }
+    if (button?.isConnected) { button.disabled = false; button.textContent = 'Entrar'; }
   }
 }
 
@@ -128,7 +125,8 @@ function setText(node, value) {
 }
 
 export const REMOTE_PAIRING_POLICY = Object.freeze({
-  oneTimeBootstrapCode: true,
+  passwordlessOwnerEmail: true,
+  activationCodeRequired: false,
   rotatingDeviceToken: true,
   noProviderSecretInClient: true,
   noPasswordStoredInApp: true,
