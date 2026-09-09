@@ -1,3 +1,5 @@
+import { installPabloVoiceCompanionReactor } from './pablovoice-companion-reactor.mjs';
+
 const ROUTES = Object.freeze({
   home: 'home',
   create: 'compose',
@@ -6,18 +8,28 @@ const ROUTES = Object.freeze({
 });
 
 let observer = null;
+let reactorCleanup = null;
 
 export function installPabloVoiceVNextRouteCompat() {
-  if (observer) return () => observer.disconnect();
+  if (observer) return teardown;
   observer = new MutationObserver(sync);
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
   document.addEventListener('click', stopDuplicateLegacyRouting, true);
+  try {
+    reactorCleanup = installPabloVoiceCompanionReactor();
+  } catch (error) {
+    console.error('PABLOVOICE_COMPANION_REACTOR_INSTALL_FAILED', error);
+  }
   sync();
-  return () => {
-    observer?.disconnect();
-    observer = null;
-    document.removeEventListener('click', stopDuplicateLegacyRouting, true);
-  };
+  return teardown;
+}
+
+function teardown() {
+  observer?.disconnect();
+  observer = null;
+  document.removeEventListener('click', stopDuplicateLegacyRouting, true);
+  reactorCleanup?.();
+  reactorCleanup = null;
 }
 
 function sync() {
@@ -60,6 +72,12 @@ function sync() {
     button.classList.toggle('route-active', active);
     button.classList.toggle('active', active);
   });
+
+  // Connectivity is an executor detail, never a second PabloVoice product mode.
+  shell.querySelectorAll('[data-vnext-online], [data-vnext-network]').forEach((node) => {
+    if (node.textContent !== 'STUDIO') node.textContent = 'STUDIO';
+    node.dataset.pvConnectivityHidden = 'true';
+  });
 }
 
 function ensureCanonicalRoute(nav, route, icon, label, after) {
@@ -92,4 +110,6 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   highLevelRoutesBubbleOnce: true,
   legacyNavHidden: true,
   delegatesToExistingRoutes: true,
+  unifiedConnectivityLanguage: true,
+  musicGraphCompanionReactor: true,
 });
