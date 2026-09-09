@@ -25,7 +25,7 @@ test('SONG CREATION GATE: unified Studio creates editable music and drives the r
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible();
 
-  await page.locator('[data-route="compose"]').first().click();
+  await page.locator('.pv-nav [data-route="compose"]').click();
   await expect(page.locator('#lyrics')).toBeVisible();
   await page.locator('#lyrics').fill('Quando a cidade apaga eu vejo você\nChega mais perto, deixa acontecer\nHoje eu não prometo o que vem depois\nQuando amanhecer, amanhã a gente vê');
 
@@ -107,11 +107,14 @@ test('SONG CREATION GATE: unified Studio creates editable music and drives the r
   await audio.evaluate(async (node) => { node.muted = true; await node.play(); });
   await expect(visualizer).toHaveAttribute('data-vnext-reaction-state', 'playing', { timeout: 5_000 });
   await expect(visualizer).toHaveAttribute('data-vnext-section', 'intro', { timeout: 5_000 });
+  await expect(visualizer).toHaveAttribute('data-vnext-bpm', '112');
   const reaction = await visualizer.getAttribute('data-vnext-reaction');
   expect(['note','wave','chime','eq','vinyl','star']).toContain(reaction);
-  const beatMs = await visualizer.evaluate((node) => Number.parseFloat(node.style.getPropertyValue('--pv-companion-beat-ms')) || 0);
+  const beatMs = Number(await visualizer.getAttribute('data-vnext-beat-ms'));
   expect(beatMs).toBeGreaterThanOrEqual(530);
   expect(beatMs).toBeLessThanOrEqual(540);
+  const reactingDock = page.locator('[data-vnext-dock-companion].music-reacting');
+  await expect(reactingDock).toHaveCount(1);
   await page.waitForTimeout(650);
   expect(await audio.evaluate((node) => node.currentTime)).toBeGreaterThan(0);
   await audio.evaluate((node) => node.pause());
