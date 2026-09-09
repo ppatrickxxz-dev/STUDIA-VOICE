@@ -14,8 +14,8 @@ android {
         applicationId 'com.pablovoice.studio'
         minSdk 24
         targetSdk 35
-        versionCode 24001
-        versionName '2.4.0-rc.1'
+        versionCode 24099
+        versionName '2.4.0'
         buildConfigField 'String', 'PV_COMMIT', '"' + (System.getenv('GITHUB_SHA') ?: 'local') + '"'
     }
 
@@ -72,4 +72,3 @@ tasks.register('verifyReleaseSigning') {
         if (!releaseSigningReady) throw new GradleException('Release signing secrets are not configured. Validation/debug builds remain available.')
     }
 }
-

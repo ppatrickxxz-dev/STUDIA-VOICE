@@ -1,9 +1,9 @@
-# PabloVoice — Runtime Delta: recovered 8.1 lineage vs 2.4.0-rc.1
+# PabloVoice — Runtime Delta: recovered 8.1 lineage vs 2.4.0
 
 ## Purpose
 This document records only evidence-backed gaps between the recovered 8.x lineage and the current canonical source. It is not a claim that recovered candidate modules were production-ready.
 
-## Present in canonical 2.4.0-rc.1
+## Present in canonical 2.4.0
 - local-first Web + Android shared source;
 - versioned project core;
 - real browser playback/render path;

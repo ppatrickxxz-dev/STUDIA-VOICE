@@ -2,7 +2,7 @@
   "benchmark": "PabloVoice Benchmark v1",
   "provider": "pablovoice",
   "kind": "readiness_baseline_not_score",
-  "runtime_version": "2.4.0-rc.1",
+  "runtime_version": "2.4.0",
   "audited_before_provider_run": true,
   "evidence": {
     "app_source_sha": "1bd48ceea1e318ec696cc88d9c0d20c37e4782c0",

@@ -39,7 +39,7 @@ export function createProject(name = 'Minha ideia', now = Date.now()) {
     authorialMemory: null,
     arrangementMap: createArrangementMap(now),
     revisions: [],
-    appVersion: '2.4.0-rc.1',
+    appVersion: '2.4.0',
   };
 }
 

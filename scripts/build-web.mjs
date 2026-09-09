@@ -16,7 +16,7 @@ await cp(resolve(packages, 'music-intelligence'), resolve(out, 'music-intelligen
 await cp(resolve(packages, 'site-vivo'), resolve(out, 'site'), { recursive: true });
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   product: 'PabloVoice',
-  version: process.env.PV_VERSION || '2.4.0-rc.1',
+  version: process.env.PV_VERSION || '2.4.0',
   commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local',
   builtAt: new Date().toISOString(),
 }, null, 2)}\n`, 'utf8');

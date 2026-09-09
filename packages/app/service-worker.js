@@ -1,4 +1,4 @@
-const CACHE = 'pablovoice-shell-v2.4.0-rc.1-r5';
+const CACHE = 'pablovoice-shell-v2.4.0-r6';
 const SHELL = [
   './', './index.html', './styles.css', './preboot.mjs', './app.js', './storage.mjs', './recording.mjs',
   './audio-engine.mjs', './manifest.webmanifest', './core/src/project.mjs',
