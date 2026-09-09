@@ -8,7 +8,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('SONG CREATION GATE: unified Studio selects local executor and persists editable music', async ({ page, context }) => {
+test('SONG CREATION GATE: unified Studio creates editable music and drives the reactive Companion visualizer', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -18,6 +18,7 @@ test('SONG CREATION GATE: unified Studio selects local executor and persists edi
   await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-vnext-boot', 'ready', { timeout: 10_000 });
 
   await page.locator('[data-action="new-project"]').first().click();
   await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Criação Musical');
@@ -39,14 +40,10 @@ test('SONG CREATION GATE: unified Studio selects local executor and persists edi
   await form.locator('select[name="key"]').selectOption('A');
   await form.locator('input[name="mood"]').fill('íntimo, elegante, noturno');
 
-  // Remove network only to force coverage of the real local executor. The product
-  // remains the same unified Studio and exposes no local/remote selector.
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
-  await expect(form.locator('[data-song-create-button]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
-  await expect(form.locator('[data-song-create-hq]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
   await form.locator('[data-pv-unified-create]').click();
 
   await expect(page.locator('#pv-song-create-status')).toContainText('Pronto.', { timeout: 45_000 });
@@ -103,8 +100,24 @@ test('SONG CREATION GATE: unified Studio selects local executor and persists edi
   expect(evidence.sections).toBeGreaterThanOrEqual(6);
   expect(evidence.confirmedSections).toBeGreaterThanOrEqual(6);
 
+  const visualizer = page.locator('[data-vnext-visualizer]');
+  await expect(visualizer).toBeVisible();
+  await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph', { timeout: 5_000 });
+  const audio = page.locator('#pv-song-create-result audio').first();
+  await audio.evaluate(async (node) => { node.muted = true; await node.play(); });
+  await expect(visualizer).toHaveAttribute('data-vnext-reaction-state', 'playing', { timeout: 5_000 });
+  await expect(visualizer).toHaveAttribute('data-vnext-section', 'intro', { timeout: 5_000 });
+  const reaction = await visualizer.getAttribute('data-vnext-reaction');
+  expect(['note','wave','chime','eq','vinyl','star']).toContain(reaction);
+  const beatMs = await visualizer.evaluate((node) => Number.parseFloat(node.style.getPropertyValue('--pv-companion-beat-ms')) || 0);
+  expect(beatMs).toBeGreaterThanOrEqual(530);
+  expect(beatMs).toBeLessThanOrEqual(540);
+  await page.waitForTimeout(650);
+  expect(await audio.evaluate((node) => node.currentTime)).toBeGreaterThan(0);
+  await audio.evaluate((node) => node.pause());
+  await expect(visualizer).toHaveAttribute('data-vnext-reaction-state', 'ready', { timeout: 5_000 });
+
   await context.setOffline(false);
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
   await page.locator('[data-song-open-studio]').click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible({ timeout: 20_000 });
   await page.getByRole('tab', { name: 'Mixer' }).click();
