@@ -55,13 +55,15 @@ test('vNext yields first interaction to canonical boot and Android import/Open-W
   assert.match(boot, /waitsForCanonicalCore:\s*true/);
 });
 
-test('vNext observer ignores self-generated structural feedback', () => {
+test('all vNext observers ignore self-generated and text-only feedback', () => {
   assert.match(boot, /isElementStructuralMutation/);
   assert.match(boot, /node\.nodeType === Node\.ELEMENT_NODE/);
   assert.match(boot, /VNEXT_OWNED_SELECTOR/);
   assert.match(boot, /isVnextOwnedMutation/);
-  assert.match(boot, /structuralObserver:\s*true/);
+  const wrappedInstalls = boot.match(/structuralObserver:\s*true/g) || [];
+  assert.ok(wrappedInstalls.length >= 2, 'UI and route/reactor observers must both be bounded');
   assert.match(boot, /ignoresTextOnlyObserverFeedback:\s*true/);
   assert.match(boot, /ignoresVnextOwnedObserverFeedback:\s*true/);
+  assert.match(boot, /boundedRouteAndCompanionObservers:\s*true/);
   assert.match(boot, /androidImportBridgeResponsive:\s*true/);
 });
