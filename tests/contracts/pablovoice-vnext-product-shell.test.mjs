@@ -45,3 +45,11 @@ test('connectivity never appears as a second vNext product mode', () => {
   assert.match(unifiedCss, /data-vnext-network/);
   assert.match(unifiedCss, /visibility:hidden/);
 });
+
+test('vNext observer ignores text-only feedback so Android import/Open-With remains responsive', () => {
+  assert.match(boot, /isElementStructuralMutation/);
+  assert.match(boot, /node\.nodeType === Node\.ELEMENT_NODE/);
+  assert.match(boot, /structuralObserver:\s*true/);
+  assert.match(boot, /ignoresTextOnlyObserverFeedback:\s*true/);
+  assert.match(boot, /androidImportBridgeResponsive:\s*true/);
+});
