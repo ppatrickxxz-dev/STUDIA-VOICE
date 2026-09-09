@@ -46,10 +46,22 @@ test('connectivity never appears as a second vNext product mode', () => {
   assert.match(unifiedCss, /visibility:hidden/);
 });
 
-test('vNext observer ignores text-only feedback so Android import/Open-With remains responsive', () => {
+test('vNext yields first interaction to canonical boot and Android import/Open-With', () => {
+  assert.match(boot, /await waitForCanonicalCore\(\)/);
+  assert.match(boot, /await prioritizeAndroidImport\(\)/);
+  assert.match(boot, /pendingImportSize/);
+  assert.match(boot, /PabloVoiceConsumeAndroidImport/);
+  assert.match(boot, /prioritizesPendingAndroidImport:\s*true/);
+  assert.match(boot, /waitsForCanonicalCore:\s*true/);
+});
+
+test('vNext observer ignores self-generated structural feedback', () => {
   assert.match(boot, /isElementStructuralMutation/);
   assert.match(boot, /node\.nodeType === Node\.ELEMENT_NODE/);
+  assert.match(boot, /VNEXT_OWNED_SELECTOR/);
+  assert.match(boot, /isVnextOwnedMutation/);
   assert.match(boot, /structuralObserver:\s*true/);
   assert.match(boot, /ignoresTextOnlyObserverFeedback:\s*true/);
+  assert.match(boot, /ignoresVnextOwnedObserverFeedback:\s*true/);
   assert.match(boot, /androidImportBridgeResponsive:\s*true/);
 });
