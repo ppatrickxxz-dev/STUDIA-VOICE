@@ -82,6 +82,7 @@ function sync() {
       legacy.classList.remove('pv-nav');
       legacy.classList.add('pv-legacy-nav');
     }
+    if (legacy?.dataset?.pvLegacyNav === 'true') normalizeHiddenLegacyLabels(legacy);
 
     const activeRoute = legacy?.querySelector('[data-route].active')?.dataset.route
       || shell.dataset.vnextRoute
@@ -103,6 +104,15 @@ function sync() {
   } finally {
     syncing = false;
   }
+}
+
+function normalizeHiddenLegacyLabels(legacy) {
+  const compose = legacy.querySelector('[data-route="compose"]');
+  if (!compose || compose.dataset.pvLegacyLabelNormalized === 'true') return;
+  compose.dataset.pvLegacyLabelNormalized = 'true';
+  compose.querySelectorAll('span, b, small').forEach((node) => {
+    if (/^compor$/i.test(node.textContent?.trim() || '')) node.textContent = 'Criar';
+  });
 }
 
 function ensureCanonicalRoute(nav, route, icon, label, after) {
@@ -132,6 +142,7 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   specialistCommandsAreNotFakeRoutes: true,
   highLevelRoutesBubbleOnce: true,
   legacyNavHidden: true,
+  hiddenLegacyLabelsDoNotShadowVisibleRouteContent: true,
   delegatesToExistingRoutes: true,
   unifiedConnectivityLanguage: true,
   connectivityEventsNeverChangeProductMode: true,
