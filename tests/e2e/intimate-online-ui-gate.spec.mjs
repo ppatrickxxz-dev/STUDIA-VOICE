@@ -41,7 +41,8 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   for (const name of companions) await expect(dock.getByText(name, { exact: true })).toBeVisible();
   await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph');
   await expect(nav.locator('[data-route="home"]')).toBeVisible();
-  await expect(nav.locator('[data-route="compose"]')).toBeVisible();
+  await expect(nav.locator('[data-vnext-route-command="create"]')).toBeVisible();
+  await expect(nav.locator('[data-vnext-route-command="lyrics"]')).toBeVisible();
   await expect(nav.locator('[data-route="studio"]')).toBeVisible();
   await expect(nav.locator('[data-route="projects"]')).toBeVisible();
   await expect(nav.locator('[data-route="pablo"]')).toBeVisible();
@@ -53,7 +54,7 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await expect(page.getByRole('heading', { name: 'Unified Studio Gate' })).toBeVisible();
 
-  await nav.locator('[data-route="compose"]').click();
+  await nav.locator('[data-vnext-route-command="create"]').click();
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
