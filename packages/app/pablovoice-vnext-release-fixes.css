@@ -11,6 +11,15 @@
   min-height: max-content;
 }
 
+/* The canonical bottom nav class carries translateX(-50%) from the legacy shell.
+   vNext reuses the class only as the router contract, so reset that transform when
+   the nav lives inside the sidebar or Playwright/real pointer geometry ends up half
+   a viewport off-screen even though the element is technically visible. */
+.pv-vnext-sidebar .pv-vnext-nav.pv-nav {
+  transform: none !important;
+  backdrop-filter: none !important;
+}
+
 .pv-vnext-sidebar .pv-vnext-visualizer {
   margin-top: 10px;
 }
