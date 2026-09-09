@@ -23,8 +23,12 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
   const durationVariation = clamp(Number(plan.args?.durationVariation) || 0, 0, 1);
   if (humanize === 0 && syncopation === 0 && durationVariation === 0) return blocked('no_effective_instrument_delta');
 
-  const transformedNotes = reshapeNotes(current.notes, { humanize, syncopation, durationVariation });
+  const scope = sectionScopeFromPlan(plan, current.bpm);
+  if (plan.args?.section && !scope) return blocked('instrument_section_mapping_unavailable');
+  const transformedNotes = reshapeNotesWithScope(current.notes, { humanize, syncopation, durationVariation }, scope);
+  if (!transformedNotes) return blocked('instrument_section_has_no_notes');
   assertPitchAndCountPreserved(current.notes, transformedNotes);
+  if (scope) assertOutsideScopePreserved(current.notes, transformedNotes, scope);
   if (JSON.stringify(current.notes) === JSON.stringify(transformedNotes)) return blocked('no_effective_instrument_change');
 
   // Capture the current Instrument Lab as an explicit baseline because manual
@@ -43,6 +47,8 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
     project: saved,
     action: plan.action,
     target: plan.args?.target || null,
+    section: plan.args?.section || null,
+    sectionId: plan.args?.sectionId || null,
     before: summarize(current.notes),
     after: summarize(saved.instrumentLab.notes),
     invariants: Object.freeze({
@@ -50,6 +56,7 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
       noteCountPreserved: true,
       presetPreserved: saved.instrumentLab.preset === current.preset,
       bpmPreserved: saved.instrumentLab.bpm === current.bpm,
+      outsideSectionPreserved: scope ? true : null,
       baselineRevisionCaptured: true,
       reversible: true,
     }),
@@ -59,7 +66,28 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
 
 export function reshapeInstrumentNotes(notes = [], options = {}) {
   const normalized = normalizeInstrumentState({ notes }).notes;
-  return reshapeNotes(normalized, options);
+  const scope = normalizeBeatScope(options.scope);
+  return reshapeNotesWithScope(normalized, options, scope) || normalized;
+}
+
+function reshapeNotesWithScope(notes, options, scope = null) {
+  if (!scope) return reshapeNotes(notes, options);
+  const indexes = [];
+  const selected = [];
+  notes.forEach((note, index) => {
+    if (note.start_beat >= scope.startBeat && note.start_beat < scope.endBeat) {
+      indexes.push(index);
+      selected.push(note);
+    }
+  });
+  if (!selected.length) return null;
+  const reshaped = reshapeNotes(selected, options).map((note) => ({
+    ...note,
+    start_beat: roundBeat(clamp(note.start_beat, scope.startBeat, Math.max(scope.startBeat, scope.endBeat - 0.000001))),
+  }));
+  const output = notes.map((note) => ({ ...note }));
+  indexes.forEach((index, selectedIndex) => { output[index] = reshaped[selectedIndex]; });
+  return output;
 }
 
 function reshapeNotes(notes, { humanize = 0, syncopation = 0, durationVariation = 0 } = {}) {
@@ -95,6 +123,25 @@ function reshapeNotes(notes, { humanize = 0, syncopation = 0, durationVariation 
   });
 }
 
+function sectionScopeFromPlan(plan, bpm) {
+  const startSeconds = finite(plan.args?.sectionStartSeconds);
+  const endSeconds = finite(plan.args?.sectionEndSeconds);
+  const tempo = finite(bpm);
+  if (startSeconds == null || endSeconds == null || tempo == null || tempo <= 0 || endSeconds <= startSeconds) return null;
+  return normalizeBeatScope({
+    startBeat: startSeconds * tempo / 60,
+    endBeat: endSeconds * tempo / 60,
+  });
+}
+
+function normalizeBeatScope(value) {
+  if (!value || typeof value !== 'object') return null;
+  const startBeat = finite(value.startBeat);
+  const endBeat = finite(value.endBeat);
+  if (startBeat == null || endBeat == null || endBeat <= startBeat) return null;
+  return Object.freeze({ startBeat, endBeat });
+}
+
 function groupByOnset(notes) {
   const map = new Map();
   for (const note of notes) {
@@ -127,6 +174,14 @@ function assertPitchAndCountPreserved(before, after) {
   }
 }
 
+function assertOutsideScopePreserved(before, after, scope) {
+  for (let index = 0; index < before.length; index += 1) {
+    const note = before[index];
+    if (note.start_beat >= scope.startBeat && note.start_beat < scope.endBeat) continue;
+    if (JSON.stringify(note) !== JSON.stringify(after[index])) throw new Error('instrument_outside_section_drift');
+  }
+}
+
 function summarize(notes) {
   return Object.freeze({
     noteCount: notes.length,
@@ -140,4 +195,5 @@ function summarize(notes) {
 function blocked(reason) {
   return Object.freeze({ ok: false, mutated: false, reason });
 }
+function finite(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, Number(value) || 0)); }

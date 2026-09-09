@@ -1,5 +1,7 @@
 import { MUSICAL_OPERATION_ROUTE_SCHEMA } from '../music-intelligence/src/operation-router.mjs';
 
+// Section timing reaches executors only after resolution against the canonical
+// project Music Graph; this compiler never persists a second musical state.
 export const MUSICAL_EXECUTION_PLAN_SCHEMA = 'pablovoice_musical_execution_plan_v1';
 
 export function compileMusicalOperation(route = {}, project = {}) {
@@ -9,7 +11,7 @@ export function compileMusicalOperation(route = {}, project = {}) {
 
   if (route.executor === 'instrument_lab') return compileInstrument(route, project);
   if (route.executor === 'beat_lab') return compileBeat(route, project);
-  if (route.executor === 'music_generation') return compileGeneration(route, project);
+  if (route.executor === 'music_generation') return compileGeneration(route);
   if (route.executor === 'version_history') return ready(route, {
     executor: 'version_history',
     action: 'preview_previous_take',
@@ -28,7 +30,8 @@ export function compileMusicalOperation(route = {}, project = {}) {
 
 function compileInstrument(route, project) {
   const target = route.scope?.target || null;
-  if (route.scope?.section) {
+  const sectionScope = resolvedSectionScope(route.scope);
+  if (route.scope?.section && !sectionScope) {
     return blocked(route, 'instrument_section_mapping_unavailable', {
       executor: 'instrument_lab',
       fallback: route.fallback || ['music_generation'],
@@ -80,8 +83,13 @@ function compileInstrument(route, project) {
       humanize,
       syncopation,
       durationVariation,
+      section: route.scope?.section || null,
+      sectionId: sectionScope?.id || null,
+      sectionStartSeconds: sectionScope?.startSeconds ?? null,
+      sectionEndSeconds: sectionScope?.endSeconds ?? null,
       preservePitch: true,
       preserveNoteCount: true,
+      preserveOutsideSection: Boolean(sectionScope),
     },
   });
 }
@@ -127,11 +135,15 @@ function compileGeneration(route) {
   const direction = describeDirection(deltas, positiveStyles, eraHints);
   if (route.action === 'regenerate_section') {
     if (!route.scope?.section) return blocked(route, 'section_required_for_regeneration', { executor: 'music_generation' });
+    const sectionScope = resolvedSectionScope(route.scope);
     return ready(route, {
       executor: 'music_generation',
       action: 'regenerate_section',
       args: {
         section: route.scope.section,
+        sectionId: sectionScope?.id || null,
+        sectionStartSeconds: sectionScope?.startSeconds ?? null,
+        sectionEndSeconds: sectionScope?.endSeconds ?? null,
         direction,
         negativeStyles,
         preserveUnselected: route.scope?.preserveUnselected !== false,
@@ -143,6 +155,17 @@ function compileGeneration(route) {
     executor: 'music_generation',
     action: route.action,
     args: { direction, negativeStyles, preserveUnselected: route.scope?.preserveUnselected !== false },
+  });
+}
+
+function resolvedSectionScope(scope = {}) {
+  const startSeconds = finite(scope.sectionStartSeconds);
+  const endSeconds = finite(scope.sectionEndSeconds);
+  if (startSeconds == null || endSeconds == null || endSeconds <= startSeconds) return null;
+  return Object.freeze({
+    id: String(scope.sectionId || '') || null,
+    startSeconds,
+    endSeconds,
   });
 }
 
@@ -194,4 +217,5 @@ function blocked(route, reason, extra = {}) {
 }
 
 function positive(value) { return clamp(Number(value) || 0, 0, 1); }
+function finite(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, Number(value) || 0)); }

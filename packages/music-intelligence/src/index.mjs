@@ -39,11 +39,17 @@ export {
   musicSpecProviderContext,
 } from './music-spec-v2.mjs';
 export {
+  PROJECT_MUSIC_GRAPH_SCHEMA,
+  buildProjectMusicGraph,
+  musicGraphContextPack,
+  resolveMusicGraphScope,
+} from './project-music-graph.mjs';
+export {
   MUSICAL_OPERATION_ROUTE_SCHEMA,
   routeMusicalIntent,
 } from './operation-router.mjs';
 
-export const PMI_MUSIC_VERSION = '1.2.0';
+export const PMI_MUSIC_VERSION = '1.3.0';
 export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'concept_engine',
   'composition_session',
@@ -56,5 +62,6 @@ export const PMI_MUSIC_CAPABILITIES = Object.freeze([
   'conversational_entrypoint',
   'musical_intent_translator',
   'music_spec_v2',
+  'project_music_graph',
   'musical_operation_router',
 ]);

@@ -26,9 +26,23 @@ export async function buildMusicalPlanReview(message = '', project = null, conte
     return blockedReview('musical_intent_plan_unavailable');
   }
 
+  let operationRoute = planning.operationRoute;
+  if (planning.musicalIntent && typeof intelligence.routeMusicalIntent === 'function') {
+    try {
+      operationRoute = intelligence.routeMusicalIntent(planning.musicalIntent, {
+        ...context,
+        project,
+        projectId: project.id,
+        trackId: context.trackId || activeTrack?.id || null,
+      });
+    } catch {
+      operationRoute = planning.operationRoute;
+    }
+  }
+
   let executionPlan;
   try {
-    executionPlan = compileMusicalOperation(planning.operationRoute, project);
+    executionPlan = compileMusicalOperation(operationRoute, project);
   } catch {
     return blockedReview('musical_execution_compile_failed', { planning });
   }
@@ -41,8 +55,9 @@ export async function buildMusicalPlanReview(message = '', project = null, conte
     projectId: String(project.id || ''),
     reply: String(planning.reply || 'Entendi a direção musical e preparei um plano revisável.'),
     musicalIntent: planning.musicalIntent,
-    operationRoute: planning.operationRoute,
+    operationRoute,
     executionPlan,
+    musicGraphSchema: operationRoute?.context?.musicGraphSchema || null,
     reviewRequired: true,
     stateFingerprint: musicalExecutionFingerprint(project, executionPlan),
   });
@@ -92,9 +107,12 @@ export function musicalExecutionFingerprint(project = {}, plan = {}) {
   const executor = String(plan?.executor || 'review_only');
   let state;
   if (executor === 'instrument_lab') {
-    state = project.instrumentLab || null;
+    state = {
+      instrumentLab: project.instrumentLab || null,
+      arrangementMap: project.arrangementMap || null,
+    };
   } else if (executor === 'beat_lab') {
-    state = { beatLab: project.beatLab || null, sampler: project.sampler || null };
+    state = { beatLab: project.beatLab || null, sampler: project.sampler || null, arrangementMap: project.arrangementMap || null };
   } else if (executor === 'music_generation') {
     state = {
       arrangementMap: project.arrangementMap || null,
@@ -132,7 +150,8 @@ export function describeMusicalExecutionPlan(plan = {}) {
   if (!plan?.ok) return blockedPlanMessage(plan?.reason);
   if (plan.executor === 'instrument_lab') {
     const target = humanTarget(plan.args?.target);
-    return `${target} · ajuste MIDI reversível de timing, dinâmica e duração; pitch e quantidade de notas ficam preservados.`;
+    const section = plan.args?.section ? ` em ${humanSection(plan.args.section)}` : '';
+    return `${target}${section} · ajuste MIDI reversível de timing, dinâmica e duração; pitch e quantidade de notas ficam preservados; material fora da seleção também.`;
   }
   if (plan.executor === 'beat_lab') {
     const amount = Math.round((Number(plan.args?.amount) || 0) * 100);
@@ -162,7 +181,7 @@ export function humanizeMusicalReviewError(reason = '') {
     review_executor_not_locally_materialized: 'O plano está entendido, mas esse executor ainda exige o fluxo dedicado antes de aplicar.',
     instrument_notes_required: 'O Instrument Lab precisa ter notas gravadas antes desse ajuste.',
     instrument_target_mismatch: 'O instrumento ativo não corresponde ao alvo entendido no pedido.',
-    instrument_section_mapping_unavailable: 'Ainda não há mapeamento MIDI por seção confiável para esse instrumento.',
+    instrument_section_mapping_unavailable: 'Essa seção ainda não está confirmada no mapa musical para editar o instrumento com segurança.',
     instrument_target_unsupported_local: 'Esse instrumento ainda não tem executor MIDI local seguro.',
     beat_lab_required: 'Abra ou crie um Beat Lab antes desse ajuste.',
     beat_local_delta_unavailable: 'O Beat Lab local ainda não consegue executar esse detalhe sem inventar comportamento.',
