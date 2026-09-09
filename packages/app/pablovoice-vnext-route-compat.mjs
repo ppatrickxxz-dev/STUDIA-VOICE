@@ -17,6 +17,8 @@ export function installPabloVoiceVNextRouteCompat() {
   observer = new MutationObserver(queueSync);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('click', stopDuplicateLegacyRouting, true);
+  window.addEventListener('online', queueSync);
+  window.addEventListener('offline', queueSync);
   try {
     reactorCleanup = installPabloVoiceCompanionReactor();
   } catch (error) {
@@ -30,6 +32,8 @@ function teardown() {
   observer?.disconnect();
   observer = null;
   document.removeEventListener('click', stopDuplicateLegacyRouting, true);
+  window.removeEventListener('online', queueSync);
+  window.removeEventListener('offline', queueSync);
   reactorCleanup?.();
   reactorCleanup = null;
   syncing = false;
@@ -130,6 +134,7 @@ export const PABLOVOICE_VNEXT_ROUTE_POLICY = Object.freeze({
   legacyNavHidden: true,
   delegatesToExistingRoutes: true,
   unifiedConnectivityLanguage: true,
+  connectivityEventsNeverChangeProductMode: true,
   musicGraphCompanionReactor: true,
   browserSafeBeatMotion: true,
   fullDockMovesWithTempo: true,
