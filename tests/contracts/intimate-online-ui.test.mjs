@@ -35,22 +35,32 @@ test('Intimate Recorder canon keeps Pablo, all companions and living state syste
   assert.match(canon, /violet\/purple is no longer the primary product color/i);
 });
 
-test('Online is the default product mode and local is only an offline contingency', async () => {
-  const [ui, auth, productCanon] = await Promise.all([
-    read('packages/app/pablovoice-intimate-ui.mjs'),
+test('PabloVoice exposes one adaptive Studio while connectivity stays an executor detail', async () => {
+  const [creator, auth, productCanon, index] = await Promise.all([
+    read('packages/app/creator-online-language.mjs'),
     read('packages/app/remote-auth-ui.mjs'),
     read('docs/PRODUCT_CANON.md'),
+    read('packages/app/index.html'),
   ]);
 
-  assert.match(ui, /onlineIsDefault:\s*true/);
-  assert.match(ui, /localOnlyWhenOffline:\s*true/);
-  assert.match(ui, /noSilentLocalFallbackOnProviderFailure:\s*true/);
-  assert.match(ui, /navigator\.onLine === false/);
-  assert.match(ui, /ONLINE · FULL/);
-  assert.match(ui, /OFFLINE · LOCAL/);
+  assert.match(creator, /pvStudioMode/);
+  assert.match(creator, /['\"]unified['\"]/);
+  assert.match(creator, /pvNetworkMode/);
+  assert.match(creator, /['\"]adaptive['\"]/);
+  assert.match(creator, /adaptive_unified/);
+  assert.match(creator, /data-pv-unified-create/);
+  assert.match(creator, /data-song-create-button/);
+  assert.match(creator, /data-song-create-hq/);
+  assert.match(creator, /ensureSession\(\)/);
+  assert.match(creator, /fallbackBeforeRemoteDispatchWhenSupported:\s*true/);
+  assert.match(creator, /remoteFailureNeverFabricatesSuccess:\s*true/);
+  assert.doesNotMatch(creator, /ONLINE · FULL|OFFLINE · LOCAL|online_full|offline_local/);
   assert.match(auth, /demandDrivenUI:\s*true/);
   assert.match(auth, /noSilentOfflineFallback:\s*true/);
-  assert.match(productCanon, /online-first and offline-safe/i);
+  assert.match(productCanon, /one Studio, one project model and one creative flow/i);
+  assert.match(productCanon, /Online\/offline are not product modes/i);
+  assert.match(productCanon, /only that action fails honestly/i);
+  assert.match(index, /creator-online-language\.mjs/);
 });
 
 test('Companions are wired to real existing product destinations instead of decorative fake controls', async () => {
