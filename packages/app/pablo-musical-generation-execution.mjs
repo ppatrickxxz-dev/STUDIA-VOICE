@@ -3,6 +3,7 @@ import { MusicGenerationClient } from './music-generation-client.mjs';
 import { latestInpaintableSongTake, resolveSectionRegeneration } from './music-section-regeneration.mjs';
 import { validateMusicalPlanReview } from './pablo-musical-plan-review.mjs';
 import { readStudioPlayhead } from './studio-playhead-context.mjs';
+import { buildProjectMusicGraph, PROJECT_MUSIC_GRAPH_SCHEMA } from '../music-intelligence/src/project-music-graph.mjs';
 
 export const REVIEWED_MUSIC_GENERATION_SCHEMA = 'pablovoice_reviewed_music_generation_v1';
 
@@ -26,6 +27,7 @@ export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
     return blocked('preserve_unselected_required', { plan });
   }
 
+  const graph = buildProjectMusicGraph(project);
   const take = latestInpaintableSongTake(project);
   if (!take) return blocked('inpainting_source_missing', { plan });
 
@@ -35,6 +37,9 @@ export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
     takeDurationSeconds: Number(take.durationSeconds),
   });
   if (!resolvedTarget.ok) return blocked(resolvedTarget.reason, { plan, matches: resolvedTarget.matches });
+
+  const graphBinding = validateGraphSectionBinding(graph, plan, resolvedTarget.section);
+  if (!graphBinding.ok) return blocked(graphBinding.reason, { plan, targetSection: resolvedTarget.section });
 
   const providerPlan = resolveSectionRegeneration(project, resolvedTarget.section.id, {
     direction: plan.args?.direction || '',
@@ -46,6 +51,7 @@ export function prepareReviewedSectionRegeneration(review = {}, project = {}, {
     ok: true,
     schema: REVIEWED_MUSIC_GENERATION_SCHEMA,
     projectId: String(project.id || ''),
+    musicGraphSchema: graph.schema,
     action: 'regenerate_section',
     sectionKind,
     targetSection: Object.freeze({ ...resolvedTarget.section }),
@@ -115,6 +121,7 @@ export async function executeReviewedSectionRegeneration(review = {}, project = 
     ok: true,
     mutated: true,
     schema: REVIEWED_MUSIC_GENERATION_SCHEMA,
+    musicGraphSchema: prepared.musicGraphSchema,
     project: persisted.project,
     track: persisted.track,
     take: persisted.take,
@@ -163,6 +170,7 @@ export function humanizeReviewedGenerationError(reason = '') {
     inpainting_source_missing: 'Ainda não existe um take conectado com continuidade para refazer só essa seção.',
     section_mapping_required: 'Essa seção ainda não está confirmada no mapa da música.',
     section_ambiguous: 'Há mais de uma seção desse tipo e o playhead não identifica qual delas você quis alterar.',
+    music_graph_scope_drift: 'A seção resolvida mudou em relação ao cérebro musical revisado. Não enviei uma edição para o trecho errado.',
     section_regeneration_prepare_failed: 'Não consegui montar o intervalo seguro dessa seção.',
     auth_required: 'Reconheça este aparelho para criar a nova versão; o take atual foi preservado.',
     provider_unavailable: 'A produção conectada não está disponível agora; o take atual foi preservado.',
@@ -175,6 +183,27 @@ export function humanizeReviewedGenerationError(reason = '') {
     project_changed: 'O projeto ativo mudou desde a revisão. Faça o pedido novamente nesse projeto.',
   };
   return messages[String(reason || '')] || 'Não consegui concluir essa edição com segurança; o take atual foi preservado.';
+}
+
+function validateGraphSectionBinding(graph, plan, section) {
+  if (graph?.schema !== PROJECT_MUSIC_GRAPH_SCHEMA) return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+  const current = (graph.structure?.sections || []).find((item) => item.id === section?.id);
+  if (!current) return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+  const plannedId = String(plan.args?.sectionId || '');
+  if (plannedId && plannedId !== String(current.id || '')) return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+  if (plan.args?.sectionStartSeconds != null) {
+    const plannedStart = Number(plan.args.sectionStartSeconds);
+    if (!Number.isFinite(plannedStart) || Math.abs(plannedStart - Number(current.startSeconds)) > 0.001) {
+      return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+    }
+  }
+  if (plan.args?.sectionEndSeconds != null) {
+    const plannedEnd = Number(plan.args.sectionEndSeconds);
+    if (!Number.isFinite(plannedEnd) || Math.abs(plannedEnd - Number(current.endSeconds)) > 0.001) {
+      return Object.freeze({ ok: false, reason: 'music_graph_scope_drift' });
+    }
+  }
+  return Object.freeze({ ok: true, reason: null });
 }
 
 function containsPlayhead(allSections, candidate, seconds, takeDurationSeconds) {
