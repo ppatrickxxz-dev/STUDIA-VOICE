@@ -1,4 +1,9 @@
 /* vNext compatibility layer: keep real legacy engines mounted while avoiding duplicate product chrome. */
+/* The fallback shell may exist for a few frames before the unified Studio decorators boot.
+   Never expose the retired ONLINE/FULL or OFFLINE/LOCAL product language during that boundary. */
+html[data-pv-boot-stage="shell"] .pv-health,
+html[data-pv-boot-stage="shell"] .pv-hero .pv-lead { visibility:hidden !important; }
+
 html[data-pv-experience-vnext] .pv-intimate-diagnostics { display:none !important; }
 
 /* The new pocket visualizer is the single recorder/companion object in vNext. */
