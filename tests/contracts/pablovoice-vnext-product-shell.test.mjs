@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const index = await readFile(new URL('../../packages/app/index.html', import.meta.url), 'utf8');
+const headers = await readFile(new URL('../../packages/app/_headers', import.meta.url), 'utf8');
 const boot = await readFile(new URL('../../packages/app/pablovoice-vnext-bootstrap.mjs', import.meta.url), 'utf8');
 const ui = await readFile(new URL('../../packages/app/pablovoice-vnext-ui.mjs', import.meta.url), 'utf8');
 const routeCompat = await readFile(new URL('../../packages/app/pablovoice-vnext-route-compat.mjs', import.meta.url), 'utf8');
 const css = await readFile(new URL('../../packages/app/pablovoice-vnext-ui.css', import.meta.url), 'utf8');
 const unifiedCss = await readFile(new URL('../../packages/app/pablovoice-vnext-unified.css', import.meta.url), 'utf8');
+const releaseCss = await readFile(new URL('../../packages/app/pablovoice-vnext-release-fixes.css', import.meta.url), 'utf8');
 const sw = await readFile(new URL('../../packages/app/service-worker.js', import.meta.url), 'utf8');
 
 test('vNext is an additive surface over the proven unified core boot', () => {
@@ -20,7 +22,14 @@ test('vNext is an additive surface over the proven unified core boot', () => {
   assert.match(index, /pablovoice-vnext-ui\.css/);
   assert.match(index, /pablovoice-vnext-compat\.css/);
   assert.match(index, /pablovoice-vnext-unified\.css/);
-  for (const asset of ['pablovoice-vnext-bootstrap.mjs','pablovoice-vnext-ui.mjs','pablovoice-vnext-route-compat.mjs','pablovoice-companion-reactor.mjs']) assert.ok(sw.includes(asset));
+  assert.match(index, /pablovoice-vnext-release-fixes\.css/);
+  for (const asset of [
+    'pablovoice-vnext-bootstrap.mjs',
+    'pablovoice-vnext-ui.mjs',
+    'pablovoice-vnext-route-compat.mjs',
+    'pablovoice-companion-reactor-safe.mjs',
+    'pablovoice-vnext-release-fixes.css',
+  ]) assert.ok(sw.includes(asset), `service worker missing ${asset}`);
 });
 
 test('vNext remains the single visible route surface and delegates real product actions', () => {
@@ -28,6 +37,7 @@ test('vNext remains the single visible route surface and delegates real product 
   assert.match(routeCompat, /ensureCanonicalRoute\(nav, 'studio'/);
   assert.match(routeCompat, /ensureCanonicalRoute\(nav, 'projects'/);
   assert.match(routeCompat, /legacy\.classList\.remove\('pv-nav'\)/);
+  assert.match(releaseCss, /overflow-y:\s*auto/);
   for (const hook of ['data-beat-lab-open','data-instrument-open','data-action="studio-tab"','data-section-map-open','data-pv-studio-stems','data-action="record"','data-action="play"']) assert.ok(ui.includes(hook), `missing hook ${hook}`);
 });
 
@@ -55,15 +65,17 @@ test('vNext yields first interaction to canonical boot and Android import/Open-W
   assert.match(boot, /waitsForCanonicalCore:\s*true/);
 });
 
-test('all vNext observers ignore self-generated and text-only feedback', () => {
+test('vNext observation is bounded and the Companion runtime does not inject CSP-blocked style elements', () => {
   assert.match(boot, /isElementStructuralMutation/);
   assert.match(boot, /node\.nodeType === Node\.ELEMENT_NODE/);
   assert.match(boot, /VNEXT_OWNED_SELECTOR/);
   assert.match(boot, /isVnextOwnedMutation/);
-  const wrappedInstalls = boot.match(/structuralObserver:\s*true/g) || [];
-  assert.ok(wrappedInstalls.length >= 2, 'UI and route/reactor observers must both be bounded');
+  assert.match(routeCompat, /observer\.observe\(document\.documentElement, \{ childList: true, subtree: true \}\)/);
+  assert.match(routeCompat, /cspSafeReactionStyles:\s*true/);
+  assert.doesNotMatch(routeCompat, /createElement\('style'\)/);
+  assert.match(index, /style-src-elem 'self'; style-src-attr 'unsafe-inline'/);
+  assert.match(headers, /style-src-elem 'self'; style-src-attr 'unsafe-inline'/);
   assert.match(boot, /ignoresTextOnlyObserverFeedback:\s*true/);
   assert.match(boot, /ignoresVnextOwnedObserverFeedback:\s*true/);
-  assert.match(boot, /boundedRouteAndCompanionObservers:\s*true/);
   assert.match(boot, /androidImportBridgeResponsive:\s*true/);
 });
