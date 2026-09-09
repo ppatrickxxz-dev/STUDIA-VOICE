@@ -20,13 +20,9 @@ test('Intimate Recorder canon keeps Pablo, all companions and living state syste
     assert.match(ui, new RegExp(name));
     assert.match(canon, new RegExp(name));
   }
-  for (const state of ['idle', 'listening', 'thinking', 'recording', 'happy', 'dancing']) {
-    assert.match(ui, new RegExp(`['\"]${state}['\"]`));
-  }
+  for (const state of ['idle', 'listening', 'thinking', 'recording', 'happy', 'dancing']) assert.match(ui, new RegExp(`['\"]${state}['\"]`));
   for (const mode of ['vibe', 'focus', 'inspiration', 'moment']) assert.match(life, new RegExp(`id: ['\"]${mode}['\"]`));
-  for (const action of ['listening', 'thinking', 'creating', 'analyzing', 'guiding', 'processing', 'approving', 'celebrating']) {
-    assert.match(life, new RegExp(`${action}:`));
-  }
+  for (const action of ['listening', 'thinking', 'creating', 'analyzing', 'guiding', 'processing', 'approving', 'celebrating']) assert.match(life, new RegExp(`${action}:`));
   assert.match(css, /pv-pocket-recorder/);
   assert.match(css, /pv-crystal-token/);
   assert.match(lifeCss, /pv-pocket-mode-strip/);
@@ -36,11 +32,12 @@ test('Intimate Recorder canon keeps Pablo, all companions and living state syste
 });
 
 test('PabloVoice exposes one adaptive Studio while connectivity stays an executor detail', async () => {
-  const [creator, auth, productCanon, index] = await Promise.all([
-    read('packages/app/creator-online-language.mjs'),
+  const [creator, auth, productCanon, index, unifiedCss] = await Promise.all([
+    read('packages/app/creator-unified-runtime.mjs'),
     read('packages/app/remote-auth-ui.mjs'),
     read('docs/PRODUCT_CANON.md'),
     read('packages/app/index.html'),
+    read('packages/app/pablovoice-unified-ui.css'),
   ]);
 
   assert.match(creator, /pvStudioMode/);
@@ -60,7 +57,9 @@ test('PabloVoice exposes one adaptive Studio while connectivity stays an executo
   assert.match(productCanon, /one Studio, one project model and one creative flow/i);
   assert.match(productCanon, /Online\/offline are not product modes/i);
   assert.match(productCanon, /only that action fails honestly/i);
-  assert.match(index, /creator-online-language\.mjs/);
+  assert.match(index, /creator-unified-runtime\.mjs/);
+  assert.doesNotMatch(index, /src=\"\.\/creator-online-language\.mjs\"/);
+  assert.match(unifiedCss, /STUDIO · PRONTO/);
 });
 
 test('Companions are wired to real existing product destinations instead of decorative fake controls', async () => {

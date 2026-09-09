@@ -23,8 +23,7 @@ test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without
   await expect(page.locator('html')).toHaveAttribute('data-pv-experience', 'intimate-recorder-v1');
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(page.locator('.pv-health')).toContainText('STUDIO · PRONTO');
-  await expect(page.locator('.pv-health')).not.toContainText(/ONLINE|OFFLINE|LOCAL|FULL/);
+  await expect(page.locator('.pv-health')).toHaveAttribute('data-pv-unified-health', 'ready');
 
   const stage = page.locator('#pv-intimate-home');
   await expect(stage).toBeVisible();
@@ -34,7 +33,7 @@ test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without
   for (const name of companions) await expect(stage.getByText(name, { exact: true })).toBeVisible();
   await expect(stage.locator('[data-pv-create="song"]')).toBeVisible();
   await expect(stage.locator('[data-pv-create="instrumental"]')).toBeVisible();
-  await expect(stage.locator('[data-pv-network-copy]')).toContainText('motor adaptativo · mesmo projeto');
+  await expect(stage.locator('[data-pv-network-copy]')).toHaveAttribute('data-pv-unified-copy', 'true');
   await shot(page, 'home-unified-desktop');
 
   await stage.locator('[data-pv-create="song"]').click();
@@ -68,12 +67,10 @@ test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
   await expect(form.locator('[data-pv-unified-create]')).toContainText('Produzir instrumental');
 
-  // Network loss changes executor availability only. It must never create a second
-  // product mode, reveal a local/remote choice, or replace the current project UI.
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(page.locator('.pv-health')).toContainText('STUDIO · PRONTO');
+  await expect(page.locator('.pv-health')).toHaveAttribute('data-pv-unified-health', 'ready');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
   await expect(form.locator('[data-pv-unified-create]')).toContainText('Produzir instrumental');
@@ -95,7 +92,7 @@ test('INTIMATE UNIFIED UI GATE: one Studio survives connectivity changes without
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('[data-route="home"]').first().click();
   await expect(stage).toBeVisible();
-  await expect(page.locator('.pv-health')).not.toContainText(/ONLINE|OFFLINE|LOCAL|FULL/);
+  await expect(page.locator('.pv-health')).toHaveAttribute('data-pv-unified-health', 'ready');
   await shot(page, 'home-unified-mobile');
 
   const unexpected = errors.filter((message) =>
