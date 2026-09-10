@@ -135,7 +135,7 @@ async function onClick(event) {
       const wasHidden = Boolean(connected?.hidden);
       if (connected) connected.hidden = true;
       try {
-        form.requestSubmit(local);
+        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: local }));
       } finally {
         if (connected) connected.hidden = wasHidden;
         queueSync();
