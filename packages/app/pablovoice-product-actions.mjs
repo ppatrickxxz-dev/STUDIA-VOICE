@@ -32,7 +32,7 @@ function queueSync() {
 }
 
 async function onClick(event) {
-  const trigger = event.target.closest('[data-pv-product-create]');
+  const trigger = event.target.closest('[data-pv-product-create], [data-pv-product-intent]');
   if (!trigger || runtime.creatingProject) return;
 
   const activeId = activeProjectSessionId();
