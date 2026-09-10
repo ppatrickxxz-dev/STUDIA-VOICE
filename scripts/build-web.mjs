@@ -1,5 +1,5 @@
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { cp, mkdir, readFile, readdir, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const out = resolve(root, 'apps/web/dist');
@@ -29,6 +29,11 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
+// packages/app contains historical modules kept in Git for release evidence and rollback,
+// but shipping every retired root module makes the mobile Web bundle slower. Build the
+// runtime closure from the real HTML module entrypoints and remove only unreachable
+// top-level JS/MJS files. Imported package modules and workers remain untouched.
+await pruneUnreachableRootModules(out);
 await assertBuiltRelativeImportsResolve(out);
 
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
@@ -39,20 +44,65 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
 }, null, 2)}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
 
+async function pruneUnreachableRootModules(directory) {
+  const html = await readFile(resolve(directory, 'index.html'), 'utf8');
+  const entrypoints = [...html.matchAll(/<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']\.\/([^"']+)["'][^>]*>/gi)]
+    .map((match) => resolve(directory, match[1]));
+  const serviceWorker = resolve(directory, 'service-worker.js');
+  try { if ((await stat(serviceWorker)).isFile()) entrypoints.push(serviceWorker); } catch { /* optional */ }
+
+  const reachable = new Set();
+  const pending = [...entrypoints];
+  while (pending.length) {
+    const file = pending.pop();
+    if (reachable.has(file)) continue;
+    let source;
+    try { source = await readFile(file, 'utf8'); } catch { continue; }
+    reachable.add(file);
+    for (const specifier of relativeModuleSpecifiers(source)) {
+      const target = resolve(dirname(file), specifier);
+      try {
+        if ((await stat(target)).isFile() && !reachable.has(target)) pending.push(target);
+      } catch { /* unresolved imports are reported by the build assertion */ }
+    }
+  }
+
+  let removedBytes = 0;
+  const removed = [];
+  for (const name of await readdir(directory)) {
+    if (!name.endsWith('.mjs') && !name.endsWith('.js')) continue;
+    const file = resolve(directory, name);
+    if (reachable.has(file)) continue;
+    const info = await stat(file);
+    if (!info.isFile()) continue;
+    removedBytes += info.size;
+    removed.push(name);
+    await unlink(file);
+  }
+  console.log(`Pruned ${removed.length} unreachable root modules (${removedBytes} bytes): ${removed.join(', ') || 'none'}`);
+}
+
+function relativeModuleSpecifiers(source) {
+  const values = new Set();
+  const staticPattern = /\b(?:import|export)\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+  const dynamicPattern = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const pattern of [staticPattern, dynamicPattern]) {
+    for (const match of source.matchAll(pattern)) if (match[1]?.startsWith('.')) values.add(match[1]);
+  }
+  return values;
+}
+
 async function assertBuiltRelativeImportsResolve(directory) {
   const files = await collectModules(directory);
-  const importPattern = /(?:from\s+|import\s*\()\s*['"]([^'"]+)['"]/g;
   const missing = [];
   for (const file of files) {
     const source = await readFile(file, 'utf8');
-    for (const match of source.matchAll(importPattern)) {
-      const specifier = match[1];
-      if (!specifier.startsWith('.')) continue;
+    for (const specifier of relativeModuleSpecifiers(source)) {
       const target = resolve(dirname(file), specifier);
       try {
-        if (!(await stat(target)).isFile()) missing.push(`${file}: ${specifier}`);
+        if (!(await stat(target)).isFile()) missing.push(`${relative(directory, file)}: ${specifier}`);
       } catch {
-        missing.push(`${file}: ${specifier}`);
+        missing.push(`${relative(directory, file)}: ${specifier}`);
       }
     }
   }

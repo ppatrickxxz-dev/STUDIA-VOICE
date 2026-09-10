@@ -13,10 +13,11 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
   const core = await loadProjectRuntime();
   if (!core) return blocked('project_runtime_unavailable');
 
+  const persistedPreset = String(project.instrumentLab?.preset || '');
   const current = normalizeInstrumentState(project.instrumentLab || {});
   if (!current.notes.length) return blocked('instrument_notes_required');
   const expectedPreset = String(plan.args?.sourcePreset || '');
-  if (expectedPreset && current.preset !== expectedPreset) return blocked('instrument_state_drift');
+  if (expectedPreset && !presetEquivalent(current.preset, expectedPreset)) return blocked('instrument_state_drift');
 
   const humanize = clamp(Number(plan.args?.humanize) || 0, 0, 1);
   const syncopation = clamp(Number(plan.args?.syncopation) || 0, 0, 1);
@@ -39,6 +40,10 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
     ...current,
     notes: transformedNotes,
   });
+  // "bass" was the v2 public preset id. The richer synth engine resolves it to
+  // synth_bass internally, but deterministic Pablo edits must not create project
+  // drift merely because an older saved project still carries that canonical id.
+  if (persistedPreset === 'bass' && current.preset === 'synth_bass') next.instrumentLab.preset = 'bass';
   const saved = core.snapshotProject(next, 'Instrumento ajustado pelo Pablo');
 
   return Object.freeze({
@@ -54,7 +59,7 @@ export async function applyPabloInstrumentOperation(project, plan = {}) {
     invariants: Object.freeze({
       pitchSequencePreserved: true,
       noteCountPreserved: true,
-      presetPreserved: saved.instrumentLab.preset === current.preset,
+      presetPreserved: saved.instrumentLab.preset === (persistedPreset || current.preset),
       bpmPreserved: saved.instrumentLab.bpm === current.bpm,
       outsideSectionPreserved: scope ? true : null,
       baselineRevisionCaptured: true,
@@ -192,6 +197,10 @@ function summarize(notes) {
   });
 }
 
+function presetEquivalent(current, expected) {
+  if (current === expected) return true;
+  return (current === 'synth_bass' && expected === 'bass') || (current === 'bass' && expected === 'synth_bass');
+}
 function blocked(reason) {
   return Object.freeze({ ok: false, mutated: false, reason });
 }

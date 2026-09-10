@@ -1,4 +1,4 @@
-import { encodePcmWav, midiToHz, renderInstrumentPcm } from './instrument-engine.mjs';
+import { encodePcmWav, renderInstrumentPcm } from './instrument-engine.mjs';
 import { normalizeSingerProfile } from './singer-profile.mjs';
 
 export const SONG_CREATION_SCHEMA = 'pablovoice_song_creation_v1';
@@ -8,34 +8,85 @@ const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
 const KEY_ROOTS = Object.freeze({ C: 48, Db: 49, D: 50, Eb: 51, E: 52, F: 53, Gb: 54, G: 55, Ab: 56, A: 57, Bb: 58, B: 59 });
 const GENRE_DEFAULTS = Object.freeze({
-  pop: { bpm: 112, mode: 'minor', progression: [1, 6, 3, 7], groove: 'pop' },
-  rnb: { bpm: 96, mode: 'minor', progression: [1, 7, 6, 7], groove: 'rnb' },
-  funk: { bpm: 128, mode: 'minor', progression: [1, 6, 7, 6], groove: 'funk' },
-  mpb: { bpm: 92, mode: 'major', progression: [1, 6, 4, 5], groove: 'soft' },
-  rap: { bpm: 88, mode: 'minor', progression: [1, 6, 4, 5], groove: 'half' },
-  dance: { bpm: 122, mode: 'minor', progression: [1, 6, 3, 7], groove: 'dance' },
+  pop: {
+    bpm: 112, mode: 'minor',
+    progressions: [[1,6,3,7], [6,4,1,5], [1,5,6,4], [4,1,5,6]],
+    grooves: ['pop', 'pop_sync', 'half'],
+    palettes: [
+      { pad: 'soft_pad', bass: 'synth_bass', accent: 'glass_pluck', guide: 'synth_lead' },
+      { pad: 'analog_pad', bass: 'sub_bass', accent: 'velvet_ep', guide: 'warm_keys' },
+    ],
+  },
+  rnb: {
+    bpm: 96, mode: 'minor',
+    progressions: [[1,7,6,7], [6,4,1,5], [2,5,1,6], [1,3,6,4], [6,2,5,1]],
+    grooves: ['rnb', 'rnb_sync', 'half'],
+    palettes: [
+      { pad: 'soft_pad', bass: 'sub_bass', accent: 'velvet_ep', guide: 'synth_lead' },
+      { pad: 'analog_pad', bass: 'synth_bass', accent: 'glass_pluck', guide: 'velvet_ep' },
+      { pad: 'soft_pad', bass: 'synth_bass', accent: 'glass_pluck', guide: 'warm_keys' },
+    ],
+  },
+  funk: {
+    bpm: 128, mode: 'minor',
+    progressions: [[1,6,7,6], [1,4,6,5], [6,7,1,4], [1,7,4,6]],
+    grooves: ['funk', 'funk_bounce', 'rnb_sync'],
+    palettes: [
+      { pad: 'analog_pad', bass: 'synth_bass', accent: 'glass_pluck', guide: 'synth_lead' },
+      { pad: 'soft_pad', bass: 'sub_bass', accent: 'warm_keys', guide: 'velvet_ep' },
+    ],
+  },
+  mpb: {
+    bpm: 92, mode: 'major',
+    progressions: [[1,6,4,5], [1,3,4,2,5], [6,2,5,1], [1,4,3,6,2,5]],
+    grooves: ['soft', 'rnb', 'pop_sync'],
+    palettes: [
+      { pad: 'soft_pad', bass: 'synth_bass', accent: 'velvet_ep', guide: 'warm_keys' },
+      { pad: 'analog_pad', bass: 'sub_bass', accent: 'glass_pluck', guide: 'velvet_ep' },
+    ],
+  },
+  rap: {
+    bpm: 88, mode: 'minor',
+    progressions: [[1,6,4,5], [1,7,6,4], [6,4,1,5], [1,3,7,6]],
+    grooves: ['half', 'rnb_sync', 'funk_bounce'],
+    palettes: [
+      { pad: 'analog_pad', bass: 'sub_bass', accent: 'glass_pluck', guide: 'synth_lead' },
+      { pad: 'soft_pad', bass: 'synth_bass', accent: 'velvet_ep', guide: 'warm_keys' },
+    ],
+  },
+  dance: {
+    bpm: 122, mode: 'minor',
+    progressions: [[1,6,3,7], [6,4,1,5], [1,5,3,6], [4,6,1,5]],
+    grooves: ['dance', 'pop_sync', 'pop'],
+    palettes: [
+      { pad: 'analog_pad', bass: 'synth_bass', accent: 'glass_pluck', guide: 'synth_lead' },
+      { pad: 'soft_pad', bass: 'sub_bass', accent: 'synth_lead', guide: 'velvet_ep' },
+    ],
+  },
 });
 
 export function createSongCreationPlan(input = {}) {
   const genre = normalizeGenre(input.genre || 'pop');
   const defaults = GENRE_DEFAULTS[genre];
+  const explicitSeed = Number.isFinite(Number(input.seed ?? input.variationSeed));
+  const seed = explicitSeed ? (Number(input.seed ?? input.variationSeed) >>> 0) : randomSeed();
   const bpm = clamp(Math.round(Number(input.bpm) || defaults.bpm), 60, 180);
   const durationSeconds = clamp(Math.round(Number(input.durationSeconds) || 120), 30, 210);
-  const seedText = `${input.brief || ''}|${input.lyrics || ''}|${genre}`;
-  const seed = hashString(seedText);
   const mode = String(input.mode || defaults.mode) === 'major' ? 'major' : 'minor';
-  const keyName = KEY_ROOTS[input.key] != null ? input.key : Object.keys(KEY_ROOTS)[seed % Object.keys(KEY_ROOTS).length];
+  const keyNames = Object.keys(KEY_ROOTS);
+  const keyName = KEY_ROOTS[input.key] != null ? input.key : keyNames[seed % keyNames.length];
   const rootMidi = KEY_ROOTS[keyName];
   const totalBeats = Math.max(16, Math.floor(durationSeconds * bpm / 60 / BEATS_PER_BAR) * BEATS_PER_BAR);
   const totalBars = Math.max(4, Math.floor(totalBeats / BEATS_PER_BAR));
-  const structure = structureForGenre(genre, totalBars);
+  const creativeProfile = buildCreativeProfile(defaults, seed);
+  const structure = structureForGenre(genre, totalBars, seed);
   const sections = allocateSections(structure, totalBars, bpm);
-  const progression = defaults.progression;
+  const progression = creativeProfile.progression;
   const scale = mode === 'major' ? MAJOR : MINOR;
-  const harmonic = buildHarmonicNotes({ sections, progression, scale, rootMidi, seed });
+  const harmonic = buildHarmonicNotes({ sections, progression, scale, rootMidi, seed, creativeProfile });
   const singerProfile = normalizeSingerProfile(input.singerProfile);
-  const guide = buildGuideNotes({ lyrics: input.lyrics, sections, scale, rootMidi, seed, genre, singerProfile });
-  const drums = buildDrumEvents({ sections, bpm, genre, groove: defaults.groove, seed });
+  const guide = buildGuideNotes({ lyrics: input.lyrics, sections, scale, rootMidi, seed, genre, singerProfile, motif: creativeProfile.motif });
+  const drums = buildDrumEvents({ sections, bpm, genre, groove: creativeProfile.groove, seed, density: creativeProfile.density });
   return Object.freeze({
     schema: SONG_CREATION_SCHEMA,
     brief: String(input.brief || '').trim().slice(0, 1200),
@@ -57,6 +108,8 @@ export function createSongCreationPlan(input = {}) {
     singerProfile,
     drumEvents: drums,
     seed,
+    variationId: `v${seed.toString(16).padStart(8, '0')}`,
+    creativeProfile,
     createdAt: Date.now(),
   });
 }
@@ -66,14 +119,15 @@ export function renderSongCreation(plan, { sampleRate = SAMPLE_RATE } = {}) {
   sampleRate = clamp(Math.round(Number(sampleRate) || SAMPLE_RATE), 22050, 32000);
   const targetFrames = Math.ceil(plan.durationSeconds * sampleRate);
   const instrumental = new Float32Array(targetFrames);
-  addInstrumentLayer(instrumental, plan.padNotes, plan.bpm, 'soft_pad', sampleRate, 0.72);
-  addInstrumentLayer(instrumental, plan.bassNotes, plan.bpm, 'bass', sampleRate, 0.74);
-  addInstrumentLayer(instrumental, plan.accentNotes, plan.bpm, 'warm_keys', sampleRate, 0.42);
+  const palette = plan.creativeProfile?.palette || { pad: 'soft_pad', bass: 'synth_bass', accent: 'warm_keys', guide: 'warm_keys' };
+  addInstrumentLayer(instrumental, plan.padNotes, plan.bpm, palette.pad, sampleRate, 0.68);
+  addInstrumentLayer(instrumental, plan.bassNotes, plan.bpm, palette.bass, sampleRate, 0.76);
+  addInstrumentLayer(instrumental, plan.accentNotes, plan.bpm, palette.accent, sampleRate, 0.4);
   renderDrums(instrumental, plan.drumEvents, sampleRate, plan.bpm, plan.seed);
   masterInPlace(instrumental, 0.92);
 
   const guide = new Float32Array(targetFrames);
-  addInstrumentLayer(guide, plan.guideNotes, plan.bpm, 'warm_keys', sampleRate, 0.9);
+  addInstrumentLayer(guide, plan.guideNotes, plan.bpm, palette.guide, sampleRate, 0.84);
   masterInPlace(guide, 0.78);
 
   const instrumentalRendered = { channels: [instrumental], sampleRate, frameCount: targetFrames, duration: plan.durationSeconds };
@@ -89,7 +143,30 @@ export function renderSongCreation(plan, { sampleRate = SAMPLE_RATE } = {}) {
 export function describeSongPlan(plan) {
   const mode = plan.mode === 'major' ? 'maior' : 'menor';
   const labels = plan.sections.map((section) => section.label).join(' → ');
-  return `${plan.genre.toUpperCase()} · ${plan.bpm} BPM · ${plan.key} ${mode} · ${labels}`;
+  const variation = plan.variationId ? ` · ${plan.variationId}` : '';
+  return `${plan.genre.toUpperCase()} · ${plan.bpm} BPM · ${plan.key} ${mode}${variation} · ${labels}`;
+}
+
+function buildCreativeProfile(defaults, seed) {
+  const rand = seededRandom(seed || 1);
+  const progression = defaults.progressions[Math.floor(rand() * defaults.progressions.length)] || defaults.progressions[0];
+  const groove = defaults.grooves[Math.floor(rand() * defaults.grooves.length)] || defaults.grooves[0];
+  const palette = defaults.palettes[Math.floor(rand() * defaults.palettes.length)] || defaults.palettes[0];
+  const voicings = ['close', 'open', 'seventh'];
+  const bassPatterns = ['root-fifth', 'syncopated', 'octave-walk'];
+  const accentPatterns = ['offbeat', 'answer', 'sparse', 'hook'];
+  const motifs = ['rise', 'fall', 'wave', 'hook'];
+  const density = 0.38 + rand() * 0.48;
+  return Object.freeze({
+    progression: Object.freeze([...progression]),
+    groove,
+    palette: Object.freeze({ ...palette }),
+    voicing: voicings[Math.floor(rand() * voicings.length)],
+    bassPattern: bassPatterns[Math.floor(rand() * bassPatterns.length)],
+    accentPattern: accentPatterns[Math.floor(rand() * accentPatterns.length)],
+    motif: motifs[Math.floor(rand() * motifs.length)],
+    density: Number(density.toFixed(3)),
+  });
 }
 
 function addInstrumentLayer(target, notes, bpm, preset, sampleRate, gain) {
@@ -100,7 +177,7 @@ function addInstrumentLayer(target, notes, bpm, preset, sampleRate, gain) {
   for (let index = 0; index < count; index += 1) target[index] += source[index] * gain;
 }
 
-function buildHarmonicNotes({ sections, progression, scale, rootMidi, seed }) {
+function buildHarmonicNotes({ sections, progression, scale, rootMidi, seed, creativeProfile }) {
   const padNotes = [];
   const bassNotes = [];
   const accentNotes = [];
@@ -109,24 +186,51 @@ function buildHarmonicNotes({ sections, progression, scale, rootMidi, seed }) {
     for (let bar = section.startBar; bar < section.endBar; bar += 1) {
       const degree = progression[chordCursor % progression.length];
       chordCursor += 1;
-      const chord = triadForDegree(degree, scale, rootMidi + 12);
+      const chord = chordForDegree(degree, scale, rootMidi + 12, creativeProfile.voicing, (bar + seed) % 3);
       const start = bar * BEATS_PER_BAR;
       const energy = sectionEnergy(section.id);
-      for (const midi of chord) padNotes.push(note(midi, 74 + Math.round(energy * 18), start, BEATS_PER_BAR * 0.94));
+      for (const midi of chord) padNotes.push(note(midi, 70 + Math.round(energy * 20), start, BEATS_PER_BAR * (creativeProfile.voicing === 'open' ? 0.88 : 0.94)));
       const bassRoot = rootForDegree(degree, scale, rootMidi - 12);
-      bassNotes.push(note(bassRoot, 92 + Math.round(energy * 20), start, 1.65));
-      if (energy > 0.45) bassNotes.push(note(bassRoot + (bar % 2 ? 7 : 0), 76, start + 2, 1.25));
-      if (energy > 0.56) {
-        const accentMidi = chord[(bar + seed) % chord.length] + 12;
-        accentNotes.push(note(accentMidi, 72 + Math.round(energy * 20), start + 1.5, 0.28));
-        accentNotes.push(note(chord[(bar + 1 + seed) % chord.length] + 12, 68 + Math.round(energy * 18), start + 3.5, 0.22));
-      }
+      addBassPattern(bassNotes, bassRoot, start, bar, energy, creativeProfile.bassPattern, seed);
+      addAccentPattern(accentNotes, chord, start, bar, energy, creativeProfile.accentPattern, seed);
     }
   }
   return { padNotes, bassNotes, accentNotes };
 }
 
-function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre, singerProfile }) {
+function addBassPattern(target, root, start, bar, energy, pattern, seed) {
+  const velocity = 90 + Math.round(energy * 22);
+  if (pattern === 'syncopated') {
+    target.push(note(root, velocity, start, 0.9), note(root + 7, 78, start + 1.5, 0.55), note(root + ((bar + seed) % 2 ? 12 : 0), 84, start + 2.75, 0.7));
+    return;
+  }
+  if (pattern === 'octave-walk') {
+    target.push(note(root, velocity, start, 1.1), note(root + 12, 80, start + 1.75, 0.65), note(root + 7, 76, start + 3, 0.6));
+    return;
+  }
+  target.push(note(root, velocity, start, 1.5));
+  if (energy > 0.42) target.push(note(root + 7, 78, start + 2, 1.05));
+}
+
+function addAccentPattern(target, chord, start, bar, energy, pattern, seed) {
+  if (energy < 0.44) return;
+  const pick = (offset = 0) => chord[(bar + seed + offset) % chord.length] + 12;
+  if (pattern === 'sparse') {
+    if ((bar + seed) % 2 === 0) target.push(note(pick(), 72, start + 2.5, 0.34));
+    return;
+  }
+  if (pattern === 'answer') {
+    target.push(note(pick(), 74, start + 2.75, 0.26), note(pick(1), 68, start + 3.35, 0.22));
+    return;
+  }
+  if (pattern === 'hook') {
+    target.push(note(pick(), 78, start + 0.75, 0.24), note(pick(1), 74, start + 1.5, 0.24), note(pick(), 72, start + 3.25, 0.3));
+    return;
+  }
+  target.push(note(pick(), 72, start + 1.5, 0.28), note(pick(1), 70, start + 3.5, 0.22));
+}
+
+function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre, singerProfile, motif }) {
   const lyricLines = String(lyrics || '').split(/\r?\n/).map((text) => text.trim()).filter((text) => text && !/^\[.*\]$/.test(text) && !/^(verso|refr[aã]o|ponte|bridge|chorus|pre)/i.test(text));
   const contentSections = sections.filter((section) => !['intro', 'outro'].includes(section.id));
   const startBeat = contentSections[0]?.startBeat ?? 0;
@@ -146,12 +250,13 @@ function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre, singe
     const phraseNotes = [];
     const lift = /refr|chorus/.test(section?.id || '') ? 5 : /pre/.test(section?.id || '') ? 3 : 0;
     for (let n = 0; n < count; n += 1) {
-      const contour = melodicDegree(index, n, seed, count);
+      const contour = melodicDegree(index, n, seed, count, motif);
       const midi = rootMidi + 24 + scale[contour % 7] + lift + (contour >= 7 ? 12 : 0);
-      const start = lineStart + n * phraseStep;
-      const duration = Math.max(0.18, phraseStep * 0.74);
+      const rhythmicNudge = ((seed >>> ((n % 4) * 4)) & 1) && n > 0 ? phraseStep * 0.08 : 0;
+      const start = lineStart + n * phraseStep + rhythmicNudge;
+      const duration = Math.max(0.18, phraseStep * (0.65 + ((seed + n) % 3) * 0.07));
       const singerMidi = clamp(midi, singerProfile.lowMidi, singerProfile.highMidi);
-      notes.push(note(singerMidi, 88 + ((index + n + seed) % 18), start, duration));
+      notes.push(note(singerMidi, 86 + ((index + n + seed) % 20), start, duration));
       phraseNotes.push({ midi: singerMidi, startBeat: start, durationBeats: duration });
     }
     mapped.push(Object.freeze({ index, text: lines[index], startBeat: lineStart, endBeat: lineEnd, sectionId: section?.id || null, notes: phraseNotes }));
@@ -159,7 +264,7 @@ function buildGuideNotes({ lyrics, sections, scale, rootMidi, seed, genre, singe
   return { notes, lines: mapped };
 }
 
-function buildDrumEvents({ sections, genre, groove, seed }) {
+function buildDrumEvents({ sections, genre, groove, seed, density }) {
   const events = [];
   for (const section of sections) {
     const energy = sectionEnergy(section.id);
@@ -167,15 +272,27 @@ function buildDrumEvents({ sections, genre, groove, seed }) {
       const start = bar * BEATS_PER_BAR;
       if (energy < 0.18) continue;
       if (groove === 'half') {
-        events.push(drum('kick', start, 0.95), drum('snare', start + 2, 0.78));
-      } else if (groove === 'funk') {
-        events.push(drum('kick', start, 0.98), drum('kick', start + 1.5, 0.72), drum('snare', start + 1, 0.82), drum('snare', start + 3, 0.88));
+        events.push(drum('kick', start, 0.95), drum('snare', start + 2, 0.8));
+        if ((bar + seed) % 2) events.push(drum('kick', start + 3.25, 0.62));
+      } else if (groove === 'funk' || groove === 'funk_bounce') {
+        const secondKick = groove === 'funk_bounce' ? 1.75 : 1.5;
+        events.push(drum('kick', start, 0.98), drum('kick', start + secondKick, 0.72), drum('snare', start + 1, 0.82), drum('snare', start + 3, 0.88));
+        if (groove === 'funk_bounce' && energy > 0.5) events.push(drum('kick', start + 2.5, 0.64));
+      } else if (groove === 'rnb_sync') {
+        events.push(drum('kick', start, 0.9), drum('kick', start + 1.75, 0.66), drum('snare', start + 1, 0.78), drum('snare', start + 3, 0.84));
+        if ((bar + seed) % 3 === 0) events.push(drum('kick', start + 3.5, 0.58));
+      } else if (groove === 'dance') {
+        events.push(drum('kick', start, 0.9), drum('kick', start + 1, 0.86), drum('kick', start + 2, 0.9), drum('kick', start + 3, 0.86), drum('snare', start + 1, 0.62), drum('snare', start + 3, 0.68));
       } else {
-        events.push(drum('kick', start, 0.95), drum('kick', start + 2 + ((bar + seed) % 2 ? 0.5 : 0), 0.72), drum('snare', start + 1, 0.82), drum('snare', start + 3, 0.86));
+        const offset = groove === 'pop_sync' && (bar + seed) % 2 ? 0.5 : 0;
+        events.push(drum('kick', start, 0.95), drum('kick', start + 2 + offset, 0.72), drum('snare', start + 1, 0.82), drum('snare', start + 3, 0.86));
       }
       if (energy > 0.34) {
-        const hatStep = genre === 'rnb' ? 0.5 : 0.5;
-        for (let beat = 0; beat < BEATS_PER_BAR; beat += hatStep) events.push(drum('hat', start + beat, 0.32 + energy * 0.2 + ((Math.round(beat * 2) + seed) % 3 === 0 ? 0.08 : 0)));
+        const hatStep = density > 0.66 || genre === 'rnb' ? 0.5 : 1;
+        for (let beat = 0; beat < BEATS_PER_BAR; beat += hatStep) {
+          const skip = density < 0.52 && ((Math.round(beat * 2) + bar + seed) % 4 === 1);
+          if (!skip) events.push(drum('hat', start + beat, 0.28 + energy * 0.22 + ((Math.round(beat * 2) + seed) % 3 === 0 ? 0.08 : 0)));
+        }
       }
       if (energy > 0.75 && bar === section.endBar - 1) {
         events.push(drum('snare', start + 3.25, 0.58), drum('snare', start + 3.5, 0.7), drum('snare', start + 3.75, 0.86));
@@ -233,10 +350,14 @@ function masterInPlace(samples, targetPeak) {
   for (let i = 0; i < samples.length; i += 1) samples[i] *= scale;
 }
 
-function structureForGenre(genre, totalBars) {
-  const full = genre === 'rap'
+function structureForGenre(genre, totalBars, seed = 0) {
+  const standard = genre === 'rap'
     ? ['intro', 'verso_1', 'refrão', 'verso_2', 'refrão', 'ponte_rap', 'refrão_final', 'outro']
     : ['intro', 'verso_1', 'pre_refrão', 'refrão', 'verso_2', 'pre_refrão_2', 'refrão_2', 'ponte', 'refrão_final', 'outro'];
+  const alternate = genre === 'rap'
+    ? ['intro', 'refrão', 'verso_1', 'refrão', 'verso_2', 'ponte_rap', 'refrão_final', 'outro']
+    : ['intro', 'refrão', 'verso_1', 'pre_refrão', 'refrão_2', 'verso_2', 'ponte', 'refrão_final', 'outro'];
+  const full = seed % 4 === 3 ? alternate : standard;
   if (totalBars < 20) return ['intro', 'verso_1', 'refrão', 'verso_2', 'refrão_final', 'outro'];
   if (totalBars < 32) return full.filter((id) => !['pre_refrão_2', 'refrão_2'].includes(id));
   return full;
@@ -267,11 +388,45 @@ function sectionWeight(id) { if (id === 'intro' || id === 'outro') return 0.5; i
 function sectionEnergy(id) { if (id === 'intro') return 0.28; if (id === 'outro') return 0.38; if (/refr[aã]o_final/.test(id)) return 1; if (/refr/.test(id)) return 0.9; if (/pre/.test(id)) return 0.66; if (/ponte/.test(id)) return 0.58; return 0.52; }
 function sectionLabel(id) { return id.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase()); }
 function sectionAtBeat(sections, beat) { return sections.find((section) => beat >= section.startBeat && beat < section.endBeat) || sections.at(-1); }
-function melodicDegree(lineIndex, noteIndex, seed, count) { const shapes = [[0,2,4,3,2,1,0],[0,1,2,4,5,4,2],[2,4,5,4,2,1,0],[0,2,3,5,4,2,1]]; const shape = shapes[(lineIndex + seed) % shapes.length]; const value = shape[noteIndex % Math.min(shape.length, count)] ?? 0; return value + (((lineIndex + seed) % 5 === 0 && noteIndex === count - 2) ? 2 : 0); }
-function triadForDegree(degree, scale, root) { const index = ((degree - 1) % 7 + 7) % 7; return [0,2,4].map((step) => { const scaleIndex = index + step; return root + scale[scaleIndex % 7] + (scaleIndex >= 7 ? 12 : 0); }); }
+function melodicDegree(lineIndex, noteIndex, seed, count, motif = 'wave') {
+  const shapes = {
+    rise: [0,1,2,4,5,6,4],
+    fall: [5,4,3,2,1,0,2],
+    wave: [0,2,4,3,2,1,0],
+    hook: [0,2,3,5,3,2,3],
+  };
+  const shape = shapes[motif] || shapes.wave;
+  const value = shape[(noteIndex + lineIndex + (seed % 3)) % Math.min(shape.length, count)] ?? 0;
+  return value + (((lineIndex + seed) % 5 === 0 && noteIndex === count - 2) ? 2 : 0);
+}
+function chordForDegree(degree, scale, root, voicing = 'close', inversion = 0) {
+  const index = ((degree - 1) % 7 + 7) % 7;
+  const steps = voicing === 'seventh' ? [0,2,4,6] : [0,2,4];
+  const notes = steps.map((step) => { const scaleIndex = index + step; return root + scale[scaleIndex % 7] + (scaleIndex >= 7 ? 12 : 0); });
+  if (voicing === 'open' && notes.length >= 3) notes[1] += 12;
+  for (let i = 0; i < inversion && i < notes.length - 1; i += 1) notes[i] += 12;
+  return notes.sort((a, b) => a - b);
+}
 function rootForDegree(degree, scale, root) { const index = ((degree - 1) % 7 + 7) % 7; return root + scale[index]; }
 function note(midi, velocity, start_beat, duration_beats) { return { midi: clamp(Math.round(midi), 0, 127), velocity: clamp(Math.round(velocity), 1, 127), start_beat: Math.max(0, start_beat), duration_beats: Math.max(0.05, duration_beats) }; }
 function drum(kind, beat, velocity) { return { kind, beat, velocity: clamp(velocity, 0, 1) }; }
 function normalizeGenre(value) { const text = String(value || '').toLowerCase(); if (/r&b|rnb/.test(text)) return 'rnb'; if (/funk/.test(text)) return 'funk'; if (/mpb|bossa/.test(text)) return 'mpb'; if (/rap|hip/.test(text)) return 'rap'; if (/dance|edm|eletr/.test(text)) return 'dance'; return 'pop'; }
-function hashString(value) { let hash = 2166136261; for (const char of String(value || '')) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); } return hash >>> 0; }
+function randomSeed() {
+  try {
+    const values = new Uint32Array(1);
+    globalThis.crypto?.getRandomValues?.(values);
+    if (values[0]) return values[0] >>> 0;
+  } catch { /* deterministic regeneration still uses explicit seed */ }
+  return ((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0) || 1;
+}
+function seededRandom(seed) {
+  let value = (seed >>> 0) || 1;
+  return () => {
+    value += 0x6D2B79F5;
+    let t = value;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
