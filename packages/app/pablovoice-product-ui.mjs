@@ -105,7 +105,7 @@ function homeMarkup() {
 
   <div class="pv-product-workspace-grid">
     <button type="button" class="pv-product-workspace" data-route="compose"><span>01</span><div><b>Letra & direção</b><small>brief, estrutura, prosódia e Song DNA</small></div><i>→</i></button>
-    <button type="button" class="pv-product-workspace" data-route="compose" data-pv-product-create="instrumental"><span>02</span><div><b>Beat & instrumentos</b><small>groove, timbres e construção do instrumental</small></div><i>→</i></button>
+    <button type="button" class="pv-product-workspace" data-route="compose" data-pv-product-intent="instrumental"><span>02</span><div><b>Beat & instrumentos</b><small>groove, timbres e construção do instrumental</small></div><i>→</i></button>
     <button type="button" class="pv-product-workspace" data-route="studio"><span>03</span><div><b>Arranjo & seções</b><small>editar trechos e preservar takes bons</small></div><i>→</i></button>
     <button type="button" class="pv-product-workspace" data-action="record"><span>04</span><div><b>Gravar voz</b><small>ideia, guia, doubles e take final</small></div><i>●</i></button>
     <button type="button" class="pv-product-workspace" data-route="studio"><span>05</span><div><b>Voice Lab & mix</b><small>limpeza, pitch, timbre, A/B e mixer</small></div><i>→</i></button>
@@ -187,11 +187,11 @@ function onClick(event) {
     }
     return;
   }
-  const create = event.target.closest('[data-pv-product-create]');
+  const create = event.target.closest('[data-pv-product-create], [data-pv-product-intent]');
   if (create) {
     const prompt = document.querySelector('[data-pv-product-prompt]')?.value?.trim() || '';
     if (prompt) sessionStorage.setItem(PROMPT_KEY, prompt);
-    sessionStorage.setItem(KIND_KEY, create.dataset.pvProductCreate || 'song');
+    sessionStorage.setItem(KIND_KEY, create.dataset.pvProductCreate || create.dataset.pvProductIntent || 'song');
   }
   queueSync();
 }
