@@ -2,15 +2,17 @@ const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v21';
 const PROMPT_KEY = 'pablovoice.product.createPrompt';
 const KIND_KEY = 'pablovoice.product.createKind';
 
-const runtime = { observer: null, queued: false };
+const runtime = { observer: null, scheduled: false, frame: 0 };
 
 export function installPabloVoiceProductUI() {
-  if (runtime.observer) return () => disconnect();
+  if (runtime.observer) return disconnect;
   document.documentElement.dataset.pvProductUi = PRODUCT_UI_VERSION;
   runtime.observer = new MutationObserver(queueSync);
   runtime.observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('click', onClick, true);
   window.addEventListener('hashchange', queueSync);
+  document.addEventListener('pablovoice:vnext-surface-ready', queueSync);
+  document.addEventListener('pablovoice:project-updated', queueSync);
   queueSync();
   return disconnect;
 }
@@ -18,17 +20,25 @@ export function installPabloVoiceProductUI() {
 function disconnect() {
   runtime.observer?.disconnect();
   runtime.observer = null;
+  if (runtime.frame) cancelAnimationFrame(runtime.frame);
+  runtime.frame = 0;
+  runtime.scheduled = false;
   window.removeEventListener('click', onClick, true);
   window.removeEventListener('hashchange', queueSync);
+  document.removeEventListener('pablovoice:vnext-surface-ready', queueSync);
+  document.removeEventListener('pablovoice:project-updated', queueSync);
 }
 
 function queueSync() {
-  if (runtime.queued) return;
-  runtime.queued = true;
-  queueMicrotask(() => {
-    runtime.queued = false;
+  if (runtime.scheduled) return;
+  runtime.scheduled = true;
+  const run = () => {
+    runtime.scheduled = false;
+    runtime.frame = 0;
     syncProductUI();
-  });
+  };
+  if (typeof requestAnimationFrame === 'function') runtime.frame = requestAnimationFrame(run);
+  else setTimeout(run, 0);
 }
 
 function syncProductUI() {
@@ -49,44 +59,9 @@ function decorateNavigation() {
   const nav = document.querySelector('.pv-nav');
   if (!nav) return;
   nav.dataset.pvProductNav = 'true';
-  const copy = {
-    home: ['⌂', 'Início'],
-    compose: ['✦', 'Criar'],
-    studio: ['◉', 'Studio'],
-    projects: ['▤', 'Projetos'],
-    pablo: ['◇', 'Pablo IA'],
-  };
-  for (const button of nav.querySelectorAll('[data-route]')) {
-    const item = copy[button.dataset.route];
-    if (!item) continue;
-    const icon = button.querySelector('b');
-    const label = button.querySelector('span');
-    if (icon && icon.textContent !== item[0]) icon.textContent = item[0];
-    if (label && label.textContent !== item[1]) label.textContent = item[1];
-  }
-
-  // The canonical vNext nav intentionally exposes two composition entries
-  // (Create and Lyrics) that both map to the compose route. Reordering by route
-  // count made those duplicate-route buttons ping-pong forever through two
-  // MutationObservers, starving the browser event loop before load/networkidle.
-  // Order concrete DOM nodes once instead, preserve both compose entries, then
-  // leave specialist Production commands after the primary product routes.
-  const children = [...nav.children].filter((node) => node instanceof HTMLElement);
-  const pick = (selector) => nav.querySelector(selector);
-  const primary = [
-    pick('[data-route="home"]'),
-    pick('[data-vnext-route-command="create"]'),
-    pick('[data-vnext-route-command="lyrics"]'),
-    pick('[data-route="studio"]'),
-    pick('[data-route="projects"]'),
-    pick('[data-route="pablo"]'),
-  ].filter(Boolean);
-  const primarySet = new Set(primary);
-  const desired = [...primary, ...children.filter((node) => !primarySet.has(node))];
-  if (children.length === desired.length && children.every((node, index) => node === desired[index])) return;
-  const fragment = document.createDocumentFragment();
-  for (const node of desired) fragment.appendChild(node);
-  nav.appendChild(fragment);
+  // vNext owns the canonical navigation DOM. Product UI only marks it; it never
+  // rewrites labels/order because doing so would make two observers fight over
+  // the same nodes and can starve the browser event loop.
 }
 
 function decorateHome() {
@@ -95,9 +70,6 @@ function decorateHome() {
   if (!main || !hero) return;
   document.documentElement.dataset.pvProductHome = 'true';
   hero.dataset.pvProductHero = 'true';
-  setText(hero.querySelector('.pv-kicker'), 'PabloVoice Studio · criação musical com IA');
-  setHtml(hero.querySelector('.pv-title'), 'Crie a música. <em>Produza de verdade.</em>');
-  setText(hero.querySelector('.pv-lead'), 'Letra, instrumental, voz, arranjo, seções, takes, mix, master e exportação no mesmo projeto.');
 
   let surface = main.querySelector('#pv-product-home');
   if (!surface) {
@@ -113,7 +85,7 @@ function decorateHome() {
 function homeMarkup() {
   return `<div class="pv-product-create-card">
     <div class="pv-product-create-head">
-      <div><span class="pv-product-eyebrow">SONG BRAIN 2.0</span><h2>O que você quer criar?</h2><p>Descreva como falaria com um produtor. O PabloVoice organiza a direção e leva para o motor musical.</p></div>
+      <div><span class="pv-product-eyebrow">SONG BRAIN 2.0</span><h1 class="pv-product-title">Crie a música. Produza de verdade.</h1><h2>O que você quer criar?</h2><p>Descreva como falaria com um produtor. O PabloVoice organiza a direção e leva para o motor musical.</p></div>
       <span class="pv-product-ai-state" data-pv-product-ai-state>IA de criação</span>
     </div>
     <label class="pv-product-prompt-wrap">
@@ -160,25 +132,15 @@ function syncHomeState(surface) {
   if (ai) {
     const online = navigator.onLine !== false;
     ai.classList.toggle('online', online);
-    const next = online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado';
-    if (ai.textContent !== next) ai.textContent = next;
+    setText(ai, online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado');
   }
 }
 
 function decorateCreate() {
   delete document.documentElement.dataset.pvProductHome;
   const main = document.querySelector('main');
-  const hero = main?.querySelector('.pv-hero');
   const creator = main?.querySelector('#pv-song-creator');
   if (!main || !creator) return;
-  if (hero) {
-    hero.dataset.pvProductHero = 'true';
-    setText(hero.querySelector('.pv-kicker'), 'Criar · Song Brain 2.0');
-    setHtml(hero.querySelector('.pv-title'), 'Da intenção ao <em>primeiro take.</em>');
-    setText(hero.querySelector('.pv-lead'), 'Direção musical primeiro. Ajustes técnicos ficam em segundo plano e cada geração permanece editável.');
-  }
-  const anchor = hero?.nextElementSibling;
-  if (anchor !== creator) hero?.insertAdjacentElement('afterend', creator);
   creator.dataset.pvProductCreator = 'true';
   applyPendingCreateIntent(creator);
 }
@@ -206,12 +168,7 @@ function decorateStudio() {
   delete document.documentElement.dataset.pvProductHome;
   const main = document.querySelector('main');
   const hero = main?.querySelector('.pv-hero');
-  if (hero) {
-    hero.dataset.pvProductHero = 'true';
-    setText(hero.querySelector('.pv-kicker'), 'Studio · edição não destrutiva');
-    const lead = hero.querySelector('.pv-lead');
-    if (lead && !lead.dataset.pvProductOriginal) lead.dataset.pvProductOriginal = lead.textContent || '';
-  }
+  if (hero) hero.dataset.pvProductHero = 'true';
   const tabs = main?.querySelector('.pv-tabs');
   if (tabs) tabs.dataset.pvProductTabs = 'true';
   const actions = main?.querySelector('.pv-studio-actions');
@@ -231,18 +188,17 @@ function onClick(event) {
     return;
   }
   const create = event.target.closest('[data-pv-product-create]');
-  if (!create) return;
-  const prompt = document.querySelector('[data-pv-product-prompt]')?.value?.trim() || '';
-  if (prompt) sessionStorage.setItem(PROMPT_KEY, prompt);
-  sessionStorage.setItem(KIND_KEY, create.dataset.pvProductCreate || 'song');
+  if (create) {
+    const prompt = document.querySelector('[data-pv-product-prompt]')?.value?.trim() || '';
+    if (prompt) sessionStorage.setItem(PROMPT_KEY, prompt);
+    sessionStorage.setItem(KIND_KEY, create.dataset.pvProductCreate || 'song');
+  }
+  queueSync();
 }
 
 function setText(node, value) {
-  if (node && node.textContent !== value) node.textContent = value;
-}
-
-function setHtml(node, value) {
-  if (node && node.innerHTML !== value) node.innerHTML = value;
+  const text = String(value ?? '');
+  if (node && node.textContent !== text) node.textContent = text;
 }
 
 installPabloVoiceProductUI();
