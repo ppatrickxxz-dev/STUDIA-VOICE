@@ -38,6 +38,21 @@ html[data-pv-product-route="home"] .pv-vnext-nav button.route-active {
   box-shadow: inset 2px 0 rgba(255,255,255,.55);
 }
 
+html[data-pv-product-route="home"] .pv-product-primary {
+  border-color: rgba(255,255,255,.34);
+  background: linear-gradient(135deg,#e5e7eb,#9ca3af 55%,#555b66);
+  color: #090a0d;
+  box-shadow: 0 16px 42px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+html[data-pv-product-route="home"] .pv-product-primary b,
+html[data-pv-product-route="home"] .pv-product-primary small,
+html[data-pv-product-route="home"] .pv-product-primary span {
+  color: #090a0d;
+}
+
+html[data-pv-product-route="home"] .pv-product-primary small { opacity:.68; }
+
 .pv-product-utilities {
   display: grid;
   grid-template-columns: repeat(4,minmax(0,1fr));
