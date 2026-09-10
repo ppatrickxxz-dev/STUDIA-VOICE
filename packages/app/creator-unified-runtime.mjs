@@ -114,9 +114,11 @@ function ensureUnifiedCreation(form) {
   const connectedAvailable = Boolean(connected && !connected.disabled);
   const localAvailable = Boolean(local && !local.disabled);
   const busy = runtime.running;
-  button.disabled = busy || !connectedAvailable;
+  const buttonDisabled = busy || !connectedAvailable;
+  const draftDisabled = busy || !localAvailable;
+  if (button.disabled !== buttonDisabled) button.disabled = buttonDisabled;
   button.classList.toggle('busy', runtime.running);
-  if (draft) draft.disabled = busy || !localAvailable;
+  if (draft && draft.disabled !== draftDisabled) draft.disabled = draftDisabled;
   if (!runtime.running) setText(button, instrumental ? '● Produzir instrumental em alta qualidade' : '● Produzir em alta qualidade');
 }
 
@@ -136,7 +138,7 @@ async function onClick(event) {
     if (!form || !local || local.disabled) return;
 
     runtime.running = true;
-    draft.disabled = true;
+    if (!draft.disabled) draft.disabled = true;
     try {
       if (connected && !connected.hidden) connected.hidden = true;
       local.click();
@@ -158,7 +160,7 @@ async function onClick(event) {
   const connected = form.querySelector('[data-song-create-hq]');
 
   runtime.running = true;
-  button.disabled = true;
+  if (!button.disabled) button.disabled = true;
   button.classList.add('busy');
   setText(button, '● Preparando produção…');
 
