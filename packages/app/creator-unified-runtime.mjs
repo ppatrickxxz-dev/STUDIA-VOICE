@@ -18,7 +18,6 @@ export function installCreatorUnifiedRuntime() {
     attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-experience', 'data-pv-ready'],
   });
   window.addEventListener('click', onClick, true);
-  window.addEventListener('submit', onSubmitCapture, true);
   window.addEventListener('online', queueSync);
   window.addEventListener('offline', queueSync);
   queueSync();
@@ -29,7 +28,6 @@ function disconnect() {
   runtime.observer?.disconnect();
   runtime.observer = null;
   window.removeEventListener('click', onClick, true);
-  window.removeEventListener('submit', onSubmitCapture, true);
   window.removeEventListener('online', queueSync);
   window.removeEventListener('offline', queueSync);
 }
@@ -102,7 +100,7 @@ function ensureUnifiedCreation(form) {
     card = document.createElement('section');
     card.className = 'pv-song-mode-card pv-unified-create-card';
     card.dataset.pvUnifiedCreateCard = 'true';
-    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="submit" data-pv-local-draft>Rascunho local</button></div>';
+    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="button" data-pv-local-draft>Rascunho local</button></div>';
     const anchor = localCard || connectedCard || form.firstElementChild;
     if (anchor) anchor.insertAdjacentElement('beforebegin', card);
     else form.appendChild(card);
@@ -121,22 +119,30 @@ function ensureUnifiedCreation(form) {
   if (!runtime.running) setText(button, instrumental ? '● Produzir instrumental em alta qualidade' : '● Produzir em alta qualidade');
 }
 
-function onSubmitCapture(event) {
-  const form = event.target.closest?.('[data-song-create-form]');
-  if (!form || !event.submitter?.matches?.('[data-pv-local-draft]')) return;
-  const connected = form.querySelector('[data-song-create-hq]');
-  if (!connected) return;
-  const wasHidden = connected.hidden;
-  connected.hidden = true;
-  setTimeout(() => {
-    connected.hidden = wasHidden;
-    queueSync();
-  }, 0);
-}
-
 async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
+
+  const draft = event.target.closest('[data-pv-local-draft]');
+  if (draft) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const form = draft.closest('[data-song-create-form]');
+    const local = form?.querySelector('[data-song-create-button]');
+    const connected = form?.querySelector('[data-song-create-hq]');
+    if (!form || !local || local.disabled) return;
+    setTimeout(() => {
+      const wasHidden = Boolean(connected?.hidden);
+      if (connected) connected.hidden = true;
+      try {
+        local.click();
+      } finally {
+        if (connected) connected.hidden = wasHidden;
+        queueSync();
+      }
+    }, 0);
+    return;
+  }
 
   const button = event.target.closest('[data-pv-unified-create]');
   if (!button) return;
