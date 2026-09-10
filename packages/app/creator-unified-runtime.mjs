@@ -18,6 +18,7 @@ export function installCreatorUnifiedRuntime() {
     attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-experience', 'data-pv-ready'],
   });
   window.addEventListener('click', onClick, true);
+  window.addEventListener('submit', onSubmitCapture, true);
   window.addEventListener('online', queueSync);
   window.addEventListener('offline', queueSync);
   queueSync();
@@ -28,6 +29,7 @@ function disconnect() {
   runtime.observer?.disconnect();
   runtime.observer = null;
   window.removeEventListener('click', onClick, true);
+  window.removeEventListener('submit', onSubmitCapture, true);
   window.removeEventListener('online', queueSync);
   window.removeEventListener('offline', queueSync);
 }
@@ -119,24 +121,22 @@ function ensureUnifiedCreation(form) {
   if (!runtime.running) setText(button, instrumental ? '● Produzir instrumental em alta qualidade' : '● Produzir em alta qualidade');
 }
 
+function onSubmitCapture(event) {
+  const form = event.target.closest?.('[data-song-create-form]');
+  if (!form || !event.submitter?.matches?.('[data-pv-local-draft]')) return;
+  const connected = form.querySelector('[data-song-create-hq]');
+  if (!connected) return;
+  const wasHidden = connected.hidden;
+  connected.hidden = true;
+  setTimeout(() => {
+    connected.hidden = wasHidden;
+    queueSync();
+  }, 0);
+}
+
 async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
-
-  const draftButton = event.target.closest('[data-pv-local-draft]');
-  if (draftButton) {
-    const form = draftButton.closest('[data-song-create-form]');
-    const local = form?.querySelector('[data-song-create-button]');
-    if (!form || !local || local.disabled) return event.preventDefault();
-    const connected = form.querySelector('[data-song-create-hq]');
-    const wasHidden = Boolean(connected?.hidden);
-    if (connected) connected.hidden = true;
-    queueMicrotask(() => {
-      if (connected) connected.hidden = wasHidden;
-      queueSync();
-    });
-    return;
-  }
 
   const button = event.target.closest('[data-pv-unified-create]');
   if (!button) return;
