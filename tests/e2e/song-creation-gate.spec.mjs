@@ -8,7 +8,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('SONG CREATION GATE: unified Studio creates editable music and drives the reactive Companion visualizer', async ({ page, context }) => {
+test('SONG CREATION GATE: unified Studio keeps local draft explicit and drives the reactive Companion visualizer', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -31,7 +31,10 @@ test('SONG CREATION GATE: unified Studio creates editable music and drives the r
 
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
+  await expect(form).toHaveAttribute('data-pv-execution-policy', 'explicit_quality_or_draft');
+  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('[data-pv-local-draft]')).toBeVisible();
   await form.locator('input[name="brief"]').fill('Pop R&B noturno, synths suaves, grave redondo e refrão aberto');
   await form.locator('.pv-intimate-advanced > summary').click();
   await form.locator('select[name="genre"]').selectOption('rnb');
@@ -42,9 +45,10 @@ test('SONG CREATION GATE: unified Studio creates editable music and drives the r
 
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
-  await form.locator('[data-pv-unified-create]').click();
+  await expect(form.locator('[data-pv-local-draft]')).toBeEnabled();
+  await form.locator('[data-pv-local-draft]').click();
 
   await expect(page.locator('#pv-song-create-status')).toContainText('Pronto.', { timeout: 45_000 });
   await expect(page.locator('#pv-song-create-result audio')).toHaveCount(2);
