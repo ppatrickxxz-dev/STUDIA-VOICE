@@ -30,7 +30,7 @@ const plan = {
   guideLines: [{ text: 'Amanhã a gente vê', sectionId: 'refrão' }],
 };
 
-test('native music client dispatches privately, polls verified job and downloads exact asset', async () => {
+test('native music client dispatches privately, directs Song DNA, polls verified job and downloads exact asset', async () => {
   const bytes = new Uint8Array([10, 20, 30, 40, 50, 60]);
   const sha = createHash('sha256').update(bytes).digest('hex');
   const calls = [];
@@ -72,13 +72,16 @@ test('native music client dispatches privately, polls verified job and downloads
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.source, 'pablovoice_native_music_v1');
+  assert.equal(result.schema, 'pablovoice_native_music_generation_v2');
+  assert.equal(result.source, 'pablovoice_native_music_v2');
   assert.equal(result.provider, 'kaggle');
   assert.equal(result.model, 'acestep-v15-turbo');
   assert.equal(result.modelRevision, 'ca1e85fe9430179831e6bc6be790c332190a3866');
   assert.equal(result.songId, null);
   assert.equal(result.blob.size, bytes.length);
   assert.equal(result.sha256, sha);
+  assert.equal(result.director?.schema, 'pablovoice_song_director_v2');
+  assert.match(result.director?.fingerprint || '', /^pv2_[0-9a-f]{8}$/);
   assert.equal(progress.includes(15), true);
   assert.equal(progress.includes(100), true);
 
@@ -87,6 +90,10 @@ test('native music client dispatches privately, polls verified job and downloads
   const body = JSON.parse(dispatch.options.body);
   assert.equal(body.project_id, '11111111-1111-4111-8111-111111111111');
   assert.equal(body.plan.schema, 'pablovoice_song_creation_v1');
+  assert.match(body.plan.brief, /PabloVoice 2\.0 Song DNA:/);
+  assert.equal(body.plan.pabloVoice2.fingerprint, body.pablovoice_director.fingerprint);
+  assert.equal(Number.isInteger(body.variation_seed), true);
+  assert.ok(body.variation_seed > 0);
   assert.deepEqual(body.negative_styles, ['heavy dembow']);
   assert.equal(JSON.stringify(body).includes('native-token'), false);
   assert.equal(calls.every((call) => !String(call.url).includes('native-token')), true);

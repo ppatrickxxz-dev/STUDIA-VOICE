@@ -57,40 +57,46 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   await nav.locator('[data-vnext-route-command="create"]').click();
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
   const form = page.locator('[data-song-create-form]');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
-  await expect(form).toHaveAttribute('data-pv-execution-policy', 'best_available');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
+  await expect(form).toHaveAttribute('data-pv-execution-policy', 'explicit_quality_or_draft');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
   await expect(form.locator('[data-pv-unified-create]')).toBeVisible();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('Produzir música');
+  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('[data-pv-local-draft]')).toBeVisible();
   await expect(form.locator('[data-song-create-button]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
   await expect(form.locator('[data-song-create-hq]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
   await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
   await expect(form.locator('.pv-intimate-advanced')).not.toHaveAttribute('open', '');
+
+  const ownerAccess = page.locator('#pv-remote-pairing');
+  await expect(ownerAccess).toBeVisible({ timeout: 10_000 });
+  await expect(ownerAccess).toContainText('Acesso do proprietário');
+  await expect(ownerAccess.getByRole('button', { name: 'Liberar meu estúdio' })).toBeVisible();
 
   await form.locator('input[name="brief"]').fill('R&B 2000s sensual, menos batestaca, baixo mais solto e refrão abrindo');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('refrão localizado');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('baixo');
   await form.locator('.pv-intimate-advanced > summary').click();
   await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20 · completa');
-  await shot(page, 'creator-vnext-unified-desktop');
+  await shot(page, 'creator-vnext-quality-first-desktop');
 
   await form.locator('[data-pv-kind="instrumental"]').click();
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('Produzir instrumental');
+  await expect(form.locator('[data-pv-unified-create]')).toContainText('instrumental em alta qualidade');
 
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('Produzir instrumental');
+  await expect(form.locator('[data-pv-local-draft]')).toBeVisible();
   await expect(shell.locator('[data-vnext-network]')).toHaveText('STUDIO');
   await expect(shell.locator('[data-vnext-online]')).toHaveText('STUDIO');
   await shot(page, 'creator-same-vnext-studio-without-network');
 
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'adaptive_unified');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
 
   await nav.locator('[data-route="pablo"]').click();
   await expect(page.locator('[data-pv-pablo-intimacy]')).toBeVisible({ timeout: 10_000 });

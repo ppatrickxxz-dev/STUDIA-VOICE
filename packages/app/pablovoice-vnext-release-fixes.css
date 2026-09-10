@@ -80,6 +80,46 @@
   100% { filter: brightness(1); }
 }
 
+/* Product-facing creator polish. Provider/debug labels do not belong in the
+   primary composition flow; the UI should communicate capability, not plumbing. */
+#pv-ai-composer > .pv-card-head .pv-tag,
+#pv-song-creator > .pv-card-head .pv-tag,
+#pv-remote-pairing > .pv-card-head .pv-tag {
+  display: none !important;
+}
+
+#pv-ai-composer,
+#pv-song-creator,
+#pv-remote-pairing {
+  border-radius: 20px !important;
+  border-color: rgba(255,255,255,.10) !important;
+  box-shadow: 0 18px 50px rgba(0,0,0,.22) !important;
+}
+
+#pv-ai-composer .pv-card-head,
+#pv-song-creator .pv-card-head,
+#pv-remote-pairing .pv-card-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+#pv-ai-composer .pv-card-head p,
+#pv-song-creator .pv-card-head p,
+#pv-remote-pairing .pv-card-head p {
+  max-width: 62ch;
+  line-height: 1.45;
+}
+
+#pv-ai-composer .pv-compose-row,
+#pv-remote-pairing .pv-compose-row {
+  align-items: stretch;
+}
+
+#pv-ai-compose-result {
+  min-height: 0 !important;
+  line-height: 1.55;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pv-vnext-visualizer[data-vnext-reactive="music-graph"].section-hit .pv-vnext-device-screen {
     animation: none !important;
@@ -94,5 +134,71 @@
   .pv-vnext-sidebar {
     max-height: none;
     overflow: visible !important;
+  }
+}
+
+@media (max-width: 720px) {
+  #pv-ai-composer,
+  #pv-song-creator,
+  #pv-remote-pairing {
+    margin-inline: 0 !important;
+    padding: 18px !important;
+    border-radius: 18px !important;
+  }
+
+  #pv-ai-composer .pv-card-head h3,
+  #pv-song-creator .pv-card-head h3,
+  #pv-remote-pairing .pv-card-head h3 {
+    font-size: clamp(1.28rem, 6vw, 1.55rem);
+    line-height: 1.15;
+  }
+
+  #pv-ai-composer .pv-card-head p,
+  #pv-song-creator .pv-card-head p,
+  #pv-remote-pairing .pv-card-head p {
+    margin-top: 7px;
+    font-size: .94rem;
+  }
+
+  #pv-ai-composer .pv-compose-row,
+  #pv-remote-pairing .pv-compose-row {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  #pv-ai-composer .pv-compose-row .pv-field,
+  #pv-remote-pairing .pv-compose-row .pv-field {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 50px;
+  }
+
+  #pv-ai-composer .pv-compose-row button,
+  #pv-remote-pairing .pv-compose-row button {
+    width: 100% !important;
+    min-height: 50px;
+  }
+
+  #pv-ai-composer .pv-tips,
+  #pv-ai-composer .pv-actions,
+  #pv-song-creator .pv-panel-grid {
+    margin-top: 12px !important;
+  }
+
+  #pv-ai-composer .pv-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  #pv-ai-composer .pv-actions .pv-btn {
+    min-width: 0 !important;
+    white-space: normal;
+  }
+
+  #pv-song-creator .pv-song-fields,
+  #pv-song-creator .pv-song-mode-grid {
+    grid-template-columns: 1fr !important;
   }
 }

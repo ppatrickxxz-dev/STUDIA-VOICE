@@ -15,6 +15,7 @@ const COMPLETE_SLUG='complete-kaggle-pipeline-job-v58'
 
 function b64(v:string){return btoa(unescape(encodeURIComponent(v)))}
 function randomToken(bytes=32){const buf=new Uint8Array(bytes);crypto.getRandomValues(buf);return btoa(String.fromCharCode(...buf)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'')}
+function randomGenerationSeed(){const buf=new Uint32Array(1);crypto.getRandomValues(buf);return (Number(buf[0])%2147483646)+1}
 async function sha256Text(value:string){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('')}
 function clamp(n:number,min:number,max:number){return Math.max(min,Math.min(max,n))}
 function clean(value:any,max:number){return String(value||'').trim().slice(0,max)}
@@ -43,7 +44,10 @@ function captionFromPlan(plan:any,negativeStyles:any[]){
   if(singerParts.length)parts.push(`Guide singer: ${singerParts.join(', ')}; comfortable MIDI range ${Number(singer.lowMidi)||48}-${Number(singer.highMidi)||67}; ${singer.falsetto?'controlled falsetto allowed':'avoid falsetto'}`)
   const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,120)).filter(Boolean).slice(0,12)
   if(avoid.length)parts.push(`Avoid: ${avoid.join(', ')}`)
-  return parts.join('. ').slice(0,500)
+  // Keep enough of the user's musical direction for arrangement, instrumentation,
+  // vocal and negative constraints to reach ACE-Step instead of collapsing a rich
+  // brief into the first 500 characters.
+  return parts.join('. ').slice(0,1400)
 }
 async function kaggleRpc(token:string,method:string,payload:any){
   const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Music/1.0'},body:JSON.stringify(payload)})
@@ -130,7 +134,11 @@ Deno.serve(async(req:Request)=>{
     const duration=clamp(Math.round(Number(plan.durationSeconds)||120),10,600)
     const bpm=clamp(Math.round(Number(plan.bpm)||112),30,300)
     const key=clean(plan.key,8), mode=String(plan.mode||'minor')==='major'?'Major':'Minor'
-    const generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:clean(plan?.singerProfile?.language,16)||'pt-BR',duration,seed:Number.isFinite(Number(plan.seed))?Math.abs(Math.trunc(Number(plan.seed)))%2147483647:42,inference_steps:8}
+    const requestedVariation=Number(body.variation_seed)
+    const generationSeed=Number.isFinite(requestedVariation)&&requestedVariation>0
+      ? Math.abs(Math.trunc(requestedVariation))%2147483647||1
+      : randomGenerationSeed()
+    const generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:clean(plan?.singerProfile?.language,16)||'pt-BR',duration,seed:generationSeed,inference_steps:8}
     if(!generation.caption)return json({ok:false,error:'music_caption_required'},400)
 
     jobId=crypto.randomUUID()
@@ -140,7 +148,7 @@ Deno.serve(async(req:Request)=>{
     const {data:upload,error:uploadErr}=await admin.storage.from('audio-private').createSignedUploadUrl(outputPath)
     if(uploadErr||!upload?.token)throw new Error('signed_upload_failed')
     const ticket={version:1,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
-    const params={client:'pablovoice_native_music_v1',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental}
+    const params={client:'pablovoice_native_music_v1',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental,generation_seed:generationSeed}
     const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:'music_generation',engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:[],output_asset_ids:[],parameters:params,proof:{required:true},provider:'kaggle',current_stage:'dispatch',human_message:'Preparando a geração musical',started_at:new Date().toISOString()})
     if(jobErr)throw new Error(`job_insert_failed: ${jobErr.message}`)
 
@@ -162,6 +170,6 @@ Deno.serve(async(req:Request)=>{
     }
     const now=new Date().toISOString()
     await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v1',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
-    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,fallback_allowed:false})
+    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,fallback_allowed:false})
   }catch(e){return json({ok:false,error:String(e instanceof Error?e.message:e).slice(0,1400),job_id:jobId||null,fallback_allowed:false},500)}
 })
