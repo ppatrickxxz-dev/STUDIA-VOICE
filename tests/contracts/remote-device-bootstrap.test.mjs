@@ -15,20 +15,22 @@ test('remote auth exposes passwordless owner email without client secrets', () =
   assert.doesNotMatch(authSource, /OPENAI_API_KEY|GROQ_API_KEY|AI_GATEWAY_API_KEY/);
 });
 
-test('owner access stays in settings and never blocks the creative interface', () => {
+test('owner access is reachable from creation without blocking local editing', () => {
   assert.match(prebootSource, /installRemoteAuthUI/);
   assert.match(uiSource, /pablovoice:request-online-auth/);
-  assert.match(uiSource, /Entrar como proprietário/);
+  assert.match(uiSource, /Acesso do proprietário/);
+  assert.match(uiSource, /Liberar meu estúdio/);
   assert.match(uiSource, /autocomplete="email"/);
   assert.match(uiSource, /Sem código de ativação/);
   assert.match(uiSource, /activationCodeRequired:\s*false/);
   assert.match(uiSource, /rotatingDeviceToken:\s*true/);
   assert.match(uiSource, /noProviderSecretInClient:\s*true/);
-  assert.match(uiSource, /demandDrivenUI:\s*true/);
+  assert.match(uiSource, /creatorSurfaceVisible:\s*true/);
   assert.match(uiSource, /noSilentOfflineFallback:\s*true/);
-  assert.match(uiSource, /\.pv-modal\.wide \.pv-cap-table/);
+  assert.match(uiSource, /#pv-ai-composer/);
+  assert.match(uiSource, /#pv-song-creator/);
+  assert.match(uiSource, /scrollIntoView/);
   assert.match(uiSource, /blocksCreativeInterface:\s*false/);
-  assert.doesNotMatch(uiSource, /scrollIntoView/);
 });
 
 test('canonical device-auth contract requires hash-only single-use codes', () => {
