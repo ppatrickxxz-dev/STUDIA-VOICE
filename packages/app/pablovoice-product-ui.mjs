@@ -64,17 +64,28 @@ function decorateNavigation() {
     if (icon && icon.textContent !== item[0]) icon.textContent = item[0];
     if (label && label.textContent !== item[1]) label.textContent = item[1];
   }
-  const order = ['home', 'compose', 'studio', 'projects', 'pablo'];
-  const current = [...nav.children]
-    .filter((node) => node instanceof HTMLElement && node.dataset?.route)
-    .map((node) => node.dataset.route);
-  const desired = order.filter((route) => nav.querySelector(`[data-route="${route}"]`));
-  if (current.length === desired.length && current.every((route, index) => route === desired[index])) return;
+
+  // The canonical vNext nav intentionally exposes two composition entries
+  // (Create and Lyrics) that both map to the compose route. Reordering by route
+  // count made those duplicate-route buttons ping-pong forever through two
+  // MutationObservers, starving the browser event loop before load/networkidle.
+  // Order concrete DOM nodes once instead, preserve both compose entries, then
+  // leave specialist Production commands after the primary product routes.
+  const children = [...nav.children].filter((node) => node instanceof HTMLElement);
+  const pick = (selector) => nav.querySelector(selector);
+  const primary = [
+    pick('[data-route="home"]'),
+    pick('[data-vnext-route-command="create"]'),
+    pick('[data-vnext-route-command="lyrics"]'),
+    pick('[data-route="studio"]'),
+    pick('[data-route="projects"]'),
+    pick('[data-route="pablo"]'),
+  ].filter(Boolean);
+  const primarySet = new Set(primary);
+  const desired = [...primary, ...children.filter((node) => !primarySet.has(node))];
+  if (children.length === desired.length && children.every((node, index) => node === desired[index])) return;
   const fragment = document.createDocumentFragment();
-  for (const route of desired) {
-    const button = nav.querySelector(`[data-route="${route}"]`);
-    if (button) fragment.appendChild(button);
-  }
+  for (const node of desired) fragment.appendChild(node);
   nav.appendChild(fragment);
 }
 
@@ -149,8 +160,8 @@ function syncHomeState(surface) {
   if (ai) {
     const online = navigator.onLine !== false;
     ai.classList.toggle('online', online);
-    const copy = online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado';
-    if (ai.textContent !== copy) ai.textContent = copy;
+    const next = online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado';
+    if (ai.textContent !== next) ai.textContent = next;
   }
 }
 
