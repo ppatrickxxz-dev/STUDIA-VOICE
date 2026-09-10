@@ -100,7 +100,7 @@ function ensureUnifiedCreation(form) {
     card = document.createElement('section');
     card.className = 'pv-song-mode-card pv-unified-create-card';
     card.dataset.pvUnifiedCreateCard = 'true';
-    card.innerHTML = '<div><strong>Produzir música</strong><span>Ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível, mas nunca substitui a produção final sem avisar.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="button" data-pv-local-draft>Rascunho local</button></div>';
+    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="submit" data-pv-local-draft>Rascunho local</button></div>';
     const anchor = localCard || connectedCard || form.firstElementChild;
     if (anchor) anchor.insertAdjacentElement('beforebegin', card);
     else form.appendChild(card);
@@ -123,24 +123,11 @@ async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
 
+  // The explicit local draft is a real submit control in the canonical form.
+  // Let the form's existing submit handler own creation instead of synthesizing
+  // a hidden click/submit event from this capture listener.
   const draftButton = event.target.closest('[data-pv-local-draft]');
-  if (draftButton) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const form = draftButton.closest('[data-song-create-form]');
-    const local = form?.querySelector('[data-song-create-button]');
-    if (form && local && !local.disabled) {
-      setTimeout(() => {
-        if (!form.isConnected || !local.isConnected || local.disabled) return;
-        form.dispatchEvent(new SubmitEvent('submit', {
-          bubbles: true,
-          cancelable: true,
-          submitter: local,
-        }));
-      }, 0);
-    }
-    return;
-  }
+  if (draftButton) return;
 
   const button = event.target.closest('[data-pv-unified-create]');
   if (!button) return;
