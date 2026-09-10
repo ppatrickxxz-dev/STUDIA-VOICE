@@ -17,7 +17,7 @@ export function installCreatorUnifiedRuntime() {
     attributes: true,
     attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-experience', 'data-pv-ready'],
   });
-  document.addEventListener('click', onClick, true);
+  window.addEventListener('click', onClick, true);
   window.addEventListener('online', queueSync);
   window.addEventListener('offline', queueSync);
   queueSync();
@@ -27,7 +27,7 @@ export function installCreatorUnifiedRuntime() {
 function disconnect() {
   runtime.observer?.disconnect();
   runtime.observer = null;
-  document.removeEventListener('click', onClick, true);
+  window.removeEventListener('click', onClick, true);
   window.removeEventListener('online', queueSync);
   window.removeEventListener('offline', queueSync);
 }
@@ -130,18 +130,14 @@ async function onClick(event) {
     const form = draftButton.closest('[data-song-create-form]');
     const local = form?.querySelector('[data-song-create-button]');
     if (!form || !local || local.disabled) return;
-    setTimeout(() => {
-      const liveForm = document.querySelector('[data-song-create-form]');
-      const connected = liveForm?.querySelector('[data-song-create-hq]');
-      if (!liveForm) return;
-      const wasHidden = Boolean(connected?.hidden);
-      if (connected) connected.hidden = true;
-      try {
-        liveForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      } finally {
-        if (connected) connected.hidden = wasHidden;
-      }
-    }, 0);
+    const connected = form.querySelector('[data-song-create-hq]');
+    const wasHidden = Boolean(connected?.hidden);
+    if (connected) connected.hidden = true;
+    try {
+      form.requestSubmit(local);
+    } finally {
+      if (connected) connected.hidden = wasHidden;
+    }
     return;
   }
 
