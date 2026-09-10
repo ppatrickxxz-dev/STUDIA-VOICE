@@ -65,10 +65,17 @@ function decorateNavigation() {
     if (label && label.textContent !== item[1]) label.textContent = item[1];
   }
   const order = ['home', 'compose', 'studio', 'projects', 'pablo'];
-  for (const route of order) {
+  const current = [...nav.children]
+    .filter((node) => node instanceof HTMLElement && node.dataset?.route)
+    .map((node) => node.dataset.route);
+  const desired = order.filter((route) => nav.querySelector(`[data-route="${route}"]`));
+  if (current.length === desired.length && current.every((route, index) => route === desired[index])) return;
+  const fragment = document.createDocumentFragment();
+  for (const route of desired) {
     const button = nav.querySelector(`[data-route="${route}"]`);
-    if (button) nav.appendChild(button);
+    if (button) fragment.appendChild(button);
   }
+  nav.appendChild(fragment);
 }
 
 function decorateHome() {
@@ -142,7 +149,8 @@ function syncHomeState(surface) {
   if (ai) {
     const online = navigator.onLine !== false;
     ai.classList.toggle('online', online);
-    ai.textContent = online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado';
+    const copy = online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado';
+    if (ai.textContent !== copy) ai.textContent = copy;
   }
 }
 
