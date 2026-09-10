@@ -100,7 +100,7 @@ function ensureUnifiedCreation(form) {
     card = document.createElement('section');
     card.className = 'pv-song-mode-card pv-unified-create-card';
     card.dataset.pvUnifiedCreateCard = 'true';
-    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="submit" data-pv-local-draft>Rascunho local</button></div>';
+    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="button" data-pv-local-draft>Rascunho local</button></div>';
     const anchor = localCard || connectedCard || form.firstElementChild;
     if (anchor) anchor.insertAdjacentElement('beforebegin', card);
     else form.appendChild(card);
@@ -123,10 +123,9 @@ async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
 
-  // Keep the explicit local draft owned by the canonical submit path, but
-  // schedule that submit after this capture click fully returns. This avoids
-  // disabling the visible proxy button while Playwright/the browser is still
-  // completing the click action when the hidden canonical button becomes busy.
+  // The visible draft control is deliberately not a submit button. Hand the
+  // action to the canonical song-creation submit listener only after this click
+  // returns, so UI busy-state mutations cannot trap the initiating click.
   const draftButton = event.target.closest('[data-pv-local-draft]');
   if (draftButton) {
     event.preventDefault();
@@ -135,7 +134,7 @@ async function onClick(event) {
     const local = form?.querySelector('[data-song-create-button]');
     if (!form || !local || local.disabled) return;
     setTimeout(() => {
-      if (!local.disabled) form.requestSubmit(local);
+      if (!local.disabled) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     }, 0);
     return;
   }
