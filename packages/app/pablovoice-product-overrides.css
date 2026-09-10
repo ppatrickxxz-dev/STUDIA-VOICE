@@ -1,0 +1,48 @@
+html[data-pv-product-route="home"] .pv-vnext-shell {
+  grid-template-columns: 190px minmax(0,1fr);
+  grid-template-rows: auto minmax(0,1fr);
+}
+
+html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-brain,
+html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-companion-dock,
+html[data-pv-product-route="home"] .pv-vnext-sidebar [data-vnext-visualizer] {
+  display: none !important;
+}
+
+html[data-pv-product-route="home"] .pv-vnext-shell > .pv-top {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+html[data-pv-product-route="home"] .pv-vnext-shell > main {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+html[data-pv-product-route="home"] .pv-vnext-sidebar {
+  min-height: calc(100dvh - 26px);
+}
+
+html[data-pv-product-route="home"] .pv-vnext-brand small {
+  color: #959aa7;
+}
+
+html[data-pv-product-route="home"] .pv-vnext-nav button.route-active {
+  border-color: rgba(255,255,255,.12);
+  background: linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.015));
+  box-shadow: inset 2px 0 rgba(255,255,255,.55);
+}
+
+@media (max-width:980px) {
+  html[data-pv-product-route="home"] .pv-vnext-shell {
+    display:block;
+  }
+  html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
+    min-height:0;
+  }
+}
