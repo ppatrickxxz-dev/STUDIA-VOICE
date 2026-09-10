@@ -94,13 +94,14 @@ function ensureUnifiedCreation(form) {
   const connectedCard = connected?.closest('.pv-song-mode-card');
   if (localCard && !localCard.hidden) localCard.hidden = true;
   if (connectedCard && !connectedCard.hidden) connectedCard.hidden = true;
+  if (connected && !connected.hidden) connected.hidden = true;
 
   let card = form.querySelector('[data-pv-unified-create-card]');
   if (!card) {
     card = document.createElement('section');
     card.className = 'pv-song-mode-card pv-unified-create-card';
     card.dataset.pvUnifiedCreateCard = 'true';
-    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="button" data-pv-local-draft>Rascunho local</button></div>';
+    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="submit" data-pv-local-draft>Rascunho local</button></div>';
     const anchor = localCard || connectedCard || form.firstElementChild;
     if (anchor) anchor.insertAdjacentElement('beforebegin', card);
     else form.appendChild(card);
@@ -122,27 +123,6 @@ function ensureUnifiedCreation(form) {
 async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
-
-  const draft = event.target.closest('[data-pv-local-draft]');
-  if (draft) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const form = draft.closest('[data-song-create-form]');
-    const local = form?.querySelector('[data-song-create-button]');
-    const connected = form?.querySelector('[data-song-create-hq]');
-    if (!form || !local || local.disabled) return;
-    setTimeout(() => {
-      const wasHidden = Boolean(connected?.hidden);
-      if (connected) connected.hidden = true;
-      try {
-        form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: local }));
-      } finally {
-        if (connected) connected.hidden = wasHidden;
-        queueSync();
-      }
-    }, 0);
-    return;
-  }
 
   const button = event.target.closest('[data-pv-unified-create]');
   if (!button) return;
