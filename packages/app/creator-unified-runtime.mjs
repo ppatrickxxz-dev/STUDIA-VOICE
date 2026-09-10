@@ -123,11 +123,22 @@ async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
 
-  // The explicit local draft is a real submit control in the canonical form.
-  // Let the form's existing submit handler own creation instead of synthesizing
-  // a hidden click/submit event from this capture listener.
+  // Keep the explicit local draft owned by the canonical submit path, but
+  // schedule that submit after this capture click fully returns. This avoids
+  // disabling the visible proxy button while Playwright/the browser is still
+  // completing the click action when the hidden canonical button becomes busy.
   const draftButton = event.target.closest('[data-pv-local-draft]');
-  if (draftButton) return;
+  if (draftButton) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const form = draftButton.closest('[data-song-create-form]');
+    const local = form?.querySelector('[data-song-create-button]');
+    if (!form || !local || local.disabled) return;
+    setTimeout(() => {
+      if (!local.disabled) form.requestSubmit(local);
+    }, 0);
+    return;
+  }
 
   const button = event.target.closest('[data-pv-unified-create]');
   if (!button) return;
