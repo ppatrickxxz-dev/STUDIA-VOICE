@@ -123,9 +123,11 @@ async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
 
-  // The visible draft control is deliberately not a submit button. Hand the
-  // action to the canonical song-creation submit listener only after this click
-  // returns, so UI busy-state mutations cannot trap the initiating click.
+  // The visible draft control is an explicit opt-in to the local renderer.
+  // The intimate online layer normally redirects generic form submits to the
+  // quality path. Hide only the hidden HQ submit target for the duration of
+  // this synchronous submit dispatch so this one user choice reaches the
+  // canonical local song-creation listener without changing network policy.
   const draftButton = event.target.closest('[data-pv-local-draft]');
   if (draftButton) {
     event.preventDefault();
@@ -135,7 +137,15 @@ async function onClick(event) {
     if (!form || !local || local.disabled) return;
     setTimeout(() => {
       const liveForm = document.querySelector('[data-song-create-form]');
-      liveForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      const connected = liveForm?.querySelector('[data-song-create-hq]');
+      if (!liveForm) return;
+      const wasHidden = Boolean(connected?.hidden);
+      if (connected) connected.hidden = true;
+      try {
+        liveForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      } finally {
+        if (connected) connected.hidden = wasHidden;
+      }
     }, 0);
     return;
   }
