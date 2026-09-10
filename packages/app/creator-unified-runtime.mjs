@@ -130,7 +130,7 @@ async function onClick(event) {
     const local = form?.querySelector('[data-song-create-button]');
     if (form && local && !local.disabled) {
       setTimeout(() => {
-        if (form.isConnected && local.isConnected && !local.disabled) form.requestSubmit(local);
+        if (form.isConnected && local.isConnected && !local.disabled) local.click();
       }, 0);
     }
     return;
