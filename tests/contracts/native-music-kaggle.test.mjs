@@ -27,6 +27,17 @@ test('native music dispatcher reuses private ticketed Kaggle v58 slot without ex
   assert.match(text, /fallback_allowed:false/);
 });
 
+test('native music creation keeps the creative brief and requests a fresh variation per take', async () => {
+  const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
+  const client = await source('packages/app/native-music-generation-client.mjs');
+  assert.match(client, /variation_seed: freshVariationSeed\(\)/);
+  assert.match(dispatcher, /const requestedVariation=Number\(body\.variation_seed\)/);
+  assert.match(dispatcher, /randomGenerationSeed\(\)/);
+  assert.match(dispatcher, /generation_seed:generationSeed/);
+  assert.match(dispatcher, /slice\(0,1400\)/);
+  assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
+});
+
 test('native music worker pins ACE-Step source identity and returns only signed output plus callback proof', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
