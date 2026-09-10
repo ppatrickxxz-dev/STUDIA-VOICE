@@ -126,11 +126,17 @@ async function onClick(event) {
   const draftButton = event.target.closest('[data-pv-local-draft]');
   if (draftButton) {
     event.preventDefault();
+    event.stopImmediatePropagation();
     const form = draftButton.closest('[data-song-create-form]');
     const local = form?.querySelector('[data-song-create-button]');
     if (form && local && !local.disabled) {
       setTimeout(() => {
-        if (form.isConnected && local.isConnected && !local.disabled) local.click();
+        if (!form.isConnected || !local.isConnected || local.disabled) return;
+        form.dispatchEvent(new SubmitEvent('submit', {
+          bubbles: true,
+          cancelable: true,
+          submitter: local,
+        }));
       }, 0);
     }
     return;
