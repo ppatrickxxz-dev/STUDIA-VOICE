@@ -31,7 +31,7 @@ test('Intimate Recorder canon keeps Pablo, all companions and living state syste
   assert.match(canon, /violet\/purple is no longer the primary product color/i);
 });
 
-test('PabloVoice exposes one adaptive Studio while connectivity stays an executor detail', async () => {
+test('PabloVoice exposes one Studio while full production is quality-first and local draft is explicit', async () => {
   const [creator, auth, productCanon, index, unifiedCss] = await Promise.all([
     read('packages/app/creator-unified-runtime.mjs'),
     read('packages/app/remote-auth-ui.mjs'),
@@ -44,15 +44,19 @@ test('PabloVoice exposes one adaptive Studio while connectivity stays an executo
   assert.match(creator, /['\"]unified['\"]/);
   assert.match(creator, /pvNetworkMode/);
   assert.match(creator, /['\"]adaptive['\"]/);
-  assert.match(creator, /adaptive_unified/);
+  assert.match(creator, /quality_first/);
+  assert.match(creator, /explicit_quality_or_draft/);
   assert.match(creator, /data-pv-unified-create/);
+  assert.match(creator, /data-pv-local-draft/);
   assert.match(creator, /data-song-create-button/);
   assert.match(creator, /data-song-create-hq/);
   assert.match(creator, /ensureSession\(\)/);
-  assert.match(creator, /fallbackBeforeRemoteDispatchWhenSupported:\s*true/);
+  assert.match(creator, /pablovoice:request-online-auth/);
+  assert.match(creator, /fallbackBeforeRemoteDispatchWhenSupported:\s*false/);
+  assert.match(creator, /localDraftRequiresExplicitUserChoice:\s*true/);
   assert.match(creator, /remoteFailureNeverFabricatesSuccess:\s*true/);
   assert.doesNotMatch(creator, /ONLINE · FULL|OFFLINE · LOCAL|online_full|offline_local/);
-  assert.match(auth, /demandDrivenUI:\s*true/);
+  assert.match(auth, /creatorSurfaceVisible:\s*true/);
   assert.match(auth, /noSilentOfflineFallback:\s*true/);
   assert.match(productCanon, /one Studio, one project model and one creative flow/i);
   assert.match(productCanon, /Online\/offline are not product modes/i);
