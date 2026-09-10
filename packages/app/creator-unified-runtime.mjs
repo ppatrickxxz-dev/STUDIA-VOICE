@@ -125,11 +125,9 @@ async function onClick(event) {
 
   const draftButton = event.target.closest('[data-pv-local-draft]');
   if (draftButton) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
     const form = draftButton.closest('[data-song-create-form]');
     const local = form?.querySelector('[data-song-create-button]');
-    if (local && !local.disabled) local.click();
+    if (form && local && !local.disabled) form.requestSubmit(local);
     return;
   }
 
