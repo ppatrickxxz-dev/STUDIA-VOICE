@@ -14,7 +14,7 @@ async function expectImageLoaded(locator) {
   await expect.poll(() => locator.evaluate((img) => Boolean(img.complete && img.naturalWidth > 0)), { timeout: 10_000 }).toBe(true);
 }
 
-test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions across connectivity changes', async ({ page, context }) => {
+test('VNEXT UNIFIED UI GATE: one Studio keeps creation central and Companions contextual across connectivity changes', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -24,6 +24,7 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
   await expect(page.locator('html')).toHaveAttribute('data-pv-vnext-boot', 'ready', { timeout: 12_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
 
   const shell = page.locator('.pv-vnext-shell');
   const nav = shell.locator('.pv-vnext-nav.pv-nav');
@@ -32,21 +33,17 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   const visualizer = shell.locator('[data-vnext-visualizer]');
   await expect(shell).toBeVisible();
   await expect(nav).toBeVisible();
-  await expect(brain).toBeVisible();
-  await expect(dock).toBeVisible();
-  await expect(visualizer).toBeVisible();
-
-  const pablo = brain.locator('img[src="/site/assets/pablo_fullbody.webp"]');
-  await expectImageLoaded(pablo);
-  for (const name of companions) await expect(dock.getByText(name, { exact: true })).toBeVisible();
-  await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph');
+  await expect(page.locator('#pv-product-home')).toBeVisible();
+  await expect(brain).toBeHidden();
+  await expect(dock).toBeHidden();
+  await expect(visualizer).toBeHidden();
   await expect(nav.locator('[data-route="home"]')).toBeVisible();
   await expect(nav.locator('[data-vnext-route-command="create"]')).toBeVisible();
   await expect(nav.locator('[data-vnext-route-command="lyrics"]')).toBeVisible();
   await expect(nav.locator('[data-route="studio"]')).toBeVisible();
   await expect(nav.locator('[data-route="projects"]')).toBeVisible();
   await expect(nav.locator('[data-route="pablo"]')).toBeVisible();
-  await shot(page, 'home-vnext-unified-desktop');
+  await shot(page, 'home-product-unified-desktop');
 
   await page.locator('[data-action="new-project"]').first().click();
   await expect(page.getByRole('heading', { name: 'Novo projeto' })).toBeVisible();
@@ -56,6 +53,14 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
 
   await nav.locator('[data-vnext-route-command="create"]').click();
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
+  await expect(brain).toBeVisible();
+  await expect(dock).toBeVisible();
+  await expect(visualizer).toBeVisible();
+  const pablo = brain.locator('img[src="/site/assets/pablo_fullbody.webp"]');
+  await expectImageLoaded(pablo);
+  for (const name of companions) await expect(dock.getByText(name, { exact: true })).toBeVisible();
+  await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph');
+
   const form = page.locator('[data-song-create-form]');
   await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
   await expect(form).toHaveAttribute('data-pv-execution-policy', 'explicit_quality_or_draft');
@@ -78,7 +83,7 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('baixo');
   await form.locator('.pv-intimate-advanced > summary').click();
   await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20 · completa');
-  await shot(page, 'creator-vnext-quality-first-desktop');
+  await shot(page, 'creator-product-quality-first-desktop');
 
   await form.locator('[data-pv-kind="instrumental"]').click();
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
@@ -92,7 +97,7 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   await expect(form.locator('[data-pv-local-draft]')).toBeVisible();
   await expect(shell.locator('[data-vnext-network]')).toHaveText('STUDIO');
   await expect(shell.locator('[data-vnext-online]')).toHaveText('STUDIO');
-  await shot(page, 'creator-same-vnext-studio-without-network');
+  await shot(page, 'creator-same-product-studio-without-network');
 
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
@@ -108,9 +113,10 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps canonical Pablo and Companions acr
   const mobileNav = page.locator('.pv-vnext-nav.pv-nav');
   await mobileNav.locator('[data-route="home"]').click();
   await expect(page.locator('.pv-vnext-shell')).toBeVisible();
-  await expect(page.locator('[data-vnext-visualizer]')).toBeVisible();
+  await expect(page.locator('#pv-product-home')).toBeVisible();
+  await expect(page.locator('[data-vnext-visualizer]')).toBeHidden();
   await expect(mobileNav).toBeVisible();
-  await shot(page, 'home-vnext-unified-mobile');
+  await shot(page, 'home-product-unified-mobile');
 
   const unexpected = errors.filter((message) =>
     !/favicon/i.test(message)
