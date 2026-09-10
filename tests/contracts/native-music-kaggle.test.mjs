@@ -27,10 +27,15 @@ test('native music dispatcher reuses private ticketed Kaggle v58 slot without ex
   assert.match(text, /fallback_allowed:false/);
 });
 
-test('native music creation keeps the creative brief and requests a fresh variation per take', async () => {
+test('native music creation uses PabloVoice 2 Song DNA and requests a fresh variation per take', async () => {
   const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const client = await source('packages/app/native-music-generation-client.mjs');
-  assert.match(client, /variation_seed: freshVariationSeed\(\)/);
+  assert.match(client, /const variationSeed = freshVariationSeed\(\)/);
+  assert.match(client, /directSongCandidates\(plan/);
+  assert.match(client, /applyDirectedCandidate\(plan, direction\.selected\)/);
+  assert.match(client, /plan: directedPlan/);
+  assert.match(client, /variation_seed: variationSeed/);
+  assert.match(client, /pablovoice_director: director/);
   assert.match(dispatcher, /const requestedVariation=Number\(body\.variation_seed\)/);
   assert.match(dispatcher, /randomGenerationSeed\(\)/);
   assert.match(dispatcher, /generation_seed:generationSeed/);
@@ -84,5 +89,6 @@ test('browser runtime can only address owned RLS job/asset rows and verifies dow
   assert.match(client, /ensureRemoteProject/);
   assert.match(client, /ensureSession/);
   assert.match(client, /fallback_allowed: false/);
+  assert.match(client, /directionEngine: 'pablovoice_song_director_v2'/);
   assert.doesNotMatch(client, /ELEVENLABS_API_KEY|KAGGLE_KEY|SUPABASE_SERVICE_ROLE_KEY/);
 });
