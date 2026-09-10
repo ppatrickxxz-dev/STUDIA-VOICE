@@ -8,6 +8,14 @@ const packages = resolve(root, 'packages');
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
+
+// Only the strict-CSP safe vNext implementations are part of the product runtime.
+// Keep the superseded variants in source history for auditability, but do not ship
+// dead duplicate code to Web/Android assets.
+for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs']) {
+  await rm(resolve(out, obsolete), { force: true });
+}
+
 for (const name of ['core', 'audio', 'songwriting']) {
   await cp(resolve(packages, name), resolve(out, name), { recursive: true });
 }
