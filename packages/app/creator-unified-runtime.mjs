@@ -100,7 +100,7 @@ function ensureUnifiedCreation(form) {
     card = document.createElement('section');
     card.className = 'pv-song-mode-card pv-unified-create-card';
     card.dataset.pvUnifiedCreateCard = 'true';
-    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="button" data-pv-local-draft>Rascunho local</button></div>';
+    card.innerHTML = '<div><strong>Produzir música</strong><span>A ação principal usa o motor musical de alta qualidade. O rascunho local continua disponível como escolha explícita.</span></div><div class="pv-actions"><button class="pv-btn primary" type="button" data-pv-unified-create>● Produzir em alta qualidade</button><button class="pv-btn" type="submit" data-pv-local-draft>Rascunho local</button></div>';
     const anchor = localCard || connectedCard || form.firstElementChild;
     if (anchor) anchor.insertAdjacentElement('beforebegin', card);
     else form.appendChild(card);
@@ -125,19 +125,16 @@ async function onClick(event) {
 
   const draftButton = event.target.closest('[data-pv-local-draft]');
   if (draftButton) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
     const form = draftButton.closest('[data-song-create-form]');
     const local = form?.querySelector('[data-song-create-button]');
-    if (!form || !local || local.disabled) return;
+    if (!form || !local || local.disabled) return event.preventDefault();
     const connected = form.querySelector('[data-song-create-hq]');
     const wasHidden = Boolean(connected?.hidden);
     if (connected) connected.hidden = true;
-    try {
-      form.requestSubmit(local);
-    } finally {
+    queueMicrotask(() => {
       if (connected) connected.hidden = wasHidden;
-    }
+      queueSync();
+    });
     return;
   }
 
