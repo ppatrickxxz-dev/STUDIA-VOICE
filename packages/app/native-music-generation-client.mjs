@@ -9,6 +9,12 @@ export const NATIVE_MUSIC_GENERATION_SCHEMA = 'pablovoice_native_music_generatio
 function headers(token) {
   return { apikey: PUBLISHABLE_KEY, authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 }
+function freshVariationSeed() {
+  const values = new Uint32Array(1);
+  globalThis.crypto?.getRandomValues?.(values);
+  const seeded = Number(values[0] || 0) & 0x7fffffff;
+  return seeded || ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) & 0x7fffffff) || 1;
+}
 async function readJson(response) {
   return response.json().catch(() => ({}));
 }
@@ -37,6 +43,7 @@ export class NativeMusicGenerationClient {
       plan,
       negative_styles: Array.isArray(negativeStyles) ? negativeStyles.slice(0, 12) : [],
       instrumental: Boolean(instrumental),
+      variation_seed: freshVariationSeed(),
     };
     const request = () => this.fetch(this.endpoint, { method: 'POST', headers: headers(this.auth.session?.accessToken || session.accessToken), body: JSON.stringify(body), signal });
     let response = await request();
