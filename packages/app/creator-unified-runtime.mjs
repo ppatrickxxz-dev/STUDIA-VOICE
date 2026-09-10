@@ -123,11 +123,6 @@ async function onClick(event) {
   const kindButton = event.target.closest('[data-pv-kind]');
   if (kindButton) return queueMicrotask(queueSync);
 
-  // The visible draft control is an explicit opt-in to the local renderer.
-  // The intimate online layer normally redirects generic form submits to the
-  // quality path. Hide only the hidden HQ submit target for the duration of
-  // this synchronous submit dispatch so this one user choice reaches the
-  // canonical local song-creation listener without changing network policy.
   const draftButton = event.target.closest('[data-pv-local-draft]');
   if (draftButton) {
     event.preventDefault();
