@@ -134,7 +134,7 @@ async function onClick(event) {
     const local = form?.querySelector('[data-song-create-button]');
     if (!form || !local || local.disabled) return;
     setTimeout(() => {
-      if (!local.disabled) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     }, 0);
     return;
   }
