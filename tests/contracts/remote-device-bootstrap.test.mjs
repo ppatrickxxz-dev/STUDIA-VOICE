@@ -37,15 +37,17 @@ test('transparent auto-provisioning is edge-admitted, rate-limited and stores no
   assert.match(deviceSource, /cf-connecting-ip/);
   assert.match(deviceSource, /hmac256/);
   assert.match(deviceSource, /consume_transparent_device_quota/);
+  assert.match(deviceSource, /p_network_hash:networkHash/);
   assert.match(deviceSource, /edge_network_hmac_daily_quota_v1/);
   assert.match(deviceSource, /device_provision_rate_limited/);
-  assert.doesNotMatch(deviceSource, /network_hash:network|ip_address|raw_ip/);
 
   assert.match(quotaMigration, /transparent_device_provision_quota/);
+  assert.match(quotaMigration, /network_hash text not null/);
   assert.match(quotaMigration, /consume_transparent_device_quota/);
   assert.match(quotaMigration, /enable row level security/i);
   assert.match(quotaMigration, /grant execute[\s\S]*service_role/i);
   assert.match(quotaMigration, /revoke all[\s\S]*anon, authenticated/i);
+  assert.doesNotMatch(quotaMigration, /ip_address|raw_ip|client_ip|x-forwarded-for|cf-connecting-ip/i);
 });
 
 test('automatic app device identity is server-side and can use shared GPU compute without owner-project access', () => {
