@@ -66,9 +66,13 @@ test('PabloVoice exposes one connected Studio with no login prompt and no offlin
 
   assert.match(access, /data-pv-local-draft/);
   assert.match(access, /data-song-create-button/);
-  assert.match(access, /pvOfflineMode = 'false'/);
-  assert.match(access, /pvAccessMode = 'transparent-device'/);
+  assert.match(access, /pvOfflineMode', 'false'/);
+  assert.match(access, /pvAccessMode', 'transparent-device'/);
   assert.match(access, /sem login, senha ou modo offline separado/);
+  assert.match(access, /function setDataset/);
+  assert.match(access, /dataset\?\.\[key\] !== value/);
+  assert.match(access, /if \(node && !node\.hidden\) node\.hidden = true/);
+  assert.doesNotMatch(access, /html\.dataset\.pvNetworkMode = 'online'/);
 
   assert.match(productCanon, /one Studio, one project model and one creative flow/i);
   assert.match(productCanon, /Online\/offline are not product modes/i);
