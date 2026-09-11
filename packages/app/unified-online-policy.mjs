@@ -14,23 +14,31 @@ function setText(node, value) {
   if (node && node.textContent !== value) node.textContent = value;
 }
 
+function setDataset(node, key, value) {
+  if (node?.dataset?.[key] !== value) node.dataset[key] = value;
+}
+
+function hide(node) {
+  if (node && !node.hidden) node.hidden = true;
+}
+
 function applyPolicy() {
   const html = document.documentElement;
-  html.dataset.pvStudioMode = 'unified';
-  html.dataset.pvNetworkMode = 'online';
-  html.dataset.pvAccessMode = 'transparent-device';
-  html.dataset.pvOfflineMode = 'false';
+  setDataset(html, 'pvStudioMode', 'unified');
+  setDataset(html, 'pvNetworkMode', 'online');
+  setDataset(html, 'pvAccessMode', 'transparent-device');
+  setDataset(html, 'pvOfflineMode', 'false');
 
   document.querySelectorAll('#pv-remote-pairing,[data-remote-pair-form],[data-pv-local-draft]').forEach((node) => node.remove());
   document.querySelectorAll('[data-song-create-button]').forEach((button) => {
-    button.hidden = true;
-    button.closest('.pv-song-mode-card')?.setAttribute('hidden', '');
+    hide(button);
+    hide(button.closest('.pv-song-mode-card'));
   });
 
   const form = document.querySelector('[data-song-create-form]');
   if (form) {
-    form.dataset.pvNetworkPolicy = 'online_only';
-    form.dataset.pvExecutionPolicy = 'high_quality_only';
+    setDataset(form, 'pvNetworkPolicy', 'online_only');
+    setDataset(form, 'pvExecutionPolicy', 'high_quality_only');
   }
 
   const health = document.querySelector('.pv-health');
