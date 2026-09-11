@@ -51,7 +51,12 @@ export function installUnifiedOnlinePolicy() {
   if (observer) return () => observer?.disconnect();
   applyPolicy();
   observer = new MutationObserver(queueApply);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-pv-network-policy'],
+  });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
   return () => {
