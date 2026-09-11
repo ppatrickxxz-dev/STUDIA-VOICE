@@ -1,9 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-test('PRODUCT UX GATE: home is a creation-first music Studio, not a local launcher', async ({ page }) => {
+test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studio', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-route', 'home');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-access-mode', 'transparent-device');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
 
   const home = page.locator('#pv-product-home');
   await expect(home).toBeVisible();
@@ -27,10 +31,18 @@ test('PRODUCT UX GATE: home is a creation-first music Studio, not a local launch
   const prompt = 'R&B 2000s sensual, baixo synth redondo, bateria solta e refrão grande';
   await home.locator('[data-pv-product-prompt]').fill(prompt);
   await home.locator('[data-pv-product-create="song"]').click();
+  const form = page.locator('[data-song-create-form]');
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('[data-song-create-form] input[name="brief"]')).toHaveValue(prompt);
-  await expect(page.locator('[data-pv-unified-create]')).toBeVisible();
-  await expect(page.locator('[data-pv-local-draft]')).toBeVisible();
+  await expect(form.locator('input[name="brief"]')).toHaveValue(prompt);
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
+  await expect(form).toHaveAttribute('data-pv-execution-policy', 'high_quality_only');
+  await expect(form.locator('[data-pv-unified-create]')).toBeVisible();
+  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
+  await expect(form.locator('[data-song-create-button]')).toBeHidden();
+  await expect(page.locator('#pv-remote-pairing')).toHaveCount(0);
+  await expect(page.locator('[data-remote-pair-form]')).toHaveCount(0);
+  await expect(page.locator('input[type="email"]')).toHaveCount(0);
 
   const nav = page.locator('.pv-nav').last();
   await nav.locator('[data-route="home"]').click();
