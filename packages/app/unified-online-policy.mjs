@@ -10,10 +10,6 @@ const POLICY = Object.freeze({
 let observer = null;
 let queued = false;
 
-function setText(node, value) {
-  if (node && node.textContent !== value) node.textContent = value;
-}
-
 function setDataset(node, key, value) {
   if (node?.dataset?.[key] !== value) node.dataset[key] = value;
 }
@@ -40,19 +36,6 @@ function applyPolicy() {
     setDataset(form, 'pvNetworkPolicy', 'online_only');
     setDataset(form, 'pvExecutionPolicy', 'high_quality_only');
   }
-
-  const health = document.querySelector('.pv-health');
-  if (health) {
-    health.classList.toggle('connected', navigator.onLine !== false);
-    setText(health, navigator.onLine === false ? '● CONEXÃO NECESSÁRIA' : '● STUDIO CONECTADO');
-  }
-
-  document.querySelectorAll('[data-pv-network-copy]').forEach((node) => {
-    setText(node, navigator.onLine === false ? 'conecte-se para criar' : 'produção em alta qualidade conectada');
-  });
-
-  const lead = document.querySelector('.pv-intimate-home-hero .pv-lead');
-  if (lead) setText(lead, 'Sua ideia ganha som em um único Studio conectado, sem login, senha ou modo offline separado.');
 }
 
 function queueApply() {
@@ -66,11 +49,11 @@ function queueApply() {
 
 export function installUnifiedOnlinePolicy() {
   if (observer) return () => observer?.disconnect();
+  applyPolicy();
   observer = new MutationObserver(queueApply);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
-  queueApply();
   return () => {
     observer?.disconnect();
     observer = null;
