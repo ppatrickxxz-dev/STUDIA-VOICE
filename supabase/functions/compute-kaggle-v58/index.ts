@@ -12,6 +12,7 @@ const ACE_REVISION='ca1e85fe9430179831e6bc6be790c332190a3866'
 const ACE_MODEL='acestep-v15-turbo'
 const WORKER_SLUG='kaggle-worker-source-v58'
 const COMPLETE_SLUG='complete-kaggle-pipeline-job-v58'
+const B09_PROJECT_ID='d64e4de9-791e-41bc-9307-7957389b2499'
 
 function b64(v:string){return btoa(unescape(encodeURIComponent(v)))}
 function randomToken(bytes=32){const buf=new Uint8Array(bytes);crypto.getRandomValues(buf);return btoa(String.fromCharCode(...buf)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'')}
@@ -44,9 +45,6 @@ function captionFromPlan(plan:any,negativeStyles:any[]){
   if(singerParts.length)parts.push(`Guide singer: ${singerParts.join(', ')}; comfortable MIDI range ${Number(singer.lowMidi)||48}-${Number(singer.highMidi)||67}; ${singer.falsetto?'controlled falsetto allowed':'avoid falsetto'}`)
   const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,120)).filter(Boolean).slice(0,12)
   if(avoid.length)parts.push(`Avoid: ${avoid.join(', ')}`)
-  // Keep enough of the user's musical direction for arrangement, instrumentation,
-  // vocal and negative constraints to reach ACE-Step instead of collapsing a rich
-  // brief into the first 500 characters.
   return parts.join('. ').slice(0,1400)
 }
 async function kaggleRpc(token:string,method:string,payload:any){
@@ -65,6 +63,16 @@ function envClients(){
   const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
   return {url,pub,secret,admin}
 }
+async function sharedComputeConnection(admin:any,user:any){
+  const read=async(userId:string)=>{const {data,error}=await admin.rpc('admin_get_compute_connection',{p_user_id:userId,p_provider:'kaggle'});if(error)throw error;return Array.isArray(data)?data[0]:null}
+  let conn=await read(user.id)
+  if((!conn?.secret||!conn?.handle)&&user?.app_metadata?.pablovoice_app_device===true){
+    const {data:anchor,error}=await admin.from('projects').select('user_id').eq('id',B09_PROJECT_ID).maybeSingle()
+    if(error)throw error
+    if(anchor?.user_id)conn=await read(String(anchor.user_id))
+  }
+  return conn
+}
 async function readiness(){
   const env=envClients()
   if(!env)return json({ok:false,error:'server_configuration_error'},500)
@@ -82,7 +90,8 @@ async function readiness(){
     model_revision:ACE_REVISION,
     worker:WORKER_SLUG,
     callback:COMPLETE_SLUG,
-    auth_for_generation:'required',
+    access_mode:'transparent_device',
+    user_login_required:false,
     credential_exposed:false,
     configured:verified,
     runnable:verified,
@@ -110,11 +119,11 @@ Deno.serve(async(req:Request)=>{
     const {url,pub,admin}=env
     const auth=req.headers.get('authorization')||''
     const jwt=auth.startsWith('Bearer ')?auth.slice(7):''
-    if(!jwt)return json({ok:false,error:'auth_required'},401)
+    if(!jwt)return json({ok:false,error:'connection_required'},401)
     const userClient=createClient(url,pub,{global:{headers:{Authorization:`Bearer ${jwt}`}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
     const {data:ud,error:ue}=await userClient.auth.getUser(jwt)
     const user=ud?.user
-    if(ue||!user)return json({ok:false,error:'invalid_session'},401)
+    if(ue||!user)return json({ok:false,error:'connection_invalid'},401)
 
     const body=await req.json().catch(()=>({}))
     const projectId=String(body.project_id||'')
@@ -123,10 +132,8 @@ Deno.serve(async(req:Request)=>{
     if(plan?.schema!=='pablovoice_song_creation_v1'||!Array.isArray(plan?.sections)||!plan.sections.length)return json({ok:false,error:'invalid_music_plan'},400)
     const {data:project}=await admin.from('projects').select('id,title').eq('id',projectId).eq('user_id',user.id).maybeSingle()
     if(!project)return json({ok:false,error:'project_not_found'},404)
-    const {data:connRows,error:connErr}=await admin.rpc('admin_get_compute_connection',{p_user_id:user.id,p_provider:'kaggle'})
-    if(connErr)throw connErr
-    const conn=Array.isArray(connRows)?connRows[0]:null
-    if(!conn?.secret||!conn?.handle)return json({ok:false,error:'kaggle_not_connected',fallback_allowed:false},409)
+    const conn=await sharedComputeConnection(admin,user)
+    if(!conn?.secret||!conn?.handle)return json({ok:false,error:'music_compute_unavailable',fallback_allowed:false},409)
 
     const {data:versionRows}=await admin.from('project_versions').select('id').eq('project_id',projectId).eq('user_id',user.id).order('version_number',{ascending:false}).limit(1)
     const versionId=versionRows?.[0]?.id||null
@@ -148,7 +155,7 @@ Deno.serve(async(req:Request)=>{
     const {data:upload,error:uploadErr}=await admin.storage.from('audio-private').createSignedUploadUrl(outputPath)
     if(uploadErr||!upload?.token)throw new Error('signed_upload_failed')
     const ticket={version:1,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
-    const params={client:'pablovoice_native_music_v1',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental,generation_seed:generationSeed}
+    const params={client:'pablovoice_native_music_v2',access_mode:'transparent_device',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental,generation_seed:generationSeed}
     const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:'music_generation',engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:[],output_asset_ids:[],parameters:params,proof:{required:true},provider:'kaggle',current_stage:'dispatch',human_message:'Preparando a geração musical',started_at:new Date().toISOString()})
     if(jobErr)throw new Error(`job_insert_failed: ${jobErr.message}`)
 
@@ -169,7 +176,7 @@ Deno.serve(async(req:Request)=>{
       return json({ok:false,error:'kaggle_dispatch_rejected',detail:msg,job_id:jobId,fallback_allowed:false},409)
     }
     const now=new Date().toISOString()
-    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v1',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
+    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v2',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
     return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,fallback_allowed:false})
   }catch(e){return json({ok:false,error:String(e instanceof Error?e.message:e).slice(0,1400),job_id:jobId||null,fallback_allowed:false},500)}
 })
