@@ -64,18 +64,29 @@ test('PabloVoice exposes one connected Studio with no login prompt and no offlin
   assert.match(auth, /creatorSurfaceVisible:\s*false/);
   assert.doesNotMatch(auth, /Acesso do proprietário|Liberar meu estúdio|autocomplete="email"/);
 
+  assert.match(access, /productMode:\s*'unified'/);
+  assert.match(access, /creationMode:\s*'online_high_quality_only'/);
+  assert.match(access, /userLoginRequired:\s*false/);
+  assert.match(access, /passwordPrompt:\s*false/);
+  assert.match(access, /offlineMode:\s*false/);
+  assert.match(access, /localDraftAvailable:\s*false/);
   assert.match(access, /data-pv-local-draft/);
   assert.match(access, /data-song-create-button/);
   assert.match(access, /pvOfflineMode', 'false'/);
   assert.match(access, /pvAccessMode', 'transparent-device'/);
-  assert.match(access, /sem login, senha ou modo offline separado/);
+  assert.match(access, /pvNetworkPolicy', 'online_only'/);
+  assert.match(access, /pvExecutionPolicy', 'high_quality_only'/);
   assert.match(access, /function setDataset/);
   assert.match(access, /dataset\?\.\[key\] !== value/);
   assert.match(access, /if \(node && !node\.hidden\) node\.hidden = true/);
+  assert.match(access, /attributeFilter:\s*\['data-pv-network-policy'\]/);
   assert.doesNotMatch(access, /html\.dataset\.pvNetworkMode = 'online'/);
 
   assert.match(productCanon, /one Studio, one project model and one creative flow/i);
   assert.match(productCanon, /Online\/offline are not product modes/i);
+  assert.match(index, /data-pv-studio-mode="unified"/);
+  assert.match(index, /data-pv-access-mode="transparent-device"/);
+  assert.match(index, /data-pv-offline-mode="false"/);
   assert.match(index, /creator-unified-runtime\.mjs/);
   assert.match(index, /unified-online-policy\.mjs/);
   assert.doesNotMatch(index, /src=\"\.\/creator-online-language\.mjs\"/);
