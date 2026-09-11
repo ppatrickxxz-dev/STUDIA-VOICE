@@ -90,6 +90,29 @@ test('first use provisions a transparent device connection without user credenti
   assert.equal('password' in calls[0].body, false);
 });
 
+test('parallel adapters share one transparent auto-provision request', async () => {
+  const storage = new MemoryStorage();
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return jsonResponse(200, {
+      ok: true,
+      mode: 'transparent_device',
+      session: { access_token: 'shared-access', refresh_token: 'shared-refresh', expires_in: 3600, token_type: 'bearer' },
+      device_token: 'shared-device-token-abcdefghijklmnopqrstuvwxyz0123456789',
+    });
+  };
+  const location = { hash: '', origin: 'https://studia-voice.ppatrickxxz.workers.dev' };
+  const a = new RemoteAuthAdapter({ storage, location, fetchImpl });
+  const b = new RemoteAuthAdapter({ storage, location, fetchImpl });
+  const [one, two] = await Promise.all([a.ensureSession(), b.ensureSession()]);
+  assert.equal(calls, 1);
+  assert.equal(one.accessToken, 'shared-access');
+  assert.equal(two.accessToken, 'shared-access');
+  assert.equal(a.deviceToken, b.deviceToken);
+});
+
 test('agent turn fails honestly without connection and never switches to a local/offline mode', async () => {
   const storage = new MemoryStorage();
   const adapter = new RemoteAuthAdapter({ storage, location: { hash: '' }, fetchImpl: async () => { throw new Error('offline'); } });
