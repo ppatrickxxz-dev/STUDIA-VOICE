@@ -14,7 +14,7 @@ async function expectImageLoaded(locator) {
   await expect.poll(() => locator.evaluate((img) => Boolean(img.complete && img.naturalWidth > 0)), { timeout: 10_000 }).toBe(true);
 }
 
-test('VNEXT UNIFIED UI GATE: one Studio keeps creation central and Companions contextual across connectivity changes', async ({ page, context }) => {
+test('VNEXT UNIFIED UI GATE: one connected Studio with transparent access and no offline/local product mode', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -22,7 +22,9 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps creation central and Companions co
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-access-mode', 'transparent-device');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
   await expect(page.locator('html')).toHaveAttribute('data-pv-vnext-boot', 'ready', { timeout: 12_000 });
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
 
@@ -62,28 +64,28 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps creation central and Companions co
   await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph');
 
   const form = page.locator('[data-song-create-form]');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
-  await expect(form).toHaveAttribute('data-pv-execution-policy', 'explicit_quality_or_draft');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
+  await expect(form).toHaveAttribute('data-pv-execution-policy', 'high_quality_only');
   await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
   await expect(form.locator('[data-pv-unified-create]')).toBeVisible();
   await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
-  await expect(form.locator('[data-pv-local-draft]')).toBeVisible();
-  await expect(form.locator('[data-song-create-button]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
-  await expect(form.locator('[data-song-create-hq]').locator('xpath=ancestor::*[contains(@class,"pv-song-mode-card")][1]')).toBeHidden();
+  await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
+  await expect(form.locator('[data-song-create-button]')).toBeHidden();
+  await expect(form.locator('[data-song-create-hq]')).toBeHidden();
   await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
   await expect(form.locator('.pv-intimate-advanced')).not.toHaveAttribute('open', '');
 
-  const ownerAccess = page.locator('#pv-remote-pairing');
-  await expect(ownerAccess).toBeVisible({ timeout: 10_000 });
-  await expect(ownerAccess).toContainText('Acesso do proprietário');
-  await expect(ownerAccess.getByRole('button', { name: 'Liberar meu estúdio' })).toBeVisible();
+  await expect(page.locator('#pv-remote-pairing')).toHaveCount(0);
+  await expect(page.locator('[data-remote-pair-form]')).toHaveCount(0);
+  await expect(page.locator('input[type="email"]')).toHaveCount(0);
+  await expect(page.getByText(/Acesso do proprietário|Liberar meu estúdio|código de ativação/i)).toHaveCount(0);
 
   await form.locator('input[name="brief"]').fill('R&B 2000s sensual, menos batestaca, baixo mais solto e refrão abrindo');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('refrão localizado');
   await expect(form.locator('[data-pv-intent-copy]')).toContainText('baixo');
   await form.locator('.pv-intimate-advanced > summary').click();
   await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20 · completa');
-  await shot(page, 'creator-product-quality-first-desktop');
+  await shot(page, 'creator-product-unified-online-desktop');
 
   await form.locator('[data-pv-kind="instrumental"]').click();
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
@@ -91,17 +93,19 @@ test('VNEXT UNIFIED UI GATE: one Studio keeps creation central and Companions co
 
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'adaptive');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
-  await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
-  await expect(form.locator('[data-pv-local-draft]')).toBeVisible();
-  await expect(shell.locator('[data-vnext-network]')).toHaveText('STUDIO');
-  await expect(shell.locator('[data-vnext-online]')).toHaveText('STUDIO');
-  await shot(page, 'creator-same-product-studio-without-network');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
+  await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
+  await expect(shell.locator('[data-vnext-network]')).not.toContainText(/OFFLINE|LOCAL/i);
+  await expect(shell.locator('[data-vnext-online]')).not.toContainText(/OFFLINE|LOCAL/i);
+  await form.locator('[data-pv-unified-create]').click();
+  await expect(page.locator('#pv-song-create-status')).toContainText('precisa de conexão', { timeout: 10_000 });
+  await shot(page, 'creator-unified-studio-connection-required');
 
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'quality_first');
+  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
 
   await nav.locator('[data-route="pablo"]').click();
   await expect(page.locator('[data-pv-pablo-intimacy]')).toBeVisible({ timeout: 10_000 });
