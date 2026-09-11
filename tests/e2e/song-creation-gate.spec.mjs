@@ -60,7 +60,10 @@ test('SONG CREATION GATE: one connected high-quality Studio with no login or off
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
   await expect(page.locator('.pv-health')).not.toContainText(/OFFLINE|LOCAL/i);
-  await expect(page.locator('[data-pv-network-copy]').first()).not.toContainText(/local|offline/i);
+  const networkCopy = page.locator('[data-pv-network-copy]');
+  for (let index = 0; index < await networkCopy.count(); index += 1) {
+    await expect(networkCopy.nth(index)).not.toContainText(/local|offline/i);
+  }
 
   expect(unexpectedErrors(errors)).toEqual([]);
 });
