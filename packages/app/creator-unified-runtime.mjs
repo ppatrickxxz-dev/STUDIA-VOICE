@@ -14,8 +14,6 @@ export function installCreatorUnifiedRuntime() {
   runtime.observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
-    attributes: true,
-    attributeFilter: ['hidden', 'disabled', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-experience', 'data-pv-ready'],
   });
   document.addEventListener('click', onClick, true);
   window.addEventListener('online', queueSync);
@@ -52,7 +50,7 @@ function syncUnifiedStudio() {
     const health = document.querySelector('.pv-health');
     if (health) {
       setDataset(health, 'pvUnifiedHealth', 'ready');
-      health.setAttribute('aria-label', 'Studio pronto');
+      if (health.getAttribute('aria-label') !== 'Studio pronto') health.setAttribute('aria-label', 'Studio pronto');
     }
     document.querySelectorAll('[data-pv-network-copy]').forEach((node) => setDataset(node, 'pvUnifiedCopy', 'true'));
     const homeLead = document.querySelector('.pv-intimate-home-hero .pv-lead');
@@ -77,8 +75,8 @@ function ensureCompleteDuration(form) {
     duration.appendChild(option);
   }
   for (const item of duration.options) {
-    if (item.value === '60') item.textContent = '1:00 · curta';
-    if (item.value === '120') item.textContent = '2:00 · média';
+    if (item.value === '60' && item.textContent !== '1:00 · curta') item.textContent = '1:00 · curta';
+    if (item.value === '120' && item.textContent !== '2:00 · média') item.textContent = '2:00 · média';
   }
 }
 
