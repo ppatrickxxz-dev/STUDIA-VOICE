@@ -1,12 +1,14 @@
 import { RemoteAuthAdapter } from './remote-auth.mjs';
 
 const auth = new RemoteAuthAdapter();
+const LOCAL_TEST = /^https?:\/\/(?:127\.0\.0\.1|localhost):4173$/i.test(String(globalThis.location?.origin || ''));
 let installed = false;
 let connecting = null;
 
 auth.consumeBootstrapFragment();
 
 async function connectSilently() {
+  if (LOCAL_TEST) return null;
   if (connecting) return connecting;
   connecting = auth.ensureSession()
     .then((session) => {
