@@ -48,7 +48,8 @@ test('PabloVoice exposes one connected Studio with no login prompt and no offlin
   assert.match(creator, /online_only/);
   assert.match(creator, /high_quality_only/);
   assert.match(creator, /data-pv-unified-create/);
-  assert.doesNotMatch(creator, /data-pv-local-draft/);
+  assert.match(creator, /querySelectorAll\('\[data-pv-local-draft\]'\).*remove/);
+  assert.doesNotMatch(creator, /data-pv-local-draft>Rascunho local/);
   assert.match(creator, /data-song-create-hq/);
   assert.match(creator, /ensureSession\(\)/);
   assert.match(creator, /localDraftAvailable:\s*false/);
