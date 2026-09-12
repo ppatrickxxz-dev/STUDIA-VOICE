@@ -1,0 +1,167 @@
+name: Native music generation live canary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-music-generation-canary.yml'
+      - 'supabase/functions/compute-kaggle-v58/**'
+      - 'supabase/functions/kaggle-worker-source-v58/**'
+      - 'supabase/functions/complete-kaggle-pipeline-job-v58/**'
+      - 'packages/app/native-music-generation-client.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  ACE_MODEL: acestep-v15-turbo
+  ACE_REVISION: ca1e85fe9430179831e6bc6be790c332190a3866
+
+jobs:
+  physical-generation:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire OIDC-backed PabloVoice session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          SESSION="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
+          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Dispatch real ACE-Step generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/native-music-generation
+          BODY="$(jq -nc --arg project "$PROJECT_ID" '{
+            project_id:$project,
+            instrumental:false,
+            variation_seed:194923,
+            negative_styles:["heavy dembow","trap beat","EDM drop"],
+            plan:{
+              schema:"pablovoice_song_creation_v1",
+              brief:"R&B 2000s sensual e noturno, baixo synth redondo, bateria solta, synths escuros, verso íntimo, pré crescendo e refrão maior; transições claras e sem loop repetitivo",
+              genre:"R&B 2000s",
+              mood:"sensual, íntimo, confiante",
+              bpm:96,key:"C",mode:"minor",durationSeconds:10,
+              singerProfile:{voiceType:"tenor/baritone",tone:"warm masculine",delivery:"smooth R&B phrasing",language:"pt-BR",lowMidi:48,highMidi:67,falsetto:true},
+              sections:[{id:"intro",label:"Intro"},{id:"verse",label:"Verso"},{id:"chorus",label:"Refrão"}],
+              guideLines:[{sectionId:"verse",text:"Deixo a noite correr"},{sectionId:"chorus",text:"Amanhã a gente vê"}]
+            }
+          }')"
+          HTTP_CODE="$(curl --silent --show-error --max-time 45 \
+            -o test-results/native-music-generation/dispatch.json \
+            -w '%{http_code}' \
+            -X POST "$SUPABASE_URL/functions/v1/compute-kaggle-v58" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          cat test-results/native-music-generation/dispatch.json | jq 'del(.kernel)'
+          test "$HTTP_CODE" = '200'
+          JOB_ID="$(jq -er '.job_id' test-results/native-music-generation/dispatch.json)"
+          jq -e '.ok == true and .status == "waiting_kaggle" and .fallback_allowed == false' test-results/native-music-generation/dispatch.json >/dev/null
+          printf 'PV_JOB_ID=%s\n' "$JOB_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for physical audio and verify proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          JOB_URL="$SUPABASE_URL/rest/v1/render_jobs?id=eq.$PV_JOB_ID&select=id,status,progress,current_stage,error_code,error_message,parameters,proof,output_asset_ids"
+          for attempt in $(seq 1 72); do
+            curl --fail-with-body --silent --show-error "$JOB_URL" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              > test-results/native-music-generation/job.json
+            STATUS="$(jq -r '.[0].status // "missing"' test-results/native-music-generation/job.json)"
+            if [ "$STATUS" = 'completed' ]; then break; fi
+            if [ "$STATUS" = 'error' ] || [ "$STATUS" = 'failed' ] || [ "$STATUS" = 'cancelled' ]; then
+              jq '.' test-results/native-music-generation/job.json
+              exit 1
+            fi
+            sleep 10
+          done
+          jq -e --arg model "$ACE_MODEL" --arg revision "$ACE_REVISION" '
+            .[0].status == "completed" and
+            .[0].proof.verified == true and
+            .[0].proof.model == $model and
+            .[0].proof.model_revision == $revision and
+            (.[0].proof.audio_size_bytes | tonumber) > 4096 and
+            (.[0].proof.duration_seconds | tonumber) > 1 and
+            (.[0].proof.sample_rate | tonumber) > 0 and
+            (.[0].proof.channels | tonumber) > 0 and
+            (.[0].proof.audio_sha256 | test("^[0-9a-f]{64}$")) and
+            .[0].parameters.client == "pablovoice_native_music_v2_1" and
+            (.[0].parameters.caption_chars | tonumber) <= 512 and
+            (.[0].parameters.shift | tonumber) == 3 and
+            .[0].parameters.constrained_decoding == true and
+            (.[0].output_asset_ids | length) > 0
+          ' test-results/native-music-generation/job.json >/dev/null
+          ASSET_ID="$(jq -er '.[0].output_asset_ids[0]' test-results/native-music-generation/job.json)"
+          printf 'PV_ASSET_ID=%s\n' "$ASSET_ID" >> "$GITHUB_ENV"
+
+      - name: Download exact persisted output and match SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/rest/v1/audio_assets?id=eq.$PV_ASSET_ID&select=id,kind,storage_bucket,storage_path,mime_type,size_bytes,duration_seconds,sample_rate,channels,sha256,metadata" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            > test-results/native-music-generation/asset.json
+          jq -e '. | length == 1 and .[0].kind == "full_mix" and .[0].storage_bucket == "audio-private"' test-results/native-music-generation/asset.json >/dev/null
+          PATH_VALUE="$(jq -er '.[0].storage_path' test-results/native-music-generation/asset.json)"
+          EXPECTED_SHA="$(jq -er '.[0].sha256' test-results/native-music-generation/asset.json)"
+          curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/storage/v1/object/authenticated/audio-private/$PATH_VALUE" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -o test-results/native-music-generation/output.flac
+          ACTUAL_SHA="$(sha256sum test-results/native-music-generation/output.flac | awk '{print $1}')"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          jq -n \
+            --arg verdict 'NATIVE_MUSIC_REAL_USER_PATH_VALIDATED' \
+            --arg github_sha "$GITHUB_SHA" \
+            --arg job_id "$PV_JOB_ID" \
+            --arg asset_id "$PV_ASSET_ID" \
+            --arg audio_sha256 "$ACTUAL_SHA" \
+            --arg model "$ACE_MODEL" \
+            --arg revision "$ACE_REVISION" \
+            '{verdict:$verdict,github_sha:$github_sha,job_id:$job_id,asset_id:$asset_id,audio_sha256:$audio_sha256,model:$model,model_revision:$revision}' \
+            > test-results/native-music-generation/evidence.json
+          jq '.' test-results/native-music-generation/evidence.json
+
+      - name: Retain generation evidence without audio
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-music-generation-evidence-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/native-music-generation/dispatch.json
+            test-results/native-music-generation/job.json
+            test-results/native-music-generation/asset.json
+            test-results/native-music-generation/evidence.json
+          if-no-files-found: warn
+          retention-days: 30
