@@ -19,7 +19,8 @@ function randomToken(bytes=32){const buf=new Uint8Array(bytes);crypto.getRandomV
 function randomGenerationSeed(){const buf=new Uint32Array(1);crypto.getRandomValues(buf);return (Number(buf[0])%2147483646)+1}
 async function sha256Text(value:string){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('')}
 function clamp(n:number,min:number,max:number){return Math.max(min,Math.min(max,n))}
-function clean(value:any,max:number){return String(value||'').trim().slice(0,max)}
+function clean(value:any,max:number){return String(value||'').trim().replace(/\s+/g,' ').slice(0,max)}
+function normalizeLanguage(value:any){const raw=clean(value,16).toLowerCase();if(!raw)return'pt';if(raw.startsWith('pt'))return'pt';if(raw.startsWith('en'))return'en';if(raw.startsWith('es'))return'es';if(raw.startsWith('fr'))return'fr';if(raw.startsWith('de'))return'de';if(raw.startsWith('it'))return'it';return raw.split(/[-_]/)[0].slice(0,8)||'pt'}
 function sectionTag(id:string){
   const v=String(id||'').toLowerCase()
   if(v.includes('refr')||v.includes('chorus'))return 'Chorus'
@@ -39,16 +40,20 @@ function buildLyrics(plan:any,instrumental:boolean){
   return out.join('\n').slice(0,4096)
 }
 function captionFromPlan(plan:any,negativeStyles:any[]){
-  const parts=[clean(plan?.brief,1200),clean(plan?.genre,80),clean(plan?.mood,160)].filter(Boolean)
+  const rawBrief=String(plan?.brief||'').trim()
+  const marker='PabloVoice 2.0 Song DNA:'
+  const markerAt=rawBrief.indexOf(marker)
+  const userBrief=clean(markerAt>=0?rawBrief.slice(0,markerAt):rawBrief,285)
+  const songDna=clean(markerAt>=0?rawBrief.slice(markerAt+marker.length):'',145)
+  const style=[clean(plan?.genre,48),clean(plan?.mood,72)].filter(Boolean).join(', ')
   const singer=plan?.singerProfile||{}
-  const singerParts=[clean(singer.voiceType,24),clean(singer.tone,100),clean(singer.delivery,140)].filter(Boolean)
-  if(singerParts.length)parts.push(`Guide singer: ${singerParts.join(', ')}; comfortable MIDI range ${Number(singer.lowMidi)||48}-${Number(singer.highMidi)||67}; ${singer.falsetto?'controlled falsetto allowed':'avoid falsetto'}`)
-  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,120)).filter(Boolean).slice(0,12)
-  if(avoid.length)parts.push(`Avoid: ${avoid.join(', ')}`)
-  return parts.join('. ').slice(0,1400)
+  const singerDirection=[clean(singer.voiceType,16),clean(singer.tone,55),clean(singer.delivery,65)].filter(Boolean).join(', ')
+  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,60)).filter(Boolean).slice(0,6).join(', ')
+  const parts=[userBrief,style?`Style: ${style}`:'',songDna?`Direction: ${songDna}`:'',singerDirection?`Vocal: ${singerDirection}`:'',avoid?`Avoid: ${avoid}`:''].filter(Boolean)
+  return parts.join('. ').slice(0,512)
 }
 async function kaggleRpc(token:string,method:string,payload:any){
-  const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Music/1.0'},body:JSON.stringify(payload)})
+  const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Music/2.1'},body:JSON.stringify(payload)})
   const text=await r.text();let out:any={};try{out=JSON.parse(text)}catch{out={raw:text.slice(0,1600)}}
   if(!r.ok||Number(out?.code||0)>=400)throw new Error(`Kaggle ${method}: ${out?.message||text.slice(0,600)}`)
   return out
@@ -58,29 +63,42 @@ function envClients(){
   const pubs=JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')||'{}')
   const secs=JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}')
   const pub=pubs.default||Deno.env.get('SUPABASE_ANON_KEY')||''
-  const secret=secs.default||Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
+  // The compute-connection RPC intentionally requires the service_role JWT.
+  // Prefer it over the newer sb_secret key, which is an admin API key but does
+  // not carry the JWT role claim used by that RPC.
+  const secret=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||secs.default||''
   if(!url||!pub||!secret)return null
   const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
   return {url,pub,secret,admin}
 }
+async function readComputeConnection(admin:any,userId:string){const {data,error}=await admin.rpc('admin_get_compute_connection',{p_user_id:userId,p_provider:'kaggle'});if(error)throw error;return Array.isArray(data)?data[0]:null}
 async function sharedComputeConnection(admin:any,user:any){
-  const read=async(userId:string)=>{const {data,error}=await admin.rpc('admin_get_compute_connection',{p_user_id:userId,p_provider:'kaggle'});if(error)throw error;return Array.isArray(data)?data[0]:null}
-  let conn=await read(user.id)
+  let conn=await readComputeConnection(admin,user.id)
   if((!conn?.secret||!conn?.handle)&&user?.app_metadata?.pablovoice_app_device===true){
     const {data:anchor,error}=await admin.from('projects').select('user_id').eq('id',B09_PROJECT_ID).maybeSingle()
     if(error)throw error
-    if(anchor?.user_id)conn=await read(String(anchor.user_id))
+    if(anchor?.user_id)conn=await readComputeConnection(admin,String(anchor.user_id))
   }
   return conn
 }
 async function readiness(){
   const env=envClients()
   if(!env)return json({ok:false,error:'server_configuration_error'},500)
+  let computeReady=false
+  try{
+    const {data:anchor,error:anchorError}=await env.admin.from('projects').select('user_id').eq('id',B09_PROJECT_ID).maybeSingle()
+    if(anchorError)throw anchorError
+    const conn=anchor?.user_id?await readComputeConnection(env.admin,String(anchor.user_id)):null
+    computeReady=Boolean(conn?.secret&&conn?.handle)
+  }catch(error){
+    return json({ok:false,error:'compute_connection_check_failed',detail:String(error instanceof Error?error.message:error).slice(0,240),configured:false,runnable:false},503)
+  }
   const {data:rows,error}=await env.admin.from('render_jobs').select('finished_at,proof,engine,provider').eq('job_type','music_generation').eq('status','completed').order('finished_at',{ascending:false}).limit(1)
   if(error)return json({ok:false,error:'readiness_query_failed'},500)
   const row=rows?.[0]||null
   const proof=row?.proof&&typeof row.proof==='object'?row.proof:{}
-  const verified=proof?.verified===true&&proof?.model===ACE_MODEL&&proof?.model_revision===ACE_REVISION&&Number(proof?.audio_size_bytes)>4096&&Number(proof?.duration_seconds)>1&&Number(proof?.sample_rate)>0&&Number(proof?.channels)>0&&/^[0-9a-f]{64}$/i.test(String(proof?.audio_sha256||''))
+  const canaryVerified=proof?.verified===true&&proof?.model===ACE_MODEL&&proof?.model_revision===ACE_REVISION&&Number(proof?.audio_size_bytes)>4096&&Number(proof?.duration_seconds)>1&&Number(proof?.sample_rate)>0&&Number(proof?.channels)>0&&/^[0-9a-f]{64}$/i.test(String(proof?.audio_sha256||''))
+  const verified=computeReady&&canaryVerified
   return json({
     ok:true,
     service:'pablovoice-native-music',
@@ -93,9 +111,10 @@ async function readiness(){
     access_mode:'transparent_device',
     user_login_required:false,
     credential_exposed:false,
+    compute_connection_ready:computeReady,
     configured:verified,
     runnable:verified,
-    physical_canary:verified?{
+    physical_canary:canaryVerified?{
       verified:true,
       finished_at:row.finished_at,
       duration_seconds:Number(proof.duration_seconds),
@@ -132,7 +151,12 @@ Deno.serve(async(req:Request)=>{
     if(plan?.schema!=='pablovoice_song_creation_v1'||!Array.isArray(plan?.sections)||!plan.sections.length)return json({ok:false,error:'invalid_music_plan'},400)
     const {data:project}=await admin.from('projects').select('id,title').eq('id',projectId).eq('user_id',user.id).maybeSingle()
     if(!project)return json({ok:false,error:'project_not_found'},404)
-    const conn=await sharedComputeConnection(admin,user)
+    let conn:any=null
+    try{conn=await sharedComputeConnection(admin,user)}catch(error){
+      const detail=String(error instanceof Error?error.message:error).slice(0,600)
+      const code=/service_role_required/i.test(detail)?'music_compute_auth_role_failed':'music_compute_lookup_failed'
+      return json({ok:false,error:code,detail,fallback_allowed:false},503)
+    }
     if(!conn?.secret||!conn?.handle)return json({ok:false,error:'music_compute_unavailable',fallback_allowed:false},409)
 
     const {data:versionRows}=await admin.from('project_versions').select('id').eq('project_id',projectId).eq('user_id',user.id).order('version_number',{ascending:false}).limit(1)
@@ -145,7 +169,20 @@ Deno.serve(async(req:Request)=>{
     const generationSeed=Number.isFinite(requestedVariation)&&requestedVariation>0
       ? Math.abs(Math.trunc(requestedVariation))%2147483647||1
       : randomGenerationSeed()
-    const generation={caption:captionFromPlan(plan,body.negative_styles),lyrics:buildLyrics(plan,instrumental),instrumental,bpm,keyscale:key?`${key} ${mode}`:'',timesignature:'4',vocal_language:clean(plan?.singerProfile?.language,16)||'pt-BR',duration,seed:generationSeed,inference_steps:8}
+    const generation={
+      caption:captionFromPlan(plan,body.negative_styles),
+      lyrics:buildLyrics(plan,instrumental),
+      instrumental,
+      bpm,
+      keyscale:key?`${key} ${mode}`:'',
+      timesignature:'4',
+      vocal_language:normalizeLanguage(plan?.singerProfile?.language),
+      duration,
+      seed:generationSeed,
+      inference_steps:8,
+      shift:3.0,
+      use_constrained_decoding:true,
+    }
     if(!generation.caption)return json({ok:false,error:'music_caption_required'},400)
 
     jobId=crypto.randomUUID()
@@ -154,8 +191,8 @@ Deno.serve(async(req:Request)=>{
     const outputPath=`${user.id}/${projectId}/music/${jobId}-full-mix.flac`
     const {data:upload,error:uploadErr}=await admin.storage.from('audio-private').createSignedUploadUrl(outputPath)
     if(uploadErr||!upload?.token)throw new Error('signed_upload_failed')
-    const ticket={version:1,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
-    const params={client:'pablovoice_native_music_v2',access_mode:'transparent_device',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental,generation_seed:generationSeed}
+    const ticket={version:2,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
+    const params={client:'pablovoice_native_music_v2_1',access_mode:'transparent_device',kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental,generation_seed:generationSeed,caption_chars:generation.caption.length,shift:generation.shift,constrained_decoding:generation.use_constrained_decoding}
     const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:'music_generation',engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:[],output_asset_ids:[],parameters:params,proof:{required:true},provider:'kaggle',current_stage:'dispatch',human_message:'Preparando a geração musical',started_at:new Date().toISOString()})
     if(jobErr)throw new Error(`job_insert_failed: ${jobErr.message}`)
 
@@ -176,7 +213,7 @@ Deno.serve(async(req:Request)=>{
       return json({ok:false,error:'kaggle_dispatch_rejected',detail:msg,job_id:jobId,fallback_allowed:false},409)
     }
     const now=new Date().toISOString()
-    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v2',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
+    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v2_1',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
     return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,fallback_allowed:false})
   }catch(e){return json({ok:false,error:String(e instanceof Error?e.message:e).slice(0,1400),job_id:jobId||null,fallback_allowed:false},500)}
 })
