@@ -21,9 +21,6 @@ function hide(node) {
 function applyPolicy() {
   const html = document.documentElement;
   setDataset(html, 'pvStudioMode', 'unified');
-  // Product mode stays online-only even when the browser temporarily loses
-  // transport. The visible create action reports the connectivity failure;
-  // we never expose a second local/offline product mode.
   setDataset(html, 'pvNetworkMode', 'online');
   setDataset(html, 'pvAccessMode', 'transparent-device');
   setDataset(html, 'pvOfflineMode', 'false');
@@ -58,7 +55,7 @@ export function installUnifiedOnlinePolicy() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['hidden', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-execution-policy'],
+    attributeFilter: ['data-pv-network-policy'],
   });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
