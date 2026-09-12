@@ -1,10 +1,11 @@
-const PY = String.raw`import sys, subprocess, tempfile, shutil, hashlib, json, os
+const PY = String.raw`import sys, subprocess, tempfile, shutil, hashlib, json, os, threading, time
 from pathlib import Path
 import requests
 
 TICKET = json.loads(__import__('base64').b64decode(TICKET_B64).decode('utf-8'))
 ACE_REVISION = 'ca1e85fe9430179831e6bc6be790c332190a3866'
 ACE_MODEL = 'acestep-v15-turbo'
+PROGRESS_URL = TICKET.get('progress_url') or (TICKET['supabase_url'].rstrip('/') + '/functions/v1/progress-kaggle-pipeline-job-v58')
 
 
 def sha256_file(path):
@@ -12,6 +13,25 @@ def sha256_file(path):
     with open(path,'rb') as f:
         for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
     return h.hexdigest()
+
+
+def post_progress(stage, message=''):
+    body={'job_id':TICKET['job_id'],'callback_token':TICKET['callback_token'],'stage':stage}
+    if message: body['message']=str(message)[:1200]
+    try:
+        r=requests.post(PROGRESS_URL,json=body,timeout=25)
+        if not r.ok:
+            print('PABLOVOICE_PROGRESS_WARN',stage,r.status_code,r.text[:300],flush=True)
+        return r.ok
+    except Exception as exc:
+        print('PABLOVOICE_PROGRESS_WARN',stage,str(exc)[:300],flush=True)
+        return False
+
+
+def heartbeat_loop(stop_event):
+    post_progress('heartbeat')
+    while not stop_event.wait(45):
+        post_progress('heartbeat')
 
 
 def upload_signed(ticket, output, file_path):
@@ -105,9 +125,13 @@ def run():
     if engine.get('source_revision')!=ACE_REVISION or engine.get('model')!=ACE_MODEL: raise RuntimeError('engine_identity_mismatch')
     generation=TICKET.get('generation') or {}
     if len(str(generation.get('caption') or ''))>512: raise RuntimeError('caption_too_long')
+    stop_event=threading.Event()
+    heartbeat=threading.Thread(target=heartbeat_loop,args=(stop_event,),daemon=True)
+    heartbeat.start()
     tmp=Path(tempfile.mkdtemp(prefix='pv-music-'))
     try:
         repo=prepare_repo(tmp)
+        post_progress('heartbeat')
         script,payload=write_generation_script(repo,tmp)
         outdir=tmp/'generated'
         env=os.environ.copy()
@@ -117,6 +141,7 @@ def run():
         env['ACESTEP_CONFIG_PATH']=ACE_MODEL
         env['ACESTEP_DOWNLOAD_SOURCE']='modelscope'
         completed=subprocess.run(['uv','run','python',str(script)],cwd=repo,env=env,check=True,text=True,capture_output=True)
+        post_progress('heartbeat')
         output_line=next((line for line in completed.stdout.splitlines() if line.startswith('PV_OUTPUT_PATH=')),None)
         if not output_line: raise RuntimeError('ace_output_path_missing '+completed.stdout[-1200:])
         generated=Path(output_line.split('=',1)[1].strip())
@@ -126,6 +151,7 @@ def run():
         if meta['duration_seconds']<=1 or meta['sample_rate']<=0 or meta['channels']<=0: raise RuntimeError('generated_audio_probe_failed')
         output=TICKET['outputs']['full_mix']
         upload_signed(TICKET,output,generated)
+        post_progress('heartbeat')
         digest=sha256_file(generated)
         result=post_callback(TICKET,{
             'audio_sha256':digest,
@@ -138,8 +164,13 @@ def run():
             'ace_model':ACE_MODEL,
             'generation_seed':int(TICKET['generation']['seed']),
         })
-        print('PABLOVOICE_NATIVE_MUSIC_OK',json.dumps(result,ensure_ascii=False))
+        print('PABLOVOICE_NATIVE_MUSIC_OK',json.dumps(result,ensure_ascii=False),flush=True)
+    except Exception as exc:
+        post_progress('error',str(exc))
+        raise
     finally:
+        stop_event.set()
+        heartbeat.join(timeout=5)
         shutil.rmtree(tmp,ignore_errors=True)
 
 run()
@@ -147,5 +178,5 @@ run()
 
 Deno.serve((req: Request) => {
   if (req.method !== 'GET') return new Response('method_not_allowed', { status: 405 });
-  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v2' } });
+  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v3-heartbeat' } });
 });
