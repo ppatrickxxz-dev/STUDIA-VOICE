@@ -31,10 +31,11 @@ test('Intimate Recorder canon keeps Pablo, all companions and living state syste
   assert.match(canon, /violet\/purple is no longer the primary product color/i);
 });
 
-test('PabloVoice exposes one Studio while full production is quality-first and local draft is explicit', async () => {
-  const [creator, auth, productCanon, index, unifiedCss] = await Promise.all([
+test('PabloVoice exposes one connected Studio with no login prompt and no offline/local product mode', async () => {
+  const [creator, auth, access, productCanon, index, unifiedCss] = await Promise.all([
     read('packages/app/creator-unified-runtime.mjs'),
     read('packages/app/remote-auth-ui.mjs'),
+    read('packages/app/unified-online-policy.mjs'),
     read('docs/PRODUCT_CANON.md'),
     read('packages/app/index.html'),
     read('packages/app/pablovoice-unified-ui.css'),
@@ -43,25 +44,51 @@ test('PabloVoice exposes one Studio while full production is quality-first and l
   assert.match(creator, /pvStudioMode/);
   assert.match(creator, /['\"]unified['\"]/);
   assert.match(creator, /pvNetworkMode/);
-  assert.match(creator, /['\"]adaptive['\"]/);
-  assert.match(creator, /quality_first/);
-  assert.match(creator, /explicit_quality_or_draft/);
+  assert.match(creator, /['\"]online['\"]/);
+  assert.match(creator, /online_only/);
+  assert.match(creator, /high_quality_only/);
   assert.match(creator, /data-pv-unified-create/);
-  assert.match(creator, /data-pv-local-draft/);
-  assert.match(creator, /data-song-create-button/);
+  assert.match(creator, /querySelectorAll\('\[data-pv-local-draft\]'\).*remove/);
+  assert.doesNotMatch(creator, /data-pv-local-draft>Rascunho local/);
   assert.match(creator, /data-song-create-hq/);
   assert.match(creator, /ensureSession\(\)/);
-  assert.match(creator, /pablovoice:request-online-auth/);
-  assert.match(creator, /fallbackBeforeRemoteDispatchWhenSupported:\s*false/);
-  assert.match(creator, /localDraftRequiresExplicitUserChoice:\s*true/);
+  assert.match(creator, /localDraftAvailable:\s*false/);
+  assert.match(creator, /userLoginRequired:\s*false/);
+  assert.match(creator, /passwordPrompt:\s*false/);
+  assert.match(creator, /transparentDeviceAccess:\s*true/);
+  assert.match(creator, /offlineMode:\s*false/);
   assert.match(creator, /remoteFailureNeverFabricatesSuccess:\s*true/);
-  assert.doesNotMatch(creator, /ONLINE · FULL|OFFLINE · LOCAL|online_full|offline_local/);
-  assert.match(auth, /creatorSurfaceVisible:\s*true/);
-  assert.match(auth, /noSilentOfflineFallback:\s*true/);
+
+  assert.match(auth, /transparentDeviceAccess:\s*true/);
+  assert.match(auth, /userLoginUI:\s*false/);
+  assert.match(auth, /creatorSurfaceVisible:\s*false/);
+  assert.doesNotMatch(auth, /Acesso do proprietário|Liberar meu estúdio|autocomplete="email"/);
+
+  assert.match(access, /productMode:\s*'unified'/);
+  assert.match(access, /creationMode:\s*'online_high_quality_only'/);
+  assert.match(access, /userLoginRequired:\s*false/);
+  assert.match(access, /passwordPrompt:\s*false/);
+  assert.match(access, /offlineMode:\s*false/);
+  assert.match(access, /localDraftAvailable:\s*false/);
+  assert.match(access, /data-pv-local-draft/);
+  assert.match(access, /data-song-create-button/);
+  assert.match(access, /pvOfflineMode', 'false'/);
+  assert.match(access, /pvAccessMode', 'transparent-device'/);
+  assert.match(access, /pvNetworkPolicy', 'online_only'/);
+  assert.match(access, /pvExecutionPolicy', 'high_quality_only'/);
+  assert.match(access, /function setDataset/);
+  assert.match(access, /dataset\?\.\[key\] !== value/);
+  assert.match(access, /if \(node && !node\.hidden\) node\.hidden = true/);
+  assert.match(access, /attributeFilter:\s*\['data-pv-network-policy'\]/);
+  assert.doesNotMatch(access, /html\.dataset\.pvNetworkMode = 'online'/);
+
   assert.match(productCanon, /one Studio, one project model and one creative flow/i);
   assert.match(productCanon, /Online\/offline are not product modes/i);
-  assert.match(productCanon, /only that action fails honestly/i);
+  assert.match(index, /data-pv-studio-mode="unified"/);
+  assert.match(index, /data-pv-access-mode="transparent-device"/);
+  assert.match(index, /data-pv-offline-mode="false"/);
   assert.match(index, /creator-unified-runtime\.mjs/);
+  assert.match(index, /unified-online-policy\.mjs/);
   assert.doesNotMatch(index, /src=\"\.\/creator-online-language\.mjs\"/);
   assert.match(unifiedCss, /STUDIO · PRONTO/);
 });

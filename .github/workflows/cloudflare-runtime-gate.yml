@@ -7,6 +7,7 @@ on:
       - 'wrangler.jsonc'
       - 'packages/app/**'
       - 'services/api/**'
+      - 'supabase/functions/device-auth/**'
       - 'supabase/functions/compute-kaggle-v58/**'
       - 'supabase/functions/kaggle-worker-source-v58/**'
       - 'supabase/functions/complete-kaggle-pipeline-job-v58/**'
@@ -95,6 +96,7 @@ jobs:
         env:
           BASE_URL: ${{ steps.discover.outputs.url }}
           NATIVE_MUSIC_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/compute-kaggle-v58
+          DEVICE_AUTH_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/device-auth
         shell: bash
         run: |
           set -euo pipefail
@@ -128,13 +130,16 @@ jobs:
           fetch_200 "$BASE_URL/api/music-regeneration" "$tmp/regen.json" "$tmp/regen.headers"
           jq -e '.ok == true and .service == "pablovoice-music-regeneration" and .provider == "elevenmusic" and .model == "music_v2" and .credential_exposed == false and .auth_for_generation == "required" and .requires_song_id == true and .preserves_unselected_ranges == true' "$tmp/regen.json" >/dev/null
 
+          fetch_200 "$DEVICE_AUTH_URL?health=1" "$tmp/device.json" "$tmp/device.headers"
+          jq -e '.ok == true and .service == "device-auth" and .transparent_device_access == true and .user_login_ui == false and .password_prompt == false and .offline_mode == false' "$tmp/device.json" >/dev/null
+
           fetch_200 "$NATIVE_MUSIC_URL" "$tmp/native-music.json" "$tmp/native-music.headers"
-          jq -e '.ok == true and .service == "pablovoice-native-music" and .provider == "kaggle" and .engine == "ACE-Step 1.5" and .model == "acestep-v15-turbo" and .model_revision == "ca1e85fe9430179831e6bc6be790c332190a3866" and .worker == "kaggle-worker-source-v58" and .callback == "complete-kaggle-pipeline-job-v58" and .auth_for_generation == "required" and .credential_exposed == false and .configured == true and .runnable == true and .physical_canary.verified == true and .physical_canary.duration_seconds > 1 and .physical_canary.sample_rate > 0 and .physical_canary.channels > 0 and .physical_canary.audio_size_bytes > 4096 and (.physical_canary.audio_sha256 | test("^[0-9a-f]{64}$"))' "$tmp/native-music.json" >/dev/null || {
-            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: PabloVoice native music provider has no verified physical canary.' >&2
-            jq '{service,provider,engine,model,model_revision,configured,runnable,physical_canary,credential_exposed}' "$tmp/native-music.json" >&2
+          jq -e '.ok == true and .service == "pablovoice-native-music" and .provider == "kaggle" and .engine == "ACE-Step 1.5" and .model == "acestep-v15-turbo" and .model_revision == "ca1e85fe9430179831e6bc6be790c332190a3866" and .worker == "kaggle-worker-source-v58" and .callback == "complete-kaggle-pipeline-job-v58" and .access_mode == "transparent_device" and .user_login_required == false and .credential_exposed == false and .configured == true and .runnable == true and .physical_canary.verified == true and .physical_canary.duration_seconds > 1 and .physical_canary.sample_rate > 0 and .physical_canary.channels > 0 and .physical_canary.audio_size_bytes > 4096 and (.physical_canary.audio_sha256 | test("^[0-9a-f]{64}$"))' "$tmp/native-music.json" >/dev/null || {
+            echo 'CLOUDFLARE_PHYSICAL_GATE_FAILED: PabloVoice native music provider has no verified transparent-device physical canary.' >&2
+            jq '{service,provider,engine,model,model_revision,access_mode,user_login_required,configured,runnable,physical_canary,credential_exposed}' "$tmp/native-music.json" >&2
             exit 1
           }
-          printf 'Native music provider: VERIFIED\nModel: %s\nRevision: %s\nCanary: %ss · %s Hz · %s channels · %s bytes\nEleven generation configured (optional): %s\nEleven selective regeneration configured (optional): %s\n' \
+          printf 'Native music provider: VERIFIED\nAccess: transparent device / no user login UI\nModel: %s\nRevision: %s\nCanary: %ss · %s Hz · %s channels · %s bytes\nEleven generation configured (optional): %s\nEleven selective regeneration configured (optional): %s\n' \
             "$(jq -r '.model' "$tmp/native-music.json")" \
             "$(jq -r '.model_revision' "$tmp/native-music.json")" \
             "$(jq -r '.physical_canary.duration_seconds' "$tmp/native-music.json")" \
@@ -144,7 +149,7 @@ jobs:
             "$(jq -r '.configured' "$tmp/music.json")" \
             "$(jq -r '.configured' "$tmp/regen.json")" >> "$GITHUB_STEP_SUMMARY"
 
-          code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate authentication probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
+          code="$(curl --silent --show-error -o "$tmp/unauth.json" -w '%{http_code}' -X POST "$BASE_URL/api/pablo-agent" -H 'content-type: application/json' --data '{"command":"generate","task":"release gate technical credential probe","project_id":"00000000-0000-0000-0000-000000000000"}')"
           test "$code" = '401'
           jq -e '.ok == false and .error == "auth_required"' "$tmp/unauth.json" >/dev/null
 
@@ -158,6 +163,6 @@ jobs:
 
           code="$(curl --silent --show-error -o "$tmp/native-unauth.json" -w '%{http_code}' -X POST "$NATIVE_MUSIC_URL" -H 'content-type: application/json' --data '{"project_id":"00000000-0000-0000-0000-000000000000","plan":{"schema":"pablovoice_song_creation_v1","sections":[{"id":"intro"}]}}')"
           test "$code" = '401'
-          jq -e '.ok == false and .error == "auth_required"' "$tmp/native-unauth.json" >/dev/null
+          jq -e '.ok == false and .error == "connection_required"' "$tmp/native-unauth.json" >/dev/null
 
           printf 'CLOUDFLARE_PHYSICAL_GATE_PASSED %s\n' "$BASE_URL"

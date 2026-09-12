@@ -83,7 +83,7 @@ export class NativeMusicGenerationClient {
     const linked = await this.auth.ensureRemoteProject(localProject);
     if (!linked?.ok || !linked?.project?.id) return { ok: false, error: linked?.error || 'project_link_failed', fallback_allowed: false, director };
     let session = await this.auth.ensureSession().catch(() => null);
-    if (!session?.accessToken) return { ok: false, error: 'auth_required', fallback_allowed: false, director };
+    if (!session?.accessToken) return { ok: false, error: 'connection_required', fallback_allowed: false, director };
 
     const body = {
       project_id: linked.project.id,
@@ -97,10 +97,8 @@ export class NativeMusicGenerationClient {
     let response = await request();
     if (response.status === 401 && !signal?.aborted) {
       this.auth.clearSession({ keepDevice: true });
-      if (await this.auth.loginWithDevice()) {
-        session = await this.auth.ensureSession();
-        response = await request();
-      }
+      session = await this.auth.ensureSession().catch(() => null);
+      if (session?.accessToken) response = await request();
     }
     const dispatch = await readJson(response);
     if (!response.ok || dispatch?.ok !== true || !dispatch?.job_id) {
@@ -146,7 +144,10 @@ export const NATIVE_MUSIC_ENDPOINTS = Object.freeze({ dispatch: DISPATCH_ENDPOIN
 export const PABLOVOICE_MUSIC_RUNTIME = Object.freeze({
   version: '2.0.0',
   directionEngine: 'pablovoice_song_director_v2',
-  primaryExecution: 'authenticated_open_model_gpu',
-  localDraft: 'explicit_only',
+  primaryExecution: 'transparent_device_open_model_gpu',
+  userLoginRequired: false,
+  passwordPrompt: false,
+  offlineMode: false,
+  localDraft: 'disabled',
   fabricatedFallback: false,
 });

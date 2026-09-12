@@ -41,7 +41,7 @@ test('ensureRemoteProject reuses an existing project linked by metadata', async 
   assert.match(calls[0].url, /metadata=cs\./);
 });
 
-test('ensureRemoteProject creates only metadata identity when no remote link exists', async () => {
+test('ensureRemoteProject creates a transparent connected project identity when no remote link exists', async () => {
   const calls = [];
   const adapter = new RemoteAuthAdapter({
     storage: memoryStorage({ 'pablovoice.remote.session.v1': JSON.stringify(session()) }),
@@ -59,14 +59,14 @@ test('ensureRemoteProject creates only metadata identity when no remote link exi
   assert.equal(body.user_id, '11111111-1111-1111-1111-111111111111');
   assert.equal(body.title, 'Voz 1');
   assert.equal(body.metadata.local_project_id, 'local-2');
-  assert.equal(body.metadata.source, 'pablovoice-local-first');
+  assert.equal(body.metadata.source, 'pablovoice-unified-online');
   assert.equal('audio' in body, false);
 });
 
-test('ensureRemoteProject remains local-first without a remote session', async () => {
-  const adapter = new RemoteAuthAdapter({ storage: memoryStorage(), fetchImpl: async () => { throw new Error('should not fetch'); } });
-  const result = await adapter.ensureRemoteProject({ id: 'local-only', name: 'Offline' });
+test('ensureRemoteProject fails closed when transparent connectivity cannot be established', async () => {
+  const adapter = new RemoteAuthAdapter({ storage: memoryStorage(), fetchImpl: async () => { throw new Error('offline'); } });
+  const result = await adapter.ensureRemoteProject({ id: 'online-required', name: 'Sem conexão' });
   assert.equal(result.ok, false);
-  assert.equal(result.error, 'auth_required');
-  assert.equal(result.fallback_allowed, true);
+  assert.equal(result.error, 'connection_required');
+  assert.equal(result.fallback_allowed, false);
 });
