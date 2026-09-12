@@ -70,7 +70,26 @@ out=Path(os.environ['PV_OUTPUT_DIR']); out.mkdir(parents=True,exist_ok=True)
 handler=AceStepHandler()
 status,ok=handler.initialize_service(project_root=str(repo),config_path='acestep-v15-turbo',device='cuda',use_flash_attention=False,compile_model=False,offload_to_cpu=False,offload_dit_to_cpu=False,prefer_source='modelscope')
 if not ok: raise RuntimeError('ace_init_failed: '+str(status))
-params=GenerationParams(caption=g['caption'],lyrics=g['lyrics'],instrumental=bool(g['instrumental']),bpm=int(g['bpm']),keyscale=g.get('keyscale',''),timesignature=g.get('timesignature','4'),vocal_language=g.get('vocal_language','unknown'),duration=float(g['duration']),thinking=False,use_cot_metas=False,use_cot_caption=False,use_cot_language=False,use_constrained_decoding=False,inference_steps=int(g.get('inference_steps',8)),seed=int(g['seed']),task_type='text2music',dcw_enabled=False)
+params=GenerationParams(
+    caption=g['caption'],
+    lyrics=g['lyrics'],
+    instrumental=bool(g['instrumental']),
+    bpm=int(g['bpm']),
+    keyscale=g.get('keyscale',''),
+    timesignature=g.get('timesignature','4'),
+    vocal_language=g.get('vocal_language','unknown'),
+    duration=float(g['duration']),
+    thinking=False,
+    use_cot_metas=False,
+    use_cot_caption=False,
+    use_cot_language=False,
+    use_constrained_decoding=bool(g.get('use_constrained_decoding',True)),
+    inference_steps=int(g.get('inference_steps',8)),
+    shift=float(g.get('shift',3.0)),
+    seed=int(g['seed']),
+    task_type='text2music',
+    dcw_enabled=False,
+)
 config=GenerationConfig(batch_size=1,seeds=[int(g['seed'])],use_random_seed=False,audio_format='flac')
 result=generate_music(handler,None,params,config,save_dir=str(out))
 if not result.success: raise RuntimeError('ace_generation_failed: '+str(result.error or result.status_message))
@@ -84,6 +103,8 @@ def run():
     if TICKET.get('job_type')!='music_generation': raise RuntimeError('invalid_job_type')
     engine=TICKET.get('engine') or {}
     if engine.get('source_revision')!=ACE_REVISION or engine.get('model')!=ACE_MODEL: raise RuntimeError('engine_identity_mismatch')
+    generation=TICKET.get('generation') or {}
+    if len(str(generation.get('caption') or ''))>512: raise RuntimeError('caption_too_long')
     tmp=Path(tempfile.mkdtemp(prefix='pv-music-'))
     try:
         repo=prepare_repo(tmp)
@@ -126,5 +147,5 @@ run()
 
 Deno.serve((req: Request) => {
   if (req.method !== 'GET') return new Response('method_not_allowed', { status: 405 });
-  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v1' } });
+  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v2' } });
 });
