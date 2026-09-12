@@ -1,5 +1,6 @@
 import { applyDirectedCandidate, directSongCandidates } from '../music-intelligence/src/index.mjs';
 import { RemoteAuthAdapter } from './remote-auth.mjs';
+import { createSongCreationPlan } from './song-creation-engine.mjs';
 import { resolveNativeMusicResult, waitForNativeMusic } from './native-music-result-runtime.mjs';
 
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
@@ -46,9 +47,37 @@ function compactDirector(direction) {
 function cleanDirection(value, max = 430) {
   return String(value || '').replace(/```(?:json)?|```/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
+function cleanLyrics(value, max = 12000) {
+  return String(value || '')
+    .replace(/```(?:text|markdown|md)?/gi, '')
+    .replace(/```/g, '')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, max);
+}
 function lyricContext(plan) {
   const lines = Array.isArray(plan?.guideLines) ? plan.guideLines : [];
   return lines.map((line) => String(line?.text || '').trim()).filter(Boolean).join(' / ').slice(0, 2400);
+}
+function hasPlaceholderGuide(plan) {
+  const values = (Array.isArray(plan?.guideLines) ? plan.guideLines : [])
+    .map((line) => String(line?.text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim())
+    .filter(Boolean);
+  return values.length === 4 && values.join('|') === 'guia|melodica|para|cantar';
+}
+function lyricTask(plan, negativeStyles) {
+  const avoid = (Array.isArray(negativeStyles) ? negativeStyles : []).filter(Boolean).slice(0, 10).join(', ');
+  return [
+    'Escreva uma letra ORIGINAL para esta música do PabloVoice.',
+    'Retorne somente a letra, sem explicações e sem markdown de código.',
+    'Use português brasileiro natural, cantável e autoral. Evite frases genéricas, rimas preguiçosas e repetição excessiva.',
+    'Estruture com cabeçalhos [Verso 1], [Pré-Refrão], [Refrão], [Verso 2], [Ponte] e, se fizer sentido, [Pós-Refrão].',
+    'Crie um refrão forte e memorável, versos que avancem a história e contraste real entre seções. Não copie artistas ou músicas existentes.',
+    `Tema/direção: ${String(plan?.brief || '').trim()}`,
+    `Gênero: ${plan?.genre || ''}; clima: ${plan?.mood || ''}; BPM: ${plan?.bpm || ''}; tom: ${plan?.key || ''} ${plan?.mode || ''}.`,
+    avoid ? `Evitar na composição e no clima: ${avoid}.` : '',
+  ].filter(Boolean).join('\n').slice(0, 5200);
 }
 function directionTask(plan, negativeStyles, instrumental) {
   const avoid = (Array.isArray(negativeStyles) ? negativeStyles : []).filter(Boolean).slice(0, 12).join(', ');
@@ -62,6 +91,39 @@ function directionTask(plan, negativeStyles, instrumental) {
     `Gênero: ${plan?.genre || ''}; clima: ${plan?.mood || ''}; BPM: ${plan?.bpm || ''}; tom: ${plan?.key || ''} ${plan?.mode || ''}.`,
     avoid ? `Evitar obrigatoriamente: ${avoid}.` : '',
   ].filter(Boolean).join('\n').slice(0, 5200);
+}
+async function remoteGeneratedLyrics({ auth, linkedProjectId, plan, negativeStyles, signal, onProgress }) {
+  onProgress({ status: 'creative_lyrics', progress: 3, current_stage: 'song_brain_lyrics', human_message: 'Pablo IA está transformando o prompt em uma letra cantável' });
+  const payload = {
+    command: 'generate',
+    project_id: linkedProjectId,
+    task: lyricTask(plan, negativeStyles),
+    context_pack: { purpose: 'full_song_lyrics_from_prompt', singer_profile: plan?.singerProfile || null },
+    constraints: { original_only: true, section_headers: true, pt_br: true, review_before_apply: false },
+    author_samples: [],
+  };
+  let last = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    last = await auth.agentTurn(payload, { signal, bypassGeneratorAdapter: true }).catch((error) => ({ ok: false, error: error?.message || 'creative_lyrics_failed' }));
+    const text = cleanLyrics(last?.reply || last?.text);
+    const lyricLines = text.split('\n').map((line) => line.trim()).filter((line) => line && !/^\[.*\]$/.test(line));
+    if (last?.ok && text.length >= 80 && lyricLines.length >= 6) return Object.freeze({ ok: true, text, provider: last.provider || null, model: last.model || null });
+    if (signal?.aborted) break;
+  }
+  return Object.freeze({ ok: false, error: last?.error || 'creative_lyrics_unavailable' });
+}
+function rebuildPlanWithLyrics(plan, lyrics) {
+  return createSongCreationPlan({
+    brief: plan.brief,
+    lyrics,
+    genre: plan.genre,
+    mood: plan.mood,
+    bpm: plan.bpm,
+    durationSeconds: plan.durationSeconds,
+    key: plan.key,
+    mode: plan.mode,
+    singerProfile: plan.singerProfile,
+  });
 }
 async function remoteProductionDirection({ auth, linkedProjectId, plan, negativeStyles, instrumental, signal, onProgress }) {
   onProgress({ status: 'creative_direction', progress: 5, current_stage: 'song_brain', human_message: 'Pablo IA está entendendo o prompt e dirigindo a produção' });
@@ -132,20 +194,29 @@ export class NativeMusicGenerationClient {
     let session = await this.auth.ensureSession().catch(() => null);
     if (!session?.accessToken) return { ok: false, error: 'connection_required', fallback_allowed: false };
 
+    let workingPlan = plan;
+    let generatedLyrics = null;
+    if (!instrumental && hasPlaceholderGuide(plan)) {
+      const lyricsResult = await remoteGeneratedLyrics({ auth: this.auth, linkedProjectId: linked.project.id, plan, negativeStyles, signal, onProgress });
+      if (!lyricsResult.ok) return { ok: false, error: 'creative_lyrics_unavailable', detail: lyricsResult.error || null, fallback_allowed: false };
+      generatedLyrics = lyricsResult;
+      workingPlan = rebuildPlanWithLyrics(plan, lyricsResult.text);
+    }
+
     const aiDirection = await remoteProductionDirection({
       auth: this.auth,
       linkedProjectId: linked.project.id,
-      plan,
+      plan: workingPlan,
       negativeStyles,
       instrumental,
       signal,
       onProgress,
     });
     if (!aiDirection.ok) {
-      return { ok: false, error: 'creative_direction_unavailable', detail: aiDirection.error || null, fallback_allowed: false };
+      return { ok: false, error: 'creative_direction_unavailable', detail: aiDirection.error || null, generatedLyrics, fallback_allowed: false };
     }
 
-    const directedInputPlan = enrichPlanWithAiDirection(plan, aiDirection);
+    const directedInputPlan = enrichPlanWithAiDirection(workingPlan, aiDirection);
     const variationSeed = freshVariationSeed();
     const direction = directSongCandidates(directedInputPlan, {
       variation,
@@ -166,6 +237,7 @@ export class NativeMusicGenerationClient {
       variation_seed: variationSeed,
       pablovoice_director: director,
       pablovoice_ai_direction: aiDirection,
+      pablovoice_generated_lyrics: generatedLyrics ? { provider: generatedLyrics.provider, model: generatedLyrics.model } : null,
     };
     const request = () => this.fetch(this.endpoint, { method: 'POST', headers: headers(this.auth.session?.accessToken || session.accessToken), body: JSON.stringify(body), signal });
     onProgress({ status: 'dispatching', progress: 10, current_stage: 'gpu_dispatch', human_message: 'Direção pronta. Enviando a música para o motor de alta qualidade' });
@@ -184,6 +256,7 @@ export class NativeMusicGenerationClient {
         requestId: dispatch?.job_id || null,
         director,
         aiDirection,
+        generatedLyrics,
         fallback_allowed: false,
       };
     }
@@ -197,7 +270,7 @@ export class NativeMusicGenerationClient {
         pollIntervalMs: this.pollIntervalMs,
         onProgress,
       });
-      if (signal?.aborted) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, aiDirection, fallback_allowed: false };
+      if (signal?.aborted) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
       const result = await resolveNativeMusicResult({ token: this.auth.session?.accessToken || session.accessToken, job, fetchImpl: this.fetch });
       return {
         ok: true,
@@ -208,11 +281,12 @@ export class NativeMusicGenerationClient {
         remoteProjectId: linked.project.id,
         director,
         aiDirection,
+        generatedLyrics,
         directedPlan,
         fallback_allowed: false,
       };
     } catch (error) {
-      return { ok: false, error: error?.message || 'native_music_failed', requestId: dispatch.job_id, director, aiDirection, fallback_allowed: false };
+      return { ok: false, error: error?.message || 'native_music_failed', requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
     }
   }
 }
