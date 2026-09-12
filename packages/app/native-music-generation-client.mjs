@@ -43,6 +43,65 @@ function compactDirector(direction) {
     energyCurve: selected.energyCurve,
   });
 }
+function cleanDirection(value, max = 430) {
+  return String(value || '').replace(/```(?:json)?|```/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+function lyricContext(plan) {
+  const lines = Array.isArray(plan?.guideLines) ? plan.guideLines : [];
+  return lines.map((line) => String(line?.text || '').trim()).filter(Boolean).join(' / ').slice(0, 2400);
+}
+function directionTask(plan, negativeStyles, instrumental) {
+  const avoid = (Array.isArray(negativeStyles) ? negativeStyles : []).filter(Boolean).slice(0, 12).join(', ');
+  return [
+    'Atue como diretor musical do PabloVoice e converta o pedido abaixo em UMA direção de produção para o gerador de áudio.',
+    'Retorne somente uma frase de no máximo 420 caracteres, sem introdução, sem markdown e sem escrever letra.',
+    'Preserve exatamente a intenção do artista. Especifique groove, bateria, baixo, timbres, densidade, contraste entre verso/pré/refrão/ponte, clima e direção vocal quando houver voz.',
+    'Não troque o gênero por um estilo genérico. Evite repetição de loop e peça transições/fills entre seções.',
+    instrumental ? 'A saída será instrumental: não peça voz cantada.' : 'A saída será música completa com voz-guia coerente com a letra.',
+    `Pedido do artista: ${String(plan?.brief || '').trim()}`,
+    `Gênero: ${plan?.genre || ''}; clima: ${plan?.mood || ''}; BPM: ${plan?.bpm || ''}; tom: ${plan?.key || ''} ${plan?.mode || ''}.`,
+    avoid ? `Evitar obrigatoriamente: ${avoid}.` : '',
+  ].filter(Boolean).join('\n').slice(0, 5200);
+}
+async function remoteProductionDirection({ auth, linkedProjectId, plan, negativeStyles, instrumental, signal, onProgress }) {
+  onProgress({ status: 'creative_direction', progress: 5, current_stage: 'song_brain', human_message: 'Pablo IA está entendendo o prompt e dirigindo a produção' });
+  const payload = {
+    command: 'generate',
+    project_id: linkedProjectId,
+    task: directionTask(plan, negativeStyles, instrumental),
+    context_pack: {
+      purpose: 'music_generation_direction',
+      creation_mode: instrumental ? 'instrumental' : 'full_song',
+      lyrics_excerpt: lyricContext(plan),
+      sections: (plan?.sections || []).map((section) => ({ id: section.id, label: section.label, startBeat: section.startBeat, endBeat: section.endBeat })).slice(0, 16),
+      singer_profile: instrumental ? null : plan?.singerProfile || null,
+    },
+    constraints: {
+      max_direction_chars: 420,
+      preserve_artist_request: true,
+      no_lyrics_in_response: true,
+      negative_styles: (Array.isArray(negativeStyles) ? negativeStyles : []).slice(0, 12),
+    },
+    author_samples: [],
+  };
+  let last = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    last = await auth.agentTurn(payload, { signal, bypassGeneratorAdapter: true }).catch((error) => ({ ok: false, error: error?.message || 'creative_direction_failed' }));
+    const text = cleanDirection(last?.reply || last?.text);
+    if (last?.ok && text) return Object.freeze({ ok: true, text, provider: last.provider || null, model: last.model || null });
+    if (signal?.aborted) break;
+  }
+  return Object.freeze({ ok: false, error: last?.error || 'creative_direction_unavailable' });
+}
+function enrichPlanWithAiDirection(plan, aiDirection) {
+  const text = cleanDirection(aiDirection?.text);
+  if (!text) return plan;
+  return Object.freeze({
+    ...plan,
+    brief: `AI production direction: ${text}. Artist request: ${String(plan.brief || '').trim()}`.slice(0, 1200),
+    pabloVoiceAiDirection: text,
+  });
+}
 
 export class NativeMusicGenerationClient {
   constructor({ authAdapter = null, fetchImpl = globalThis.fetch, endpoint = DISPATCH_ENDPOINT, pollIntervalMs = 5000 } = {}) {
@@ -68,22 +127,36 @@ export class NativeMusicGenerationClient {
     if (!plan?.sections?.length || plan?.schema !== 'pablovoice_song_creation_v1') return { ok: false, error: 'music_plan_required', fallback_allowed: false };
     if (signal?.aborted) return { ok: false, error: 'request_cancelled', fallback_allowed: false };
 
+    const linked = await this.auth.ensureRemoteProject(localProject);
+    if (!linked?.ok || !linked?.project?.id) return { ok: false, error: linked?.error || 'project_link_failed', fallback_allowed: false };
+    let session = await this.auth.ensureSession().catch(() => null);
+    if (!session?.accessToken) return { ok: false, error: 'connection_required', fallback_allowed: false };
+
+    const aiDirection = await remoteProductionDirection({
+      auth: this.auth,
+      linkedProjectId: linked.project.id,
+      plan,
+      negativeStyles,
+      instrumental,
+      signal,
+      onProgress,
+    });
+    if (!aiDirection.ok) {
+      return { ok: false, error: 'creative_direction_unavailable', detail: aiDirection.error || null, fallback_allowed: false };
+    }
+
+    const directedInputPlan = enrichPlanWithAiDirection(plan, aiDirection);
     const variationSeed = freshVariationSeed();
-    const direction = directSongCandidates(plan, {
+    const direction = directSongCandidates(directedInputPlan, {
       variation,
       candidateCount: 3,
       recentFingerprints: rememberedFingerprints(localProject, this.recentFingerprints),
       locks,
       entropy: variationSeed,
     });
-    const directedPlan = applyDirectedCandidate(plan, direction.selected);
+    const directedPlan = applyDirectedCandidate(directedInputPlan, direction.selected);
     const director = compactDirector(direction);
     if (director?.fingerprint) this.recentFingerprints = [...this.recentFingerprints, director.fingerprint].slice(-12);
-
-    const linked = await this.auth.ensureRemoteProject(localProject);
-    if (!linked?.ok || !linked?.project?.id) return { ok: false, error: linked?.error || 'project_link_failed', fallback_allowed: false, director };
-    let session = await this.auth.ensureSession().catch(() => null);
-    if (!session?.accessToken) return { ok: false, error: 'connection_required', fallback_allowed: false, director };
 
     const body = {
       project_id: linked.project.id,
@@ -92,8 +165,10 @@ export class NativeMusicGenerationClient {
       instrumental: Boolean(instrumental),
       variation_seed: variationSeed,
       pablovoice_director: director,
+      pablovoice_ai_direction: aiDirection,
     };
     const request = () => this.fetch(this.endpoint, { method: 'POST', headers: headers(this.auth.session?.accessToken || session.accessToken), body: JSON.stringify(body), signal });
+    onProgress({ status: 'dispatching', progress: 10, current_stage: 'gpu_dispatch', human_message: 'Direção pronta. Enviando a música para o motor de alta qualidade' });
     let response = await request();
     if (response.status === 401 && !signal?.aborted) {
       this.auth.clearSession({ keepDevice: true });
@@ -108,12 +183,13 @@ export class NativeMusicGenerationClient {
         detail: dispatch?.detail || null,
         requestId: dispatch?.job_id || null,
         director,
+        aiDirection,
         fallback_allowed: false,
       };
     }
 
     try {
-      onProgress({ status: dispatch.status || 'waiting_kaggle', progress: dispatch.progress || 15, current_stage: 'gpu_queued', human_message: 'PabloVoice 2 está dirigindo e criando a música na GPU' });
+      onProgress({ status: dispatch.status || 'waiting_kaggle', progress: dispatch.progress || 15, current_stage: 'gpu_queued', human_message: 'PabloVoice está criando a música na GPU' });
       const job = await waitForNativeMusic({
         token: this.auth.session?.accessToken || session.accessToken,
         jobId: dispatch.job_id,
@@ -121,29 +197,30 @@ export class NativeMusicGenerationClient {
         pollIntervalMs: this.pollIntervalMs,
         onProgress,
       });
-      if (signal?.aborted) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, fallback_allowed: false };
+      if (signal?.aborted) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, aiDirection, fallback_allowed: false };
       const result = await resolveNativeMusicResult({ token: this.auth.session?.accessToken || session.accessToken, job, fetchImpl: this.fetch });
       return {
         ok: true,
         schema: NATIVE_MUSIC_GENERATION_SCHEMA,
         ...result,
-        source: 'pablovoice_native_music_v2',
+        source: 'pablovoice_native_music_v2_1',
         songId: null,
         remoteProjectId: linked.project.id,
         director,
+        aiDirection,
         directedPlan,
         fallback_allowed: false,
       };
     } catch (error) {
-      return { ok: false, error: error?.message || 'native_music_failed', requestId: dispatch.job_id, director, fallback_allowed: false };
+      return { ok: false, error: error?.message || 'native_music_failed', requestId: dispatch.job_id, director, aiDirection, fallback_allowed: false };
     }
   }
 }
 
 export const NATIVE_MUSIC_ENDPOINTS = Object.freeze({ dispatch: DISPATCH_ENDPOINT });
 export const PABLOVOICE_MUSIC_RUNTIME = Object.freeze({
-  version: '2.0.0',
-  directionEngine: 'pablovoice_song_director_v2',
+  version: '2.1.0',
+  directionEngine: 'pablovoice_ai_direction_plus_song_director_v2',
   primaryExecution: 'transparent_device_open_model_gpu',
   userLoginRequired: false,
   passwordPrompt: false,
