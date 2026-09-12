@@ -21,12 +21,15 @@ function hide(node) {
 function applyPolicy() {
   const html = document.documentElement;
   setDataset(html, 'pvStudioMode', 'unified');
+  // Product mode stays online-only even when the browser temporarily loses
+  // transport. The visible create action reports the connectivity failure;
+  // we never expose a second local/offline product mode.
   setDataset(html, 'pvNetworkMode', 'online');
   setDataset(html, 'pvAccessMode', 'transparent-device');
   setDataset(html, 'pvOfflineMode', 'false');
 
   document.querySelectorAll('#pv-remote-pairing,[data-remote-pair-form],[data-pv-local-draft]').forEach((node) => node.remove());
-  document.querySelectorAll('[data-song-create-button]').forEach((button) => {
+  document.querySelectorAll('[data-song-create-button],[data-song-create-hq]').forEach((button) => {
     hide(button);
     hide(button.closest('.pv-song-mode-card'));
   });
@@ -55,7 +58,7 @@ export function installUnifiedOnlinePolicy() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['data-pv-network-policy'],
+    attributeFilter: ['hidden', 'data-pv-network-mode', 'data-pv-network-policy', 'data-pv-execution-policy'],
   });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
