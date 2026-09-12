@@ -21,6 +21,10 @@ function hide(node) {
 function applyPolicy() {
   const html = document.documentElement;
   setDataset(html, 'pvStudioMode', 'unified');
+  // This dataset describes the product execution policy, not instantaneous
+  // connectivity. The creator remains online-only even when the browser loses
+  // its network; the action then fails clearly instead of exposing a local
+  // substitute or silently switching engines.
   setDataset(html, 'pvNetworkMode', 'online');
   setDataset(html, 'pvAccessMode', 'transparent-device');
   setDataset(html, 'pvOfflineMode', 'false');
@@ -55,7 +59,7 @@ export function installUnifiedOnlinePolicy() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['data-pv-network-policy'],
+    attributeFilter: ['data-pv-network-policy', 'data-pv-network-mode', 'data-pv-offline-mode'],
   });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
