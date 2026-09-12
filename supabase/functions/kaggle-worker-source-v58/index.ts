@@ -1,4 +1,4 @@
-const PY = String.raw`import sys, subprocess, tempfile, shutil, hashlib, json, os, threading, time
+const PY = String.raw`import sys, subprocess, tempfile, shutil, hashlib, json, os, threading
 from pathlib import Path
 import requests
 
@@ -17,7 +17,7 @@ def sha256_file(path):
 
 def post_progress(stage, message=''):
     body={'job_id':TICKET['job_id'],'callback_token':TICKET['callback_token'],'stage':stage}
-    if message: body['message']=str(message)[:1200]
+    if message: body['message']=str(message)[-1200:]
     try:
         r=requests.post(PROGRESS_URL,json=body,timeout=25)
         if not r.ok:
@@ -79,7 +79,7 @@ def write_generation_script(repo,tmp):
     generation=TICKET['generation']
     script=tmp/'generate_once.py'
     payload=json.dumps(generation,ensure_ascii=False)
-    script.write_text("""import json, os
+    script.write_text("""import json, os, traceback
 from pathlib import Path
 from acestep.handler import AceStepHandler
 from acestep.inference import GenerationParams, GenerationConfig, generate_music
@@ -87,34 +87,38 @@ from acestep.inference import GenerationParams, GenerationConfig, generate_music
 g=json.loads(os.environ['PV_GENERATION_JSON'])
 repo=Path(os.environ['PV_ACE_REPO'])
 out=Path(os.environ['PV_OUTPUT_DIR']); out.mkdir(parents=True,exist_ok=True)
-handler=AceStepHandler()
-status,ok=handler.initialize_service(project_root=str(repo),config_path='acestep-v15-turbo',device='cuda',use_flash_attention=False,compile_model=False,offload_to_cpu=False,offload_dit_to_cpu=False,prefer_source='modelscope')
-if not ok: raise RuntimeError('ace_init_failed: '+str(status))
-params=GenerationParams(
-    caption=g['caption'],
-    lyrics=g['lyrics'],
-    instrumental=bool(g['instrumental']),
-    bpm=int(g['bpm']),
-    keyscale=g.get('keyscale',''),
-    timesignature=g.get('timesignature','4'),
-    vocal_language=g.get('vocal_language','unknown'),
-    duration=float(g['duration']),
-    thinking=False,
-    use_cot_metas=False,
-    use_cot_caption=False,
-    use_cot_language=False,
-    use_constrained_decoding=bool(g.get('use_constrained_decoding',True)),
-    inference_steps=int(g.get('inference_steps',8)),
-    shift=float(g.get('shift',3.0)),
-    seed=int(g['seed']),
-    task_type='text2music',
-    dcw_enabled=False,
-)
-config=GenerationConfig(batch_size=1,seeds=[int(g['seed'])],use_random_seed=False,audio_format='flac')
-result=generate_music(handler,None,params,config,save_dir=str(out))
-if not result.success: raise RuntimeError('ace_generation_failed: '+str(result.error or result.status_message))
-if not result.audios or not result.audios[0].get('path'): raise RuntimeError('ace_output_missing')
-print('PV_OUTPUT_PATH='+str(result.audios[0]['path']))
+try:
+    handler=AceStepHandler()
+    status,ok=handler.initialize_service(project_root=str(repo),config_path='acestep-v15-turbo',device='cuda',use_flash_attention=False,compile_model=False,offload_to_cpu=False,offload_dit_to_cpu=False,prefer_source='modelscope')
+    if not ok: raise RuntimeError('ace_init_failed: '+str(status))
+    params=GenerationParams(
+        caption=g['caption'],
+        lyrics=g['lyrics'],
+        instrumental=bool(g['instrumental']),
+        bpm=int(g['bpm']),
+        keyscale=g.get('keyscale',''),
+        timesignature=g.get('timesignature','4'),
+        vocal_language=g.get('vocal_language','unknown'),
+        duration=float(g['duration']),
+        thinking=False,
+        use_cot_metas=False,
+        use_cot_caption=False,
+        use_cot_language=False,
+        use_constrained_decoding=bool(g.get('use_constrained_decoding',True)),
+        inference_steps=int(g.get('inference_steps',8)),
+        shift=float(g.get('shift',3.0)),
+        seed=int(g['seed']),
+        task_type='text2music',
+        dcw_enabled=False,
+    )
+    config=GenerationConfig(batch_size=1,seeds=[int(g['seed'])],use_random_seed=False,audio_format='flac')
+    result=generate_music(handler,None,params,config,save_dir=str(out))
+    if not result.success: raise RuntimeError('ace_generation_failed: '+str(result.error or result.status_message))
+    if not result.audios or not result.audios[0].get('path'): raise RuntimeError('ace_output_missing')
+    print('PV_OUTPUT_PATH='+str(result.audios[0]['path']))
+except Exception:
+    traceback.print_exc()
+    raise
 """,encoding='utf-8')
     return script,payload
 
@@ -140,7 +144,10 @@ def run():
         env['PV_OUTPUT_DIR']=str(outdir)
         env['ACESTEP_CONFIG_PATH']=ACE_MODEL
         env['ACESTEP_DOWNLOAD_SOURCE']='modelscope'
-        completed=subprocess.run(['uv','run','python',str(script)],cwd=repo,env=env,check=True,text=True,capture_output=True)
+        completed=subprocess.run(['uv','run','python',str(script)],cwd=repo,env=env,check=False,text=True,capture_output=True)
+        if completed.returncode != 0:
+            diagnostic=('ACE_STEP_STDERR:\n'+(completed.stderr or '')+'\nACE_STEP_STDOUT:\n'+(completed.stdout or ''))[-5000:]
+            raise RuntimeError('ace_generation_process_failed: '+diagnostic)
         post_progress('heartbeat')
         output_line=next((line for line in completed.stdout.splitlines() if line.startswith('PV_OUTPUT_PATH=')),None)
         if not output_line: raise RuntimeError('ace_output_path_missing '+completed.stdout[-1200:])
@@ -178,5 +185,5 @@ run()
 
 Deno.serve((req: Request) => {
   if (req.method !== 'GET') return new Response('method_not_allowed', { status: 405 });
-  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v3-heartbeat' } });
+  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v4-diagnostics' } });
 });
