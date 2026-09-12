@@ -7,7 +7,7 @@ const MODEL = 'acestep-v15-turbo';
 
 async function source(path) { return readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); }
 
-test('native music dispatcher reuses private ticketed Kaggle v58 slot without exposing privileged credentials', async () => {
+test('native music dispatcher uses service-role RPC access and private ticketed Kaggle v58 without exposing credentials', async () => {
   const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
   assert.match(text, /job_type:'music_generation'/);
   assert.match(text, /engine:'ace_step_1_5_turbo'/);
@@ -18,6 +18,9 @@ test('native music dispatcher reuses private ticketed Kaggle v58 slot without ex
   assert.match(text, /createSignedUploadUrl/);
   assert.match(text, /kaggle_callback_hash/);
   assert.match(text, /admin_get_compute_connection/);
+  assert.match(text, /Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)\|\|secs\.default/);
+  assert.match(text, /compute_connection_ready:computeReady/);
+  assert.match(text, /music_compute_auth_role_failed/);
   assert.match(text, /kaggle-worker-source-v58/);
   assert.match(text, /complete-kaggle-pipeline-job-v58/);
   assert.match(text, new RegExp(REVISION));
@@ -27,23 +30,29 @@ test('native music dispatcher reuses private ticketed Kaggle v58 slot without ex
   assert.match(text, /fallback_allowed:false/);
 });
 
-test('native music creation uses PabloVoice 2 Song DNA and requests a fresh variation per take', async () => {
+test('native music creation obtains remote AI production direction, uses Song DNA and fresh variation per take', async () => {
   const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const client = await source('packages/app/native-music-generation-client.mjs');
+  assert.match(client, /remoteProductionDirection/);
+  assert.match(client, /bypassGeneratorAdapter: true/);
+  assert.match(client, /creative_direction_unavailable/);
   assert.match(client, /const variationSeed = freshVariationSeed\(\)/);
-  assert.match(client, /directSongCandidates\(plan/);
-  assert.match(client, /applyDirectedCandidate\(plan, direction\.selected\)/);
+  assert.match(client, /directSongCandidates\(directedInputPlan/);
+  assert.match(client, /applyDirectedCandidate\(directedInputPlan, direction\.selected\)/);
   assert.match(client, /plan: directedPlan/);
   assert.match(client, /variation_seed: variationSeed/);
   assert.match(client, /pablovoice_director: director/);
+  assert.match(client, /pablovoice_ai_direction: aiDirection/);
   assert.match(dispatcher, /const requestedVariation=Number\(body\.variation_seed\)/);
   assert.match(dispatcher, /randomGenerationSeed\(\)/);
   assert.match(dispatcher, /generation_seed:generationSeed/);
-  assert.match(dispatcher, /slice\(0,1400\)/);
+  assert.match(dispatcher, /slice\(0,512\)/);
+  assert.match(dispatcher, /shift:3\.0/);
+  assert.match(dispatcher, /use_constrained_decoding:true/);
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
-test('native music worker pins ACE-Step source identity and returns only signed output plus callback proof', async () => {
+test('native music worker pins ACE-Step source identity and uses turbo prompt-adherence settings', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
@@ -51,6 +60,9 @@ test('native music worker pins ACE-Step source identity and returns only signed 
   assert.match(text, /uv','sync','--frozen','--no-dev','--python','3\.11'/);
   assert.match(text, /prefer_source='modelscope'/);
   assert.match(text, /thinking=False/);
+  assert.match(text, /use_constrained_decoding=bool\(g\.get\('use_constrained_decoding',True\)\)/);
+  assert.match(text, /shift=float\(g\.get\('shift',3\.0\)\)/);
+  assert.match(text, /caption_too_long/);
   assert.match(text, /task_type='text2music'/);
   assert.match(text, /audio_format='flac'/);
   assert.match(text, /sha256_file/);
@@ -89,6 +101,6 @@ test('browser runtime can only address owned RLS job/asset rows and verifies dow
   assert.match(client, /ensureRemoteProject/);
   assert.match(client, /ensureSession/);
   assert.match(client, /fallback_allowed: false/);
-  assert.match(client, /directionEngine: 'pablovoice_song_director_v2'/);
+  assert.match(client, /directionEngine: 'pablovoice_ai_direction_plus_song_director_v2'/);
   assert.doesNotMatch(client, /ELEVENLABS_API_KEY|KAGGLE_KEY|SUPABASE_SERVICE_ROLE_KEY/);
 });
