@@ -24,9 +24,11 @@ function syncWorkspace() {
   if (!form) return;
   runtime.applying = true;
   try {
-    ensureBriefTextarea(form);
+    ensureCanonicalBrief(form);
+    ensureKindSwitch(form);
     const shell = ensureShell(form);
     moveCanonicalControls(form, shell);
+    syncKindSwitch(form);
     syncLyricsSummary(shell);
     syncPromptSummary(form, shell);
     document.documentElement.dataset.pvCompositionWorkspace = VERSION;
@@ -35,22 +37,30 @@ function syncWorkspace() {
   }
 }
 
-function ensureBriefTextarea(form) {
+function ensureCanonicalBrief(form) {
   const field = form.elements.brief;
-  if (!field || field.tagName === 'TEXTAREA') {
-    if (field && !field.dataset.pvArtistBrief) field.dataset.pvArtistBrief = field.value || '';
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.className = field.className;
-  textarea.name = 'brief';
-  textarea.maxLength = Number(field.maxLength) > 0 ? field.maxLength : 1200;
-  textarea.required = field.required;
-  textarea.rows = 5;
-  textarea.value = field.value || '';
-  textarea.placeholder = 'Descreva a música como falaria com um produtor: gênero, época, groove, instrumentos, energia, refrão, voz e o que não pode acontecer.';
-  textarea.dataset.pvArtistBrief = textarea.value;
-  field.replaceWith(textarea);
+  if (!field) return;
+  if (!field.dataset.pvArtistBrief) field.dataset.pvArtistBrief = field.value || '';
+  field.placeholder = 'Descreva a música como falaria com um produtor: gênero, época, groove, instrumentos, energia, refrão, voz e o que não pode acontecer.';
+}
+
+function ensureKindSwitch(form) {
+  if (form.querySelector('[data-pv-kind-switch]')) return;
+  const brief = form.elements.brief?.closest('label');
+  const switcher = document.createElement('div');
+  switcher.className = 'pv-kind-switch';
+  switcher.dataset.pvKindSwitch = 'true';
+  switcher.innerHTML = '<button type="button" class="active" data-pv-kind="song"><span>♪</span><b>Música completa</b><small>letra + arranjo + voz-guia</small></button><button type="button" data-pv-kind="instrumental"><span>▥</span><b>Instrumental</b><small>groove + harmonia + arranjo</small></button>';
+  if (brief) brief.insertAdjacentElement('beforebegin', switcher);
+  else form.prepend(switcher);
+}
+
+function syncKindSwitch(form) {
+  const instrumental = Boolean(form.elements.instrumentalFirst?.checked);
+  form.dataset.pvCreationKind = instrumental ? 'instrumental' : 'song';
+  form.querySelectorAll('[data-pv-kind]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.pvKind === (instrumental ? 'instrumental' : 'song'));
+  });
 }
 
 function ensureShell(form) {
@@ -206,6 +216,11 @@ function onInput(event) {
   if (event.target.matches?.('#lyrics,[data-pv-arrangement-intent],[data-pv-preserve-intent],[data-pv-structure-intent]') || form) queueSync();
 }
 
+function onChange(event) {
+  const form = event.target.closest?.('[data-song-create-form]');
+  if (form && event.target === form.elements.instrumentalFirst) queueSync();
+}
+
 function onClick(event) {
   const jump = event.target.closest('[data-pv-compose-jump]');
   if (jump) {
@@ -251,6 +266,7 @@ export function installCompositionWorkspace() {
   runtime.observer = new MutationObserver(queueSync);
   runtime.observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('input', onInput, true);
+  document.addEventListener('change', onChange, true);
   document.addEventListener('click', onClick, true);
   window.addEventListener('click', onCaptureClick, true);
   queueSync();
@@ -258,6 +274,7 @@ export function installCompositionWorkspace() {
     runtime.observer?.disconnect();
     runtime.observer = null;
     document.removeEventListener('input', onInput, true);
+    document.removeEventListener('change', onChange, true);
     document.removeEventListener('click', onClick, true);
     window.removeEventListener('click', onCaptureClick, true);
   };
