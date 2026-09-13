@@ -11,7 +11,7 @@ test('music capacity queue claims one durable queued job before reserving shared
   assert.match(migration, /for update/);
   assert.match(migration, /private\.music_generation_dispatch_lease/);
   assert.match(migration, /expires_at <= now\(\)/);
-  assert.match(migration, /status='dispatching'/);
+  assert.match(migration, /status='dispatched'/);
   assert.match(migration, /current_stage='gpu_dispatch'/);
   assert.match(migration, /next_retry_at=null/);
 });
