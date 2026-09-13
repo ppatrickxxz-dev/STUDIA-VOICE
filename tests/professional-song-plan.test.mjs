@@ -45,10 +45,10 @@ Tão eu...
 Todo meu...
 Tão eu...`;
 
-test('structured lyrics keep authored order and declared bar counts', () => {
+test('structured lyrics keep authored order and compound bar counts', () => {
   const parsed = parseStructuredLyrics(lyrics);
   assert.equal(parsed.sections.length, 12);
-  assert.deepEqual(parsed.sections.map((section) => section.declaredBars), [4, 12, 4, 12, 4, 12, 12, 4, 16, 1, 12, 6]);
+  assert.deepEqual(parsed.sections.map((section) => section.declaredBars), [4, 12, 4, 12, 4, 12, 12, 4, 16, 2, 12, 6]);
 });
 
 test('professional plan uses the authored structure instead of a generic genre template', () => {
@@ -63,15 +63,17 @@ test('professional plan uses the authored structure instead of a generic genre t
 
   assert.equal(plan.professionalBlueprint.authoredStructure, true);
   assert.equal(plan.professionalBlueprint.source, 'authored_lyrics');
+  assert.equal(plan.professionalBlueprint.exactDeclaredBars, true);
   assert.equal(plan.sections.length, 12);
-  assert.equal(plan.totalBars, 99);
-  assert.equal(plan.durationSeconds, 198);
+  assert.equal(plan.totalBars, 100);
+  assert.equal(plan.durationSeconds, 200);
   assert.equal(plan.sections[0].id, 'intro');
   assert.match(plan.sections[1].id, /^verso_/);
   assert.match(plan.sections[2].id, /^pre_refr_/);
   assert.match(plan.sections[3].id, /^refr_/);
   assert.match(plan.sections[8].id, /^ponte_rap_/);
   assert.match(plan.sections[9].id, /^break_/);
+  assert.equal(plan.sections[9].bars, 2);
   assert.equal(plan.sections.at(-1).id, 'outro');
 
   const chorusLines = plan.guideLines.filter((line) => line.sectionId === plan.sections[3].id).map((line) => line.text);
@@ -79,10 +81,9 @@ test('professional plan uses the authored structure instead of a generic genre t
   assert.ok(plan.guideLines.some((line) => line.text === '(Levar...)'));
 });
 
-test('two-bar beat-cut syntax can be declared explicitly without changing other sections', () => {
-  const adjusted = lyrics.replace('[BEAT CUT — 1 bar silence + 1 bar pickup]', '[BEAT CUT — 2 bars, silence + pickup]');
-  const plan = createProfessionalSongPlan({ brief: 'same song', lyrics: adjusted, genre: 'rnb', bpm: 120, durationSeconds: 200 });
-  assert.equal(plan.totalBars, 100);
-  assert.equal(plan.durationSeconds, 200);
-  assert.equal(plan.sections.find((section) => section.id.startsWith('break_')).bars, 2);
+test('full artist brief is preserved outside the legacy 1200-char plan field', () => {
+  const longBrief = 'pagofunk sensual '.repeat(160);
+  const plan = createProfessionalSongPlan({ brief: longBrief, lyrics, genre: 'rnb', bpm: 120, durationSeconds: 200 });
+  assert.ok(plan.artistBrief.length > 1200);
+  assert.ok(plan.artistBrief.length <= 4000);
 });
