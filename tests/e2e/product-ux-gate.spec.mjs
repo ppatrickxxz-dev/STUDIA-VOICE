@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studio', async ({ page }) => {
+test('PRODUCT UX GATE: home leads into one song-first professional music Studio', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
@@ -63,13 +63,13 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
   await home.locator('[data-pv-product-create="song"]').click();
   const form = page.locator('[data-song-create-form]');
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
-  await expect(form.locator('input[name="brief"]')).toHaveValue(prompt);
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
-  await expect(form).toHaveAttribute('data-pv-execution-policy', 'high_quality_only');
-  await expect(form.locator('[data-pv-unified-create]')).toBeVisible();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('textarea[name="brief"]')).toHaveValue(prompt);
+  await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
+  await expect(form.locator('[data-song-create-hq]')).toBeVisible();
+  await expect(form.locator('[data-song-create-hq]')).toContainText('Criar 2 versões');
+  await expect(form.locator('[data-pv-unified-create]')).toHaveCount(0);
   await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
-  await expect(form.locator('[data-song-create-button]')).toBeHidden();
+  await expect(form.locator('.pv-create-adjustments')).not.toHaveAttribute('open', '');
   await expect(page.locator('#pv-remote-pairing')).toHaveCount(0);
   await expect(page.locator('[data-remote-pair-form]')).toHaveCount(0);
   await expect(page.locator('input[type="email"]')).toHaveCount(0);
