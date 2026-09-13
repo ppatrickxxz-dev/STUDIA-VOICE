@@ -109,7 +109,10 @@ jobs:
             set -euo pipefail
             APK="$(cat /tmp/pv-apk-path)"
             reset_app_state() {
-              adb install -r -d "$APK" >/dev/null
+              local package
+              package="$(adb shell pm list packages -3 | tr -d '\r' | sed -n 's/^package://p' | head -1)"
+              if [ -n "$package" ]; then adb uninstall "$package" >/dev/null || true; fi
+              adb install "$APK" >/dev/null
             }
             bash scripts/android-emulator-gate.sh "$APK"
             reset_app_state
