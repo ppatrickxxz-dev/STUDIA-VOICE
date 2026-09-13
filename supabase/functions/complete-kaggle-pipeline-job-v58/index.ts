@@ -30,6 +30,8 @@ Deno.serve(async(req:Request)=>{
     const aceModel=String(body?.ace_model||'')
     const seed=Number(body?.generation_seed)
     const shift=Number(body?.generation_shift)
+    const generationDtype=String(body?.generation_dtype||'').toLowerCase()
+    const dtypePatchSha=String(body?.dtype_patch_sha256||'').toLowerCase()
     if(!/^[0-9a-f-]{36}$/i.test(jobId))return json({ok:false,error:'invalid_job_id'},400)
     if(token.length<32||token.length>512)return json({ok:false,error:'invalid_callback_token'},401)
     if(!isSha(audioSha))return json({ok:false,error:'invalid_sha256_proof'},400)
@@ -38,6 +40,8 @@ Deno.serve(async(req:Request)=>{
     if(!Number.isFinite(sampleRate)||sampleRate<16000||sampleRate>192000)return json({ok:false,error:'invalid_sample_rate'},400)
     if(!Number.isFinite(channels)||channels<1||channels>8)return json({ok:false,error:'invalid_channels'},400)
     if(aceRevision!==ACE_REVISION||aceModel!==ACE_MODEL)return json({ok:false,error:'engine_identity_mismatch'},409)
+    if(generationDtype!=='float32')return json({ok:false,error:'invalid_generation_dtype'},409)
+    if(!isSha(dtypePatchSha))return json({ok:false,error:'invalid_dtype_patch_proof'},400)
 
     const {data:job}=await admin.from('render_jobs').select('*').eq('id',jobId).maybeSingle()
     if(!job)return json({ok:false,error:'job_not_found'},404)
@@ -57,11 +61,11 @@ Deno.serve(async(req:Request)=>{
     if(!claim?.length)return json({ok:false,error:'job_already_claimed'},409)
     claimed=true
     const executedShift=Number.isFinite(shift)?shift:(Number.isFinite(Number(p.shift))?Number(p.shift):null)
-    const metadata={engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,worker:'kaggle_ticketed',provider:'kaggle',purpose:'generated_reference_mix',generation_seed:Number.isFinite(seed)?seed:null,generation_shift:executedShift,bpm:Number(p.bpm)||null,keyscale:String(p.keyscale||''),instrumental:Boolean(p.instrumental),proof_version:'pablovoice_native_music_v2_2'}
+    const metadata={engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,worker:'kaggle_ticketed',provider:'kaggle',purpose:'generated_reference_mix',generation_seed:Number.isFinite(seed)?seed:null,generation_shift:executedShift,generation_dtype:generationDtype,dtype_patch_sha256:dtypePatchSha,bpm:Number(p.bpm)||null,keyscale:String(p.keyscale||''),instrumental:Boolean(p.instrumental),proof_version:'pablovoice_native_music_v2_3'}
     const {data:asset,error:assetErr}=await admin.from('audio_assets').insert({project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'full_mix',storage_bucket:'audio-private',storage_path:outputPath,original_name:`generated-music-${jobId.slice(0,8)}.flac`,mime_type:mimeType,size_bytes:audioSize,duration_seconds:duration,sample_rate:Math.round(sampleRate),channels:Math.round(channels),sha256:audioSha,metadata}).select('id').maybeSingle()
     if(assetErr||!asset?.id)throw new Error(`asset_insert_failed: ${assetErr?.message||'unknown'}`)
-    const cleaned={...p,generation_seed:Number.isFinite(seed)?seed:p.generation_seed,generation_shift:executedShift};delete cleaned.kaggle_callback_hash
-    const proof={verified:true,worker:'kaggle_ticketed',engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,audio_sha256:audioSha,audio_size_bytes:audioSize,duration_seconds:duration,sample_rate:Math.round(sampleRate),channels:Math.round(channels),output_asset_id:asset.id,generation_seed:Number.isFinite(seed)?seed:null,generation_shift:executedShift,dispatch_serialized:Boolean(p.dispatch_serialized)}
+    const cleaned={...p,generation_seed:Number.isFinite(seed)?seed:p.generation_seed,generation_shift:executedShift,generation_dtype:generationDtype,dtype_patch_sha256:dtypePatchSha};delete cleaned.kaggle_callback_hash
+    const proof={verified:true,worker:'kaggle_ticketed',engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,audio_sha256:audioSha,audio_size_bytes:audioSize,duration_seconds:duration,sample_rate:Math.round(sampleRate),channels:Math.round(channels),output_asset_id:asset.id,generation_seed:Number.isFinite(seed)?seed:null,generation_shift:executedShift,generation_dtype:generationDtype,dtype_patch_sha256:dtypePatchSha,dispatch_serialized:Boolean(p.dispatch_serialized)}
     const {error:finishErr}=await admin.from('render_jobs').update({status:'completed',progress:100,current_stage:'completed',heartbeat_at:now,human_message:'Música criada',engine:'ace_step_1_5_turbo',provider:'kaggle',output_asset_ids:[asset.id],proof,error_code:null,error_message:null,technical_error:null,next_retry_at:null,finished_at:now,parameters:cleaned}).eq('id',jobId).eq('status','finalizing')
     if(finishErr)throw new Error(`job_finalize_failed: ${finishErr.message}`)
     await releaseLease(admin,jobId)
