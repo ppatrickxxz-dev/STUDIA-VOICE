@@ -108,10 +108,8 @@ jobs:
           script: |
             set -euo pipefail
             APK="$(cat /tmp/pv-apk-path)"
-            PACKAGE="$(apkanalyzer manifest application-id "$APK")"
-            test -n "$PACKAGE"
             reset_app_state() {
-              adb shell pm clear "$PACKAGE" >/dev/null
+              adb install -r -d "$APK" >/dev/null
             }
             bash scripts/android-emulator-gate.sh "$APK"
             reset_app_state
