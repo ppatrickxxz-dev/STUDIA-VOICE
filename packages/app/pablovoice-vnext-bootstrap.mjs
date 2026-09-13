@@ -2,7 +2,7 @@ const failures = [];
 const VNEXT_OWNED_SELECTOR = '[data-vnext-sidebar], [data-vnext-brain], [data-vnext-companion-dock], [data-vnext-arrangement-overview]';
 
 document.documentElement.dataset.pvStudioMode = 'unified';
-document.documentElement.dataset.pvNetworkMode = 'adaptive';
+document.documentElement.dataset.pvNetworkMode = 'online';
 document.documentElement.dataset.pvVnextBoot = 'starting';
 
 function delay(ms) {
@@ -118,15 +118,11 @@ async function install(label, modulePath, exportName, { structuralObserver = fal
   }
 }
 
-// Core boot and Android Open-With/import always own the first interactive slice.
 document.documentElement.dataset.pvVnextBoot = 'waiting-core';
 await waitForCanonicalCore();
 await prioritizeAndroidImport();
 document.documentElement.dataset.pvVnextBoot = 'mounting';
 
-// The vNext surface is strict-CSP: geometry uses SVG attributes and musical motion
-// uses Web Animations API. Its observers are limited to structural changes outside
-// the vNext-owned rails, while the Companion Reactor uses no MutationObserver.
 await install('ui', './pablovoice-vnext-ui-safe.mjs', 'installPabloVoiceVNextUI', { structuralObserver: true });
 await install('route', './pablovoice-vnext-route-compat.mjs', 'installPabloVoiceVNextRouteCompat', { structuralObserver: true });
 
@@ -137,7 +133,7 @@ else delete document.documentElement.dataset.pvVnextFailures;
 export const PABLOVOICE_VNEXT_BOOT_POLICY = Object.freeze({
   coreBootIndependent: true,
   studioMode: 'unified',
-  connectivityMode: 'adaptive',
+  connectivityMode: 'online_only',
   vnextFailureScope: 'surface-only',
   waitsForCanonicalCore: true,
   prioritizesPendingAndroidImport: true,
