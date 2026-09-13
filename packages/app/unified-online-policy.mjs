@@ -9,7 +9,6 @@ const POLICY = Object.freeze({
 
 let observer = null;
 let queued = false;
-let trailingTimer = 0;
 
 function setDataset(node, key, value) {
   if (node?.dataset?.[key] !== value) node.dataset[key] = value;
@@ -47,12 +46,7 @@ function queueApply() {
       applyPolicy();
     });
   }
-  if (!trailingTimer) {
-    trailingTimer = window.setTimeout(() => {
-      trailingTimer = 0;
-      applyPolicy();
-    }, 0);
-  }
+  setTimeout(applyPolicy, 0);
 }
 
 export function installUnifiedOnlinePolicy() {
@@ -70,8 +64,6 @@ export function installUnifiedOnlinePolicy() {
   return () => {
     observer?.disconnect();
     observer = null;
-    if (trailingTimer) window.clearTimeout(trailingTimer);
-    trailingTimer = 0;
     window.removeEventListener('online', queueApply);
     window.removeEventListener('offline', queueApply);
   };
