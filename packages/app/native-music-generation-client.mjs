@@ -23,17 +23,8 @@ async function readJson(response) {
 function waitWithAbort(ms, signal) {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve(false);
-    let settled = false;
-    const done = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal?.removeEventListener?.('abort', onAbort);
-      resolve(value);
-    };
-    const onAbort = () => done(false);
-    const timer = setTimeout(() => done(true), Math.max(0, Number(ms) || 0));
-    signal?.addEventListener?.('abort', onAbort, { once: true });
+    const timer = setTimeout(() => resolve(true), Math.max(0, Number(ms) || 0));
+    signal?.addEventListener?.('abort', () => { clearTimeout(timer); resolve(false); }, { once: true });
   });
 }
 function rememberedFingerprints(localProject, sessionFingerprints) {
@@ -275,7 +266,7 @@ export class NativeMusicGenerationClient {
       return Boolean(session?.accessToken);
     };
 
-    onProgress({ status: 'dispatching', progress: 10, current_stage: 'gpu_dispatch', human_message: 'Direção pronta. Salvando a criação e buscando uma vaga na GPU' });
+    onProgress({ status: 'dispatching', progress: 10, current_stage: 'gpu_dispatch', human_message: 'Direção pronta. Salvando criação.' });
     let response = await request();
     if (response.status === 401 && !signal?.aborted) {
       if (!await refreshSession()) return { ok: false, error: 'connection_required', director, aiDirection, generatedLyrics, fallback_allowed: false };
@@ -308,10 +299,8 @@ export class NativeMusicGenerationClient {
     while (dispatch.status === 'queued_capacity') {
       if (signal?.aborted) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
       const retrySeconds = Math.max(5, Math.min(45, Number(dispatch?.retry_after_seconds) || 30));
-      onProgress({ status: 'waiting_for_gpu', progress: 11, current_stage: 'gpu_capacity', human_message: 'Criação salva na fila. A GPU está terminando outra música; sua vez será retomada automaticamente.' });
-      const waitMs = this.pollIntervalMs === 0 ? 0 : retrySeconds * 1000;
-      const shouldContinue = await waitWithAbort(waitMs, signal);
-      if (!shouldContinue) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
+      onProgress({ status: 'waiting_for_gpu', progress: 11, current_stage: 'gpu_capacity', human_message: 'Criação salva na fila. Aguardando GPU.' });
+      if (!await waitWithAbort(this.pollIntervalMs === 0 ? 0 : retrySeconds * 1000, signal)) return { ok: false, error: 'request_cancelled', requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
 
       response = await request({ resume_job_id: dispatch.job_id });
       if (response.status === 401 && !signal?.aborted) {
@@ -335,7 +324,7 @@ export class NativeMusicGenerationClient {
     }
 
     try {
-      onProgress({ status: dispatch.status || 'waiting_kaggle', progress: dispatch.progress || 15, current_stage: 'gpu_queued', human_message: 'PabloVoice está criando a música na GPU' });
+      onProgress({ status: dispatch.status || 'waiting_kaggle', progress: dispatch.progress || 15, current_stage: 'gpu_queued', human_message: 'Criando música na GPU' });
       const job = await waitForNativeMusic({
         token: this.auth.session?.accessToken || session.accessToken,
         jobId: dispatch.job_id,
@@ -368,7 +357,7 @@ export const NATIVE_MUSIC_ENDPOINTS = Object.freeze({ dispatch: DISPATCH_ENDPOIN
 export const PABLOVOICE_MUSIC_RUNTIME = Object.freeze({
   version: '2.3.0',
   directionEngine: 'pablovoice_ai_direction_plus_song_director_v2',
-  primaryExecution: 'transparent_device_durable_capacity_queue_open_model_gpu',
+  primaryExecution: 'durable_capacity_queue_open_model_gpu',
   userLoginRequired: false,
   passwordPrompt: false,
   offlineMode: false,
