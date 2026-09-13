@@ -7,9 +7,10 @@ const MODEL = 'acestep-v15-turbo';
 
 async function source(path) { return readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); }
 
-test('native music dispatcher uses service-role RPC access, serialized capacity and private ticketed Kaggle v58 without exposing credentials', async () => {
+test('native music dispatcher uses service-role durable capacity claim and private ticketed Kaggle v58 without exposing credentials', async () => {
   const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const lease = await source('supabase/migrations/20260913174500_music_generation_dispatch_lease.sql');
+  const queue = await source('supabase/migrations/20260913211000_music_generation_capacity_queue.sql');
   assert.match(text, /job_type:'music_generation'/);
   assert.match(text, /engine:'ace_step_1_5_turbo'/);
   assert.match(text, /provider:'kaggle'/);
@@ -22,15 +23,20 @@ test('native music dispatcher uses service-role RPC access, serialized capacity 
   assert.match(text, /Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)\|\|secs\.default/);
   assert.match(text, /compute_connection_ready:computeReady/);
   assert.match(text, /music_compute_auth_role_failed/);
-  assert.match(text, /acquire_music_generation_dispatch_lease/);
+  assert.match(text, /claim_music_generation_capacity_job/);
   assert.match(text, /release_music_generation_dispatch_lease/);
-  assert.match(text, /music_compute_busy/);
+  assert.match(text, /status:'queued_capacity'/);
+  assert.match(text, /durable_capacity_queue:true/);
   assert.match(text, /kaggle_capacity_busy/);
   assert.match(text, /dispatch_serialized:true/);
   assert.match(lease, /private\.music_generation_dispatch_lease/);
   assert.match(lease, /holder_job_id=excluded\.holder_job_id/);
   assert.match(lease, /expires_at <= now\(\)/);
   assert.match(lease, /service_role_required/);
+  assert.match(queue, /claim_music_generation_capacity_job/);
+  assert.match(queue, /for update/);
+  assert.match(queue, /status='queued_capacity'/);
+  assert.match(queue, /status='dispatched'/);
   assert.match(text, /kaggle-worker-source-v58/);
   assert.match(text, /complete-kaggle-pipeline-job-v58/);
   assert.match(text, new RegExp(REVISION));
@@ -40,7 +46,7 @@ test('native music dispatcher uses service-role RPC access, serialized capacity 
   assert.match(text, /fallback_allowed:false/);
 });
 
-test('native music creation obtains remote AI production direction, uses Song DNA, fresh variation and waits for shared GPU capacity', async () => {
+test('native music creation uses AI direction and resumes the same persisted job instead of timing out while GPU is busy', async () => {
   const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(client, /remoteProductionDirection/);
@@ -53,17 +59,28 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.match(client, /variation_seed: variationSeed/);
   assert.match(client, /pablovoice_director: director/);
   assert.match(client, /pablovoice_ai_direction: aiDirection/);
-  assert.match(client, /CAPACITY_WAIT_MS = 8 \* 60 \* 1000/);
-  assert.match(client, /dispatch\?\.error === 'music_compute_busy'/);
+  assert.match(client, /while \(dispatch\.status === 'queued_capacity'\)/);
+  assert.match(client, /resume_job_id: dispatch\.job_id/);
   assert.match(client, /status: 'waiting_for_gpu'/);
-  assert.match(client, /A GPU está terminando outra criação/);
-  assert.match(client, /source: 'pablovoice_native_music_v2_2'/);
+  assert.match(client, /Criação salva na fila/);
+  assert.match(client, /source: 'pablovoice_native_music_v2_3'/);
+  assert.match(client, /capacityQueue: 'durable_render_jobs'/);
+  assert.doesNotMatch(client, /CAPACITY_WAIT_MS/);
+  assert.doesNotMatch(client, /music_compute_busy_timeout/);
   assert.match(dispatcher, /const requestedVariation=Number\(body\.variation_seed\)/);
   assert.match(dispatcher, /randomGenerationSeed\(\)/);
+  assert.match(dispatcher, /queue_schema:'pablovoice_music_capacity_queue_v1'/);
+  assert.match(dispatcher, /queued_generation:generation/);
+  assert.match(dispatcher, /resume_job_id/);
+  assert.match(dispatcher, /accepted:true/);
+  assert.match(dispatcher, /return await requeueCapacity\(msg\)/);
   assert.match(dispatcher, /generation_seed:generationSeed/);
   assert.match(dispatcher, /slice\(0,512\)/);
   assert.match(dispatcher, /shift:3\.0/);
   assert.match(dispatcher, /use_constrained_decoding:true/);
+  const claimAt = dispatcher.indexOf('claimCapacity(admin,jobId)');
+  const signedUploadAt = dispatcher.indexOf("createSignedUploadUrl(outputPath)");
+  assert.ok(claimAt >= 0 && signedUploadAt > claimAt, 'trusted upload/callback material must only be created after GPU capacity is claimed');
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
