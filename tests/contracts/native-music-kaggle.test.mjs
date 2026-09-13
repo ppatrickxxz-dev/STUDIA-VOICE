@@ -67,20 +67,24 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
-test('ACE caption keeps configured vocal range, falsetto policy and explicit exclusions inside the 512 character budget', async () => {
+test('ACE caption preserves artist direction, vocal range, falsetto policy, form and explicit exclusions inside the 512 character budget', async () => {
   const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
   assert.match(dispatcher, /const lowMidi=clamp\(Math\.round\(Number\(singer\.lowMidi\)\|\|48\),24,96\)/);
   assert.match(dispatcher, /const highMidi=clamp\(Math\.round\(Number\(singer\.highMidi\)\|\|67\),lowMidi,108\)/);
   assert.match(dispatcher, /`MIDI \$\{lowMidi\}-\$\{highMidi\}`/);
-  assert.match(dispatcher, /singer\.falsetto\?'falsetto ok':'no falsetto'/);
-  assert.match(dispatcher, /map\(v=>clean\(v,24\)\)\.filter\(Boolean\)\.slice\(0,5\)/);
-  assert.match(dispatcher, /singerDirection\?`Vocal: \$\{singerDirection\}`:''/);
-  assert.match(dispatcher, /avoid\?`Avoid: \$\{avoid\}`:''/);
-  assert.match(dispatcher, /songDna\?`Direction: \$\{songDna\}`:''/);
-  const vocalAt = dispatcher.indexOf("singerDirection?`Vocal:");
-  const avoidAt = dispatcher.indexOf("avoid?`Avoid:");
-  const directionAt = dispatcher.indexOf("songDna?`Direction:");
-  assert.ok(vocalAt >= 0 && avoidAt > vocalAt && directionAt > avoidAt, 'vocal controls and exclusions must precede optional Song DNA');
+  assert.match(dispatcher, /singer\.falsetto\?'falsetto controlled':'avoid falsetto'/);
+  assert.match(dispatcher, /map\(v=>clean\(v,34\)\)\.filter\(Boolean\)\.slice\(0,10\)/);
+  assert.match(dispatcher, /compactPart\('Artist',artistRequest\(plan\),112\)/);
+  assert.match(dispatcher, /compactPart\('Production',aiProductionDirection\(plan,body\),158\)/);
+  assert.match(dispatcher, /compactPart\('Vocal',vocal,88\)/);
+  assert.match(dispatcher, /compactPart\('Form',formSummary\(plan\),66\)/);
+  assert.match(dispatcher, /compactPart\('Avoid',avoid,70\)/);
+  assert.match(dispatcher, /parts\.join\('\. '\)\.slice\(0,512\)/);
+  const artistAt = dispatcher.indexOf("compactPart('Artist'");
+  const vocalAt = dispatcher.indexOf("compactPart('Vocal'");
+  const formAt = dispatcher.indexOf("compactPart('Form'");
+  const avoidAt = dispatcher.indexOf("compactPart('Avoid'");
+  assert.ok(artistAt >= 0 && vocalAt > artistAt && formAt > vocalAt && avoidAt > formAt, 'artist, vocal, form and exclusions must stay represented in the prompt compiler');
 });
 
 test('native music worker pins ACE-Step, forces audited fp32 on Kaggle T4 and retries only inside the same worker', async () => {
