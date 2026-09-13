@@ -109,7 +109,9 @@ jobs:
             set -euo pipefail
             APK="$(cat /tmp/pv-apk-path)"
             bash scripts/android-emulator-gate.sh "$APK"
+            adb shell pm clear studio.pablovoice.app >/dev/null || true
             bash scripts/android-import-emulator-gate.sh "$APK"
+            adb shell pm clear studio.pablovoice.app >/dev/null || true
             bash scripts/android-open-with-project-emulator-gate.sh "$APK"
             bash scripts/android-complete-user-flow-gate.sh
       - uses: actions/upload-artifact@v4
