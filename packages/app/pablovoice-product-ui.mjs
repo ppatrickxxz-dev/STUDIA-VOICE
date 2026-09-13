@@ -109,11 +109,11 @@ function homeMarkup() {
     </div>
   </div>
 
-  <div class="pv-product-song-row">
+  <div class="pv-product-bottom-row pv-product-song-row">
     <button class="pv-product-project-card" type="button" data-route="projects">
       <div><span>SUA MÚSICA</span><b data-pv-product-project-title>Meus projetos</b><small data-pv-product-project-copy>Continue exatamente de onde parou.</small></div><i>→</i>
     </button>
-    <button class="pv-product-studio-card" type="button" data-route="studio">
+    <button class="pv-product-project-card pv-product-studio-card" type="button" data-route="studio">
       <div><span>STUDIO</span><b>Continuar produzindo</b><small>timeline, voz, instrumentos, stems, mix e versões no mesmo lugar.</small></div><i>→</i>
     </button>
     <button class="pv-product-pablo-card" type="button" data-route="pablo">
