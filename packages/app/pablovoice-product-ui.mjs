@@ -1,4 +1,4 @@
-const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v21';
+const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v22';
 const PROMPT_KEY = 'pablovoice.product.createPrompt';
 const KIND_KEY = 'pablovoice.product.createKind';
 
@@ -11,6 +11,8 @@ export function installPabloVoiceProductUI() {
   runtime.observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('click', onClick, true);
   window.addEventListener('hashchange', queueSync);
+  window.addEventListener('online', queueSync);
+  window.addEventListener('offline', queueSync);
   document.addEventListener('pablovoice:vnext-surface-ready', queueSync);
   document.addEventListener('pablovoice:project-updated', queueSync);
   queueSync();
@@ -25,6 +27,8 @@ function disconnect() {
   runtime.scheduled = false;
   window.removeEventListener('click', onClick, true);
   window.removeEventListener('hashchange', queueSync);
+  window.removeEventListener('online', queueSync);
+  window.removeEventListener('offline', queueSync);
   document.removeEventListener('pablovoice:vnext-surface-ready', queueSync);
   document.removeEventListener('pablovoice:project-updated', queueSync);
 }
@@ -59,9 +63,6 @@ function decorateNavigation() {
   const nav = document.querySelector('.pv-nav');
   if (!nav) return;
   nav.dataset.pvProductNav = 'true';
-  // vNext owns the canonical navigation DOM. Product UI only marks it; it never
-  // rewrites labels/order because doing so would make two observers fight over
-  // the same nodes and can starve the browser event loop.
 }
 
 function decorateHome() {
@@ -75,7 +76,7 @@ function decorateHome() {
   if (!surface) {
     surface = document.createElement('section');
     surface.id = 'pv-product-home';
-    surface.className = 'pv-product-home';
+    surface.className = 'pv-product-home pv-product-home-song-first';
     surface.innerHTML = homeMarkup();
     hero.insertAdjacentElement('afterend', surface);
   }
@@ -83,41 +84,40 @@ function decorateHome() {
 }
 
 function homeMarkup() {
-  return `<div class="pv-product-create-card">
+  return `<div class="pv-product-create-card pv-product-create-card-v22">
     <div class="pv-product-create-head">
-      <div><span class="pv-product-eyebrow">SONG BRAIN 2.0</span><h1 class="pv-product-title">Crie a música. Produza de verdade.</h1><h2>O que você quer criar?</h2><p>Descreva como falaria com um produtor. O PabloVoice organiza a direção e leva para o motor musical.</p></div>
-      <span class="pv-product-ai-state" data-pv-product-ai-state>IA de criação</span>
+      <div>
+        <span class="pv-product-eyebrow">PABLOVOICE STUDIO</span>
+        <h1 class="pv-product-title">Comece pela música.</h1>
+        <h2>Como ela deve soar?</h2>
+        <p>Traga uma ideia, uma letra ou uma direção. O PabloVoice transforma isso em versões completas e continua a produção no mesmo projeto.</p>
+      </div>
+      <span class="pv-product-ai-state" data-pv-product-ai-state>Studio pronto</span>
     </div>
     <label class="pv-product-prompt-wrap">
       <span class="sr-only">Direção musical</span>
-      <textarea data-pv-product-prompt rows="4" maxlength="1200" placeholder="Ex.: R&B 2000s sensual, baixo synth redondo, bateria solta, versos íntimos e refrão grande; sem trap, sem dembow pesado…"></textarea>
+      <textarea data-pv-product-prompt rows="5" maxlength="4000" placeholder="Ex.: R&B brasileiro 2000s, sensual e noturno; groove humano, baixo synth profundo, refrão grande, voz masculina próxima; sem trap e sem dembow pesado…"></textarea>
     </label>
     <div class="pv-product-prompt-chips" aria-label="Atalhos de direção musical">
-      <button type="button" data-pv-product-preset="R&B 2000s sensual, grave redondo, synths escuros, bateria solta e refrão grande">R&B 2000s</button>
-      <button type="button" data-pv-product-preset="Pop funk brasileiro, groove chiclete, baixo synth e refrão imediato, sem batestaca excessiva">Pop funk</button>
+      <button type="button" data-pv-product-preset="R&B brasileiro 2000s, sensual e noturno, grave redondo, synths escuros, bateria humana e refrão grande">R&B 2000s</button>
+      <button type="button" data-pv-product-preset="Pop funk brasileiro elegante, groove chiclete, baixo synth e refrão imediato, sem batestaca excessiva">Pop funk</button>
       <button type="button" data-pv-product-preset="Pop R&B moderno, elegante e dançante, synths gloss, pads e motivo melódico memorável">Pop R&B</button>
     </div>
     <div class="pv-product-create-actions">
-      <button class="pv-product-primary" type="button" data-route="compose" data-pv-product-create="song"><span>✦</span><b>Criar música com IA</b><small>letra + instrumental + guia + takes</small></button>
-      <button class="pv-product-secondary" type="button" data-route="compose" data-pv-product-create="instrumental"><span>▥</span><b>Criar instrumental</b><small>groove + harmonia + arranjo</small></button>
+      <button class="pv-product-primary" type="button" data-route="compose" data-pv-product-create="song"><span>✦</span><b>Música com voz</b><small>letra + voz cantada + produção + versões</small></button>
+      <button class="pv-product-secondary" type="button" data-route="compose" data-pv-product-create="instrumental"><span>▥</span><b>Instrumental</b><small>produção completa sem vocal</small></button>
     </div>
   </div>
 
-  <div class="pv-product-workspace-grid">
-    <button type="button" class="pv-product-workspace" data-route="compose"><span>01</span><div><b>Letra & direção</b><small>brief, estrutura, prosódia e Song DNA</small></div><i>→</i></button>
-    <button type="button" class="pv-product-workspace" data-route="compose" data-pv-product-intent="instrumental"><span>02</span><div><b>Beat & instrumentos</b><small>groove, timbres e construção do instrumental</small></div><i>→</i></button>
-    <button type="button" class="pv-product-workspace" data-route="studio"><span>03</span><div><b>Arranjo & seções</b><small>editar trechos e preservar takes bons</small></div><i>→</i></button>
-    <button type="button" class="pv-product-workspace" data-action="record"><span>04</span><div><b>Gravar voz</b><small>ideia, guia, doubles e take final</small></div><i>●</i></button>
-    <button type="button" class="pv-product-workspace" data-route="studio"><span>05</span><div><b>Voice Lab & mix</b><small>limpeza, pitch, timbre, A/B e mixer</small></div><i>→</i></button>
-    <button type="button" class="pv-product-workspace" data-route="studio"><span>06</span><div><b>Stems, master & export</b><small>fechamento, versões e saída final</small></div><i>→</i></button>
-  </div>
-
-  <div class="pv-product-bottom-row">
+  <div class="pv-product-song-row">
     <button class="pv-product-project-card" type="button" data-route="projects">
-      <div><span>PROJETOS</span><b data-pv-product-project-title>Seu catálogo</b><small data-pv-product-project-copy>Abra um projeto ou continue de onde parou.</small></div><i>→</i>
+      <div><span>SUA MÚSICA</span><b data-pv-product-project-title>Meus projetos</b><small data-pv-product-project-copy>Continue exatamente de onde parou.</small></div><i>→</i>
+    </button>
+    <button class="pv-product-studio-card" type="button" data-route="studio">
+      <div><span>STUDIO</span><b>Continuar produzindo</b><small>timeline, voz, instrumentos, stems, mix e versões no mesmo lugar.</small></div><i>→</i>
     </button>
     <button class="pv-product-pablo-card" type="button" data-route="pablo">
-      <div class="pv-product-pablo-orb">PV</div><div><span>PABLO IA</span><b>Assistente dentro do projeto</b><small>Peça mudanças por seção sem decorar ferramenta.</small></div><i>→</i>
+      <div class="pv-product-pablo-orb">PV</div><div><span>PABLO</span><b>Seu companheiro criativo</b><small>Selecione um trecho e peça a mudança do seu jeito.</small></div><i>→</i>
     </button>
   </div>`;
 }
@@ -132,7 +132,7 @@ function syncHomeState(surface) {
   if (ai) {
     const online = navigator.onLine !== false;
     ai.classList.toggle('online', online);
-    setText(ai, online ? 'IA conectada ao Studio' : 'Modo local · projeto preservado');
+    setText(ai, online ? 'Criação conectada' : 'Projeto local disponível');
   }
 }
 
@@ -158,6 +158,8 @@ function applyPendingCreateIntent(creator) {
   if (kind === 'instrumental' && form.elements.instrumentalFirst) {
     form.elements.instrumentalFirst.checked = true;
     form.elements.instrumentalFirst.dispatchEvent(new Event('change', { bubbles: true }));
+    const button = form.querySelector('[data-pv-kind="instrumental"]');
+    button?.click();
   }
   sessionStorage.removeItem(PROMPT_KEY);
   sessionStorage.removeItem(KIND_KEY);
