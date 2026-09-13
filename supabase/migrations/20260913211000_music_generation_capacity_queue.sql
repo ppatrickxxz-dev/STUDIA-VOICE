@@ -51,7 +51,7 @@ begin
   end if;
 
   update public.render_jobs
-     set status='dispatching',
+     set status='dispatched',
          progress=greatest(progress,12),
          current_stage='gpu_dispatch',
          heartbeat_at=now(),
