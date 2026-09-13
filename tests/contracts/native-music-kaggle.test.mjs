@@ -67,12 +67,21 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
-test('native music worker pins ACE-Step, protects Kaggle T4 from fp16 latent overflow and retries only inside the same worker', async () => {
+test('native music worker pins ACE-Step, forces audited fp32 on Kaggle T4 and retries only inside the same worker', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
   assert.match(text, /git','-C',str\(repo\),'fetch','--depth','1','origin',ACE_REVISION/);
   assert.match(text, /uv','sync','--frozen','--no-dev','--python','3\.11'/);
+  assert.match(text, /apply_pre_ampere_dtype_patch/);
+  assert.match(text, /ace_dtype_patch_source_mismatch/);
+  assert.match(text, /ACESTEP_DTYPE/);
+  assert.match(text, /os\.environ\['ACESTEP_DTYPE'\]='float32'/);
+  assert.match(text, /ace_dtype_override_not_applied/);
+  assert.match(text, /PV_GENERATION_DTYPE=/);
+  assert.match(text, /PV_ACE_DTYPE_PATCH_SHA256=/);
+  assert.match(text, /unexpected_t4_generation_dtype/);
+  assert.match(text, /ace_dtype_patch_proof_mismatch/);
   assert.match(text, /prefer_source='modelscope'/);
   assert.match(text, /thinking=False/);
   assert.match(text, /use_constrained_decoding=bool\(g\.get\('use_constrained_decoding',True\)\)/);
@@ -90,6 +99,7 @@ test('native music worker pins ACE-Step, protects Kaggle T4 from fp16 latent ove
   assert.match(text, /ffprobe/);
   assert.match(text, /upload_to_signed_url/);
   assert.match(text, /callback_token/);
+  assert.match(text, /native-music-ace-step-v6-t4-fp32/);
   assert.doesNotMatch(text, /KAGGLE_KEY|KAGGLE_USERNAME|service_role/i);
 });
 
@@ -102,16 +112,22 @@ test('music progress endpoint never advertises a retry that has no second dispat
   assert.match(text, /Tente novamente em instantes/);
 });
 
-test('native music callback verifies identity, callback, storage and hash before asset persistence and releases GPU capacity', async () => {
+test('native music callback verifies identity, T4 fp32 provenance, storage and hash before asset persistence and releases GPU capacity', async () => {
   const text = await source('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /job\.job_type!=='music_generation'/);
   assert.match(text, /sha256Text\(token\)/);
   assert.match(text, /callback_token_expired/);
   assert.match(text, /engine_identity_mismatch/);
+  assert.match(text, /generationDtype!=='float32'/);
+  assert.match(text, /invalid_generation_dtype/);
+  assert.match(text, /invalid_dtype_patch_proof/);
   assert.match(text, /audio-private/);
   assert.match(text, /kind:'full_mix'/);
   assert.match(text, /sha256:audioSha/);
   assert.match(text, /generation_shift:executedShift/);
+  assert.match(text, /generation_dtype:generationDtype/);
+  assert.match(text, /dtype_patch_sha256:dtypePatchSha/);
+  assert.match(text, /pablovoice_native_music_v2_3/);
   assert.match(text, /dispatch_serialized:Boolean\(p\.dispatch_serialized\)/);
   assert.match(text, /release_music_generation_dispatch_lease/);
   assert.match(text, /proof=\{verified:true/);
