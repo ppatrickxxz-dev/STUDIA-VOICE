@@ -83,7 +83,7 @@ test('native music client asks remote AI for production direction, dispatches pr
 
   assert.equal(result.ok, true);
   assert.equal(result.schema, 'pablovoice_native_music_generation_v2');
-  assert.equal(result.source, 'pablovoice_native_music_v2_1');
+  assert.equal(result.source, 'pablovoice_native_music_v2_2');
   assert.equal(result.provider, 'kaggle');
   assert.equal(result.model, 'acestep-v15-turbo');
   assert.equal(result.modelRevision, 'ca1e85fe9430179831e6bc6be790c332190a3866');
