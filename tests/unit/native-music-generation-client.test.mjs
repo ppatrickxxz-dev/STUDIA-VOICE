@@ -117,6 +117,62 @@ test('native music client asks remote AI for production direction, dispatches pr
   assert.equal(calls.every((call) => !String(call.url).includes('native-token')), true);
 });
 
+test('native music client relinks the remote project once when dispatch reports project_not_found', async () => {
+  const bytes = new Uint8Array([9, 8, 7, 6, 5, 4]);
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  const oldProjectId = '11111111-1111-4111-8111-111111111111';
+  const newProjectId = '44444444-4444-4444-8444-444444444444';
+  const auth = authFixture();
+  let linkCalls = 0;
+  auth.ensureRemoteProject = async (localProject) => {
+    assert.equal(localProject.id, 'local-native');
+    linkCalls += 1;
+    return { ok: true, project: { id: linkCalls === 1 ? oldProjectId : newProjectId } };
+  };
+  const dispatchBodies = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url) === NATIVE_MUSIC_ENDPOINTS.dispatch) {
+      dispatchBodies.push(JSON.parse(options.body));
+      if (dispatchBodies.length === 1) return Response.json({ ok: false, error: 'project_not_found' }, { status: 404 });
+      return Response.json({ ok: true, job_id: '55555555-5555-4555-8555-555555555555', status: 'waiting_kaggle', progress: 15 });
+    }
+    if (String(url).includes('/rest/v1/render_jobs')) {
+      return Response.json([{
+        id: '55555555-5555-4555-8555-555555555555', project_id: newProjectId,
+        job_type: 'music_generation', status: 'completed', progress: 100,
+        engine: 'ace_step_1_5_turbo', provider: 'kaggle', output_asset_ids: ['66666666-6666-4666-8666-666666666666'],
+        proof: { verified: true, model: 'acestep-v15-turbo', model_revision: 'ca1e85fe9430179831e6bc6be790c332190a3866' },
+      }]);
+    }
+    if (String(url).includes('/rest/v1/audio_assets')) {
+      return Response.json([{
+        id: '66666666-6666-4666-8666-666666666666', project_id: newProjectId,
+        kind: 'full_mix', storage_bucket: 'audio-private', storage_path: 'user/project/music/relinked.flac',
+        original_name: 'relinked.flac', mime_type: 'audio/flac', size_bytes: bytes.length, duration_seconds: 60,
+        sample_rate: 48000, channels: 2, sha256: sha,
+        metadata: { model: 'acestep-v15-turbo', model_revision: 'ca1e85fe9430179831e6bc6be790c332190a3866' },
+      }]);
+    }
+    if (String(url).includes('/storage/v1/object/authenticated/audio-private/')) {
+      return new Response(bytes, { status: 200, headers: { 'content-type': 'audio/flac' } });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 0 });
+  const result = await client.generate({ localProject: { id: 'local-native', name: 'Relink test' }, plan });
+
+  assert.equal(result.ok, true);
+  assert.equal(linkCalls, 2);
+  assert.equal(auth.directionCalls.length, 1);
+  assert.equal(dispatchBodies.length, 2);
+  assert.equal(dispatchBodies[0].project_id, oldProjectId);
+  assert.equal(dispatchBodies[1].project_id, newProjectId);
+  assert.equal(result.remoteProjectId, newProjectId);
+  assert.equal(result.sha256, sha);
+  assert.equal(result.fallback_allowed, false);
+});
+
 test('native music generation fails closed when AI direction cannot be produced', async () => {
   const auth = authFixture();
   auth.agentTurn = async () => ({ ok: false, error: 'provider_unavailable' });
