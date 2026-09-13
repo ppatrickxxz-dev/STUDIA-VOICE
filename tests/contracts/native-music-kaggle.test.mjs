@@ -7,8 +7,9 @@ const MODEL = 'acestep-v15-turbo';
 
 async function source(path) { return readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); }
 
-test('native music dispatcher uses service-role RPC access and private ticketed Kaggle v58 without exposing credentials', async () => {
+test('native music dispatcher uses service-role RPC access, serialized capacity and private ticketed Kaggle v58 without exposing credentials', async () => {
   const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
+  const lease = await source('supabase/migrations/20260913174500_music_generation_dispatch_lease.sql');
   assert.match(text, /job_type:'music_generation'/);
   assert.match(text, /engine:'ace_step_1_5_turbo'/);
   assert.match(text, /provider:'kaggle'/);
@@ -21,6 +22,15 @@ test('native music dispatcher uses service-role RPC access and private ticketed 
   assert.match(text, /Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)\|\|secs\.default/);
   assert.match(text, /compute_connection_ready:computeReady/);
   assert.match(text, /music_compute_auth_role_failed/);
+  assert.match(text, /acquire_music_generation_dispatch_lease/);
+  assert.match(text, /release_music_generation_dispatch_lease/);
+  assert.match(text, /music_compute_busy/);
+  assert.match(text, /kaggle_capacity_busy/);
+  assert.match(text, /dispatch_serialized:true/);
+  assert.match(lease, /private\.music_generation_dispatch_lease/);
+  assert.match(lease, /holder_job_id=excluded\.holder_job_id/);
+  assert.match(lease, /expires_at <= now\(\)/);
+  assert.match(lease, /service_role_required/);
   assert.match(text, /kaggle-worker-source-v58/);
   assert.match(text, /complete-kaggle-pipeline-job-v58/);
   assert.match(text, new RegExp(REVISION));
@@ -30,7 +40,7 @@ test('native music dispatcher uses service-role RPC access and private ticketed 
   assert.match(text, /fallback_allowed:false/);
 });
 
-test('native music creation obtains remote AI production direction, uses Song DNA and fresh variation per take', async () => {
+test('native music creation obtains remote AI production direction, uses Song DNA, fresh variation and waits for shared GPU capacity', async () => {
   const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(client, /remoteProductionDirection/);
@@ -43,6 +53,11 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.match(client, /variation_seed: variationSeed/);
   assert.match(client, /pablovoice_director: director/);
   assert.match(client, /pablovoice_ai_direction: aiDirection/);
+  assert.match(client, /CAPACITY_WAIT_MS = 8 \* 60 \* 1000/);
+  assert.match(client, /dispatch\?\.error === 'music_compute_busy'/);
+  assert.match(client, /status: 'waiting_for_gpu'/);
+  assert.match(client, /A GPU está terminando outra criação/);
+  assert.match(client, /source: 'pablovoice_native_music_v2_2'/);
   assert.match(dispatcher, /const requestedVariation=Number\(body\.variation_seed\)/);
   assert.match(dispatcher, /randomGenerationSeed\(\)/);
   assert.match(dispatcher, /generation_seed:generationSeed/);
@@ -78,14 +93,16 @@ test('native music worker pins ACE-Step, protects Kaggle T4 from fp16 latent ove
   assert.doesNotMatch(text, /KAGGLE_KEY|KAGGLE_USERNAME|service_role/i);
 });
 
-test('music progress endpoint never advertises a retry that has no second dispatch executor', async () => {
+test('music progress endpoint never advertises a retry that has no second dispatch executor and keeps the lease alive only for a live worker', async () => {
   const text = await source('supabase/functions/progress-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /music_numeric_instability/);
   assert.match(text, /job\.job_type!=='music_generation'&&!!c\.transient/);
+  assert.match(text, /touch_music_generation_dispatch_lease/);
+  assert.match(text, /release_music_generation_dispatch_lease/);
   assert.match(text, /Tente novamente em instantes/);
 });
 
-test('native music callback verifies identity, callback, storage and hash before asset persistence', async () => {
+test('native music callback verifies identity, callback, storage and hash before asset persistence and releases GPU capacity', async () => {
   const text = await source('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /job\.job_type!=='music_generation'/);
   assert.match(text, /sha256Text\(token\)/);
@@ -95,6 +112,8 @@ test('native music callback verifies identity, callback, storage and hash before
   assert.match(text, /kind:'full_mix'/);
   assert.match(text, /sha256:audioSha/);
   assert.match(text, /generation_shift:executedShift/);
+  assert.match(text, /dispatch_serialized:Boolean\(p\.dispatch_serialized\)/);
+  assert.match(text, /release_music_generation_dispatch_lease/);
   assert.match(text, /proof=\{verified:true/);
   assert.match(text, /status:'finalizing'/);
   assert.match(text, /status:'completed'/);
