@@ -55,7 +55,7 @@ export function installUnifiedOnlinePolicy() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['data-pv-network-policy', 'data-pv-network-mode', 'data-pv-offline-mode'],
+    attributeFilter: ['data-pv-network-policy'],
   });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
