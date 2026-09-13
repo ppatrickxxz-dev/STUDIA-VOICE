@@ -83,7 +83,7 @@ test('native music client asks remote AI for production direction, dispatches pr
 
   assert.equal(result.ok, true);
   assert.equal(result.schema, 'pablovoice_native_music_generation_v2');
-  assert.equal(result.source, 'pablovoice_native_music_v2_2');
+  assert.equal(result.source, 'pablovoice_native_music_v2_3');
   assert.equal(result.provider, 'kaggle');
   assert.equal(result.model, 'acestep-v15-turbo');
   assert.equal(result.modelRevision, 'ca1e85fe9430179831e6bc6be790c332190a3866');
@@ -115,6 +115,65 @@ test('native music client asks remote AI for production direction, dispatches pr
   assert.deepEqual(body.negative_styles, ['heavy dembow']);
   assert.equal(JSON.stringify(body).includes('native-token'), false);
   assert.equal(calls.every((call) => !String(call.url).includes('native-token')), true);
+});
+
+test('native music client resumes the same durable job when GPU capacity is initially occupied', async () => {
+  const bytes = new Uint8Array([6, 5, 4, 3, 2, 1]);
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  const jobId = '77777777-7777-4777-8777-777777777777';
+  const assetId = '88888888-8888-4888-8888-888888888888';
+  const auth = authFixture();
+  const progress = [];
+  const dispatchBodies = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url) === NATIVE_MUSIC_ENDPOINTS.dispatch) {
+      const body = JSON.parse(options.body);
+      dispatchBodies.push(body);
+      if (dispatchBodies.length === 1) {
+        return Response.json({ ok: true, accepted: true, job_id: jobId, status: 'queued_capacity', progress: 11, retry_after_seconds: 1 }, { status: 202 });
+      }
+      assert.deepEqual(body, { resume_job_id: jobId });
+      return Response.json({ ok: true, job_id: jobId, status: 'waiting_kaggle', progress: 15 });
+    }
+    if (String(url).includes('/rest/v1/render_jobs')) {
+      return Response.json([{
+        id: jobId, project_id: '11111111-1111-4111-8111-111111111111', job_type: 'music_generation',
+        status: 'completed', progress: 100, engine: 'ace_step_1_5_turbo', provider: 'kaggle', output_asset_ids: [assetId],
+        proof: { verified: true, model: 'acestep-v15-turbo', model_revision: 'ca1e85fe9430179831e6bc6be790c332190a3866' },
+      }]);
+    }
+    if (String(url).includes('/rest/v1/audio_assets')) {
+      return Response.json([{
+        id: assetId, project_id: '11111111-1111-4111-8111-111111111111', kind: 'full_mix', storage_bucket: 'audio-private',
+        storage_path: 'user/project/music/queued.flac', original_name: 'queued.flac', mime_type: 'audio/flac', size_bytes: bytes.length,
+        duration_seconds: 60, sample_rate: 48000, channels: 2, sha256: sha,
+        metadata: { model: 'acestep-v15-turbo', model_revision: 'ca1e85fe9430179831e6bc6be790c332190a3866' },
+      }]);
+    }
+    if (String(url).includes('/storage/v1/object/authenticated/audio-private/')) {
+      return new Response(bytes, { status: 200, headers: { 'content-type': 'audio/flac' } });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 0 });
+  const result = await client.generate({
+    localProject: { id: 'local-native', name: 'Queued test' },
+    plan,
+    onProgress: (state) => progress.push(state.progress),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.requestId, jobId);
+  assert.equal(result.source, 'pablovoice_native_music_v2_3');
+  assert.equal(result.sha256, sha);
+  assert.equal(dispatchBodies.length, 2);
+  assert.equal(dispatchBodies[0].project_id, '11111111-1111-4111-8111-111111111111');
+  assert.deepEqual(dispatchBodies[1], { resume_job_id: jobId });
+  assert.equal(auth.directionCalls.length, 1);
+  assert.equal(progress.includes(11), true);
+  assert.equal(progress.includes(15), true);
+  assert.equal(progress.includes(100), true);
 });
 
 test('native music client relinks the remote project once when dispatch reports project_not_found', async () => {
