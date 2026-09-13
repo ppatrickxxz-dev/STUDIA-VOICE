@@ -1,10 +1,11 @@
 const POLICY = Object.freeze({
   productMode: 'unified',
-  creationMode: 'online_high_quality_only',
+  creationMode: 'professional_remote_with_offline_queue',
   userLoginRequired: false,
   passwordPrompt: false,
-  offlineMode: false,
-  localDraftAvailable: false,
+  localProjectAvailableOffline: true,
+  localToyFallback: false,
+  pendingNetworkActionsArePreserved: true,
 });
 
 let observer = null;
@@ -14,50 +15,42 @@ function setDataset(node, key, value) {
   if (node?.dataset?.[key] !== value) node.dataset[key] = value;
 }
 
-function hide(node) {
-  if (node && !node.hidden) node.hidden = true;
-}
-
-function applyPolicy() {
+function syncConnectivity() {
+  const online = navigator.onLine !== false;
   const html = document.documentElement;
   setDataset(html, 'pvStudioMode', 'unified');
-  setDataset(html, 'pvNetworkMode', 'online');
+  setDataset(html, 'pvNetworkMode', online ? 'online' : 'offline');
   setDataset(html, 'pvAccessMode', 'transparent-device');
-  setDataset(html, 'pvOfflineMode', 'false');
+  setDataset(html, 'pvOfflineMode', online ? 'false' : 'true');
 
-  document.querySelectorAll('#pv-remote-pairing,[data-remote-pair-form],[data-pv-local-draft]').forEach((node) => node.remove());
-  document.querySelectorAll('[data-song-create-button],[data-song-create-hq]').forEach((button) => {
-    hide(button);
-    hide(button.closest('.pv-song-mode-card'));
-  });
+  // Access stays transparent. Legacy pairing/login surfaces must never block the owner.
+  document.querySelectorAll('#pv-remote-pairing,[data-remote-pair-form]').forEach((node) => node.remove());
 
+  // The current professional Creator owns these controls. Do not hide or replace it.
   const form = document.querySelector('[data-song-create-form]');
   if (form) {
-    setDataset(form, 'pvNetworkPolicy', 'online_only');
-    setDataset(form, 'pvExecutionPolicy', 'high_quality_only');
+    setDataset(form, 'pvNetworkPolicy', 'offline_queue');
+    setDataset(form, 'pvExecutionPolicy', 'professional_only');
+    setDataset(form, 'pvConnectivity', online ? 'online' : 'offline');
   }
 }
 
 function queueApply() {
-  if (!queued) {
-    queued = true;
-    queueMicrotask(() => {
-      queued = false;
-      applyPolicy();
-    });
-  }
-  setTimeout(applyPolicy, 0);
+  if (queued) return;
+  queued = true;
+  queueMicrotask(() => {
+    queued = false;
+    syncConnectivity();
+  });
 }
 
 export function installUnifiedOnlinePolicy() {
   if (observer) return () => observer?.disconnect();
-  applyPolicy();
+  syncConnectivity();
   observer = new MutationObserver(queueApply);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
-    attributes: true,
-    attributeFilter: ['data-pv-network-policy'],
   });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
