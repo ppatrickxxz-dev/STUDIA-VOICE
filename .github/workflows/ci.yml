@@ -110,9 +110,9 @@ jobs:
             APK="$(cat /tmp/pv-apk-path)"
             reset_app_state() {
               local package
-              package="$(aapt dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
+              package="$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package:\(.*pablovoice.*\)$/\1/p' | head -1)"
               test -n "$package"
-              adb shell pm clear "$package" >/dev/null || true
+              adb shell pm clear "$package" >/dev/null
             }
             bash scripts/android-emulator-gate.sh "$APK"
             reset_app_state
