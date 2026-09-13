@@ -1,7 +1,7 @@
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
-// music_generation has no second-dispatch daemon. A backend "retrying" state
-// therefore means the worker already failed and must not hold the Creator open.
+// queued music is durable server-side work. Capacity no longer needs to keep the
+// original dispatch request alive; the backend dispatcher/cron promotes it.
 const TERMINAL = new Set(['completed', 'error', 'failed', 'cancelled', 'retrying']);
 
 function authHeaders(token = '') {
@@ -34,7 +34,7 @@ export async function getNativeMusicJob({ token, jobId, fetchImpl = globalThis.f
   return job;
 }
 
-export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 20 * 60 * 1000, onProgress = () => {} }) {
+export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 45 * 60 * 1000, onProgress = () => {} }) {
   const started = Date.now();
   for (;;) {
     const job = await getNativeMusicJob({ token, jobId, fetchImpl });
@@ -99,10 +99,11 @@ export async function resolveNativeMusicResult({ token, job, fetchImpl = globalT
 }
 
 export const NATIVE_MUSIC_RESULT_RUNTIME = Object.freeze({
-  schema: 'pablovoice_native_music_result_v1',
+  schema: 'pablovoice_native_music_result_v2_queue',
   jobType: 'music_generation',
   outputKind: 'full_mix',
   bucket: 'audio-private',
-  maxWaitMs: 20 * 60 * 1000,
+  queueMode: 'server_persistent_fifo',
+  maxWaitMs: 45 * 60 * 1000,
   terminalStates: [...TERMINAL],
 });
