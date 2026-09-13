@@ -108,11 +108,9 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -eu
-            APK="$(cat /tmp/pv-apk-path)"
-            bash scripts/android-emulator-gate.sh "$APK"
-            bash scripts/android-import-emulator-gate.sh "$APK"
-            bash scripts/android-open-with-project-emulator-gate.sh "$APK"
+            bash scripts/android-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+            bash scripts/android-import-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
+            bash scripts/android-open-with-project-emulator-gate.sh "$(cat /tmp/pv-apk-path)"
             bash scripts/android-complete-user-flow-gate.sh
       - uses: actions/upload-artifact@v4
         if: always()
