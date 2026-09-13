@@ -35,9 +35,13 @@ test('Android import emulator gate fails closed and captures evidence', () => {
   assert.match(gate, /import-smoke-source-file\.txt/);
 });
 
-test('Canonical CI runs Android import emulator gate after validation APK build', () => {
-  assert.match(ci, /android-import-emulator:/);
-  assert.match(ci, /needs: android-build/);
-  assert.match(ci, /scripts\/android-import-emulator-gate\.sh/);
-  assert.match(ci, /pablovoice-android-import-emulator-evidence/);
+test('Canonical CI runs Android import gate after validation APK build in the unified emulator job', () => {
+  const unifiedStart = ci.indexOf('  android-emulator:');
+  assert.ok(unifiedStart >= 0, 'unified Android emulator job must exist');
+  const unifiedJob = ci.slice(unifiedStart);
+  assert.match(unifiedJob, /needs: android-build/);
+  assert.match(unifiedJob, /scripts\/android-import-emulator-gate\.sh/);
+  assert.match(unifiedJob, /pablovoice-android-emulator-evidence/);
+  assert.match(unifiedJob, /test-results\/android-import-emulator/);
+  assert.doesNotMatch(ci, /\n  android-import-emulator:/, 'import must not require a second emulator boot');
 });
