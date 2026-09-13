@@ -206,7 +206,7 @@ export class NativeMusicGenerationClient {
     if (!plan?.sections?.length || plan?.schema !== 'pablovoice_song_creation_v1') return { ok: false, error: 'music_plan_required', fallback_allowed: false };
     if (signal?.aborted) return { ok: false, error: 'request_cancelled', fallback_allowed: false };
 
-    const linked = await this.auth.ensureRemoteProject(localProject);
+    let linked = await this.auth.ensureRemoteProject(localProject);
     if (!linked?.ok || !linked?.project?.id) return { ok: false, error: linked?.error || 'project_link_failed', fallback_allowed: false };
     let session = await this.auth.ensureSession().catch(() => null);
     if (!session?.accessToken) return { ok: false, error: 'connection_required', fallback_allowed: false };
@@ -256,7 +256,15 @@ export class NativeMusicGenerationClient {
       pablovoice_ai_direction: aiDirection,
       pablovoice_generated_lyrics: generatedLyrics ? { provider: generatedLyrics.provider, model: generatedLyrics.model } : null,
     };
-    const request = () => this.fetch(this.endpoint, { method: 'POST', headers: headers(this.auth.session?.accessToken || session.accessToken), body: JSON.stringify(body), signal });
+    let projectRecoveryAttempts = 0;
+    const relinkProject = async () => {
+      const next = await this.auth.ensureRemoteProject(localProject).catch(() => null);
+      if (!next?.ok || !next?.project?.id) return false;
+      linked = next;
+      body.project_id = next.project.id;
+      return true;
+    };
+    const request = () => this.fetch(this.endpoint, { method: 'POST', headers: headers(this.auth.session?.accessToken || session?.accessToken || ''), body: JSON.stringify(body), signal });
     onProgress({ status: 'dispatching', progress: 10, current_stage: 'gpu_dispatch', human_message: 'Direção pronta. Enviando a música para o motor de alta qualidade' });
 
     const capacityDeadline = Date.now() + CAPACITY_WAIT_MS;
@@ -268,9 +276,25 @@ export class NativeMusicGenerationClient {
       if (response.status === 401 && !signal?.aborted) {
         this.auth.clearSession({ keepDevice: true });
         session = await this.auth.ensureSession().catch(() => null);
-        if (session?.accessToken) response = await request();
+        if (!session?.accessToken) {
+          return { ok: false, error: 'connection_required', director, aiDirection, generatedLyrics, fallback_allowed: false };
+        }
+        const relinked = await relinkProject();
+        if (!relinked) {
+          return { ok: false, error: 'project_link_failed', director, aiDirection, generatedLyrics, fallback_allowed: false };
+        }
+        response = await request();
       }
       dispatch = await readJson(response);
+      if (dispatch?.error === 'project_not_found' && response.status === 404 && !signal?.aborted && projectRecoveryAttempts < 1) {
+        projectRecoveryAttempts += 1;
+        const relinked = await relinkProject();
+        if (!relinked) {
+          return { ok: false, error: 'project_link_failed', director, aiDirection, generatedLyrics, fallback_allowed: false };
+        }
+        response = await request();
+        dispatch = await readJson(response);
+      }
       const busy = dispatch?.error === 'music_compute_busy' || response.status === 429;
       if (!busy) break;
       if (Date.now() >= capacityDeadline) {
