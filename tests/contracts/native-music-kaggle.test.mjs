@@ -7,7 +7,7 @@ const MODEL = 'acestep-v15-turbo';
 
 async function source(path) { return readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); }
 
-test('native music dispatcher uses service-role RPC access, serialized capacity and private ticketed Kaggle v58 without exposing credentials', async () => {
+test('native music dispatcher uses service-role RPC access, durable serialized capacity and private ticketed Kaggle v58 without exposing credentials', async () => {
   const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const lease = await source('supabase/migrations/20260913174500_music_generation_dispatch_lease.sql');
   assert.match(text, /job_type:'music_generation'/);
@@ -24,8 +24,10 @@ test('native music dispatcher uses service-role RPC access, serialized capacity 
   assert.match(text, /music_compute_auth_role_failed/);
   assert.match(text, /acquire_music_generation_dispatch_lease/);
   assert.match(text, /release_music_generation_dispatch_lease/);
-  assert.match(text, /music_compute_busy/);
-  assert.match(text, /kaggle_capacity_busy/);
+  assert.match(text, /persistent_queue:true/);
+  assert.match(text, /dispatchNextQueued/);
+  assert.match(text, /queue_schema:'pablovoice_music_queue_v1'/);
+  assert.match(text, /status:'queued'/);
   assert.match(text, /dispatch_serialized:true/);
   assert.match(lease, /private\.music_generation_dispatch_lease/);
   assert.match(lease, /holder_job_id=excluded\.holder_job_id/);
@@ -40,7 +42,7 @@ test('native music dispatcher uses service-role RPC access, serialized capacity 
   assert.match(text, /fallback_allowed:false/);
 });
 
-test('native music creation obtains remote AI production direction, uses Song DNA, fresh variation and waits for shared GPU capacity', async () => {
+test('native music creation obtains remote AI production direction, uses Song DNA, fresh variation and remains compatible with queued capacity', async () => {
   const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(client, /remoteProductionDirection/);
@@ -64,6 +66,7 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.match(dispatcher, /slice\(0,512\)/);
   assert.match(dispatcher, /shift:3\.0/);
   assert.match(dispatcher, /use_constrained_decoding:true/);
+  assert.match(dispatcher, /return json\(\{\.\.\.result,queue_position:position,human_message:'Sua música está na fila e será iniciada automaticamente\.'\},202\)/);
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
@@ -119,16 +122,18 @@ test('native music worker pins ACE-Step, forces audited fp32 on Kaggle T4 and re
   assert.doesNotMatch(text, /KAGGLE_KEY|KAGGLE_USERNAME|service_role/i);
 });
 
-test('music progress endpoint never advertises a retry that has no second dispatch executor and keeps the lease alive only for a live worker', async () => {
+test('music progress endpoint keeps non-music retry rules while releasing and advancing the durable music queue', async () => {
   const text = await source('supabase/functions/progress-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /music_numeric_instability/);
   assert.match(text, /job\.job_type!=='music_generation'&&!!c\.transient/);
   assert.match(text, /touch_music_generation_dispatch_lease/);
   assert.match(text, /release_music_generation_dispatch_lease/);
+  assert.match(text, /kickNext\(url,secret,job\)/);
+  assert.match(text, /action:'dispatch_next'/);
   assert.match(text, /Tente novamente em instantes/);
 });
 
-test('native music callback verifies identity, T4 fp32 provenance, storage and hash before asset persistence and releases GPU capacity', async () => {
+test('native music callback verifies identity, T4 fp32 provenance, storage and hash before asset persistence, then advances queue', async () => {
   const text = await source('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
   assert.match(text, /job\.job_type!=='music_generation'/);
   assert.match(text, /sha256Text\(token\)/);
@@ -143,9 +148,11 @@ test('native music callback verifies identity, T4 fp32 provenance, storage and h
   assert.match(text, /generation_shift:executedShift/);
   assert.match(text, /generation_dtype:generationDtype/);
   assert.match(text, /dtype_patch_sha256:dtypePatchSha/);
-  assert.match(text, /pablovoice_native_music_v2_3/);
+  assert.match(text, /pablovoice_native_music_v2_4_queue/);
   assert.match(text, /dispatch_serialized:Boolean\(p\.dispatch_serialized\)/);
   assert.match(text, /release_music_generation_dispatch_lease/);
+  assert.match(text, /kickNext\(supabaseUrl,adminKey\)/);
+  assert.match(text, /action:'dispatch_next'/);
   assert.match(text, /proof=\{verified:true/);
   assert.match(text, /status:'finalizing'/);
   assert.match(text, /status:'completed'/);
@@ -153,13 +160,15 @@ test('native music callback verifies identity, T4 fp32 provenance, storage and h
   assert.match(text, new RegExp(MODEL));
 });
 
-test('browser runtime can only address owned RLS job/asset rows, bounds waiting and verifies downloaded bytes', async () => {
+test('browser runtime can only address owned RLS job/asset rows, treats queued as nonterminal, bounds waiting and verifies downloaded bytes', async () => {
   const resultRuntime = await source('packages/app/native-music-result-runtime.mjs');
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(resultRuntime, /authorization = `Bearer \$\{token\}`/);
   assert.match(resultRuntime, /job_type !== 'music_generation'/);
   assert.match(resultRuntime, /'retrying'/);
-  assert.match(resultRuntime, /maxWaitMs = 20 \* 60 \* 1000/);
+  assert.doesNotMatch(resultRuntime, /TERMINAL = new Set\([^\n]*'queued'/);
+  assert.match(resultRuntime, /maxWaitMs = 45 \* 60 \* 1000/);
+  assert.match(resultRuntime, /queueMode: 'server_persistent_fifo'/);
   assert.match(resultRuntime, /technical_error/);
   assert.match(resultRuntime, /asset\.kind !== 'full_mix'/);
   assert.match(resultRuntime, /asset\.storage_bucket !== 'audio-private'/);
