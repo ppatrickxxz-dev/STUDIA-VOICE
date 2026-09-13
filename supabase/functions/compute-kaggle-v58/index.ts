@@ -153,6 +153,7 @@ async function readiness(){
     compute_connection_ready:computeReady,
     dispatch_serialized:true,
     durable_capacity_queue:true,
+    server_handoff:true,
     configured:verified,
     runnable:verified,
     physical_canary:canaryVerified?{
@@ -178,18 +179,31 @@ Deno.serve(async(req:Request)=>{
   try{
     const env=envClients()
     if(!env)return json({ok:false,error:'server_configuration_error'},500)
-    const {url,pub}=env;admin=env.admin
-    const auth=req.headers.get('authorization')||''
-    const jwt=auth.startsWith('Bearer ')?auth.slice(7):''
-    if(!jwt)return json({ok:false,error:'connection_required'},401)
-    const userClient=createClient(url,pub,{global:{headers:{Authorization:`Bearer ${jwt}`}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
-    const {data:ud,error:ue}=await userClient.auth.getUser(jwt)
-    const user=ud?.user
-    if(ue||!user)return json({ok:false,error:'connection_invalid'},401)
+    const {url,pub,secret}=env;admin=env.admin
+    const body=await req.json().catch(()=>({}))
+    const internalHandoff=body?.resume_next===true&&(req.headers.get('apikey')||'')===secret
+    let user:any=null
+    let resumeJobId=String(body.resume_job_id||'')
+
+    if(internalHandoff){
+      const {data:next,error:nextErr}=await admin.from('render_jobs').select('id,user_id').eq('job_type','music_generation').eq('status','queued_capacity').is('finished_at',null).order('created_at',{ascending:true}).order('id',{ascending:true}).limit(1).maybeSingle()
+      if(nextErr)return json({ok:false,error:'music_queue_next_lookup_failed',detail:nextErr.message,fallback_allowed:false},500)
+      if(!next)return json({ok:true,status:'queue_empty',server_handoff:true,fallback_allowed:false})
+      resumeJobId=String(next.id)
+      const {data:adminUser,error:adminUserErr}=await admin.auth.admin.getUserById(String(next.user_id))
+      user=adminUser?.user||null
+      if(adminUserErr||!user)return json({ok:false,error:'music_queue_user_not_found',job_id:resumeJobId,fallback_allowed:false},409)
+    }else{
+      const auth=req.headers.get('authorization')||''
+      const jwt=auth.startsWith('Bearer ')?auth.slice(7):''
+      if(!jwt)return json({ok:false,error:'connection_required'},401)
+      const userClient=createClient(url,pub,{global:{headers:{Authorization:`Bearer ${jwt}`}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
+      const {data:ud,error:ue}=await userClient.auth.getUser(jwt)
+      user=ud?.user||null
+      if(ue||!user)return json({ok:false,error:'connection_invalid'},401)
+    }
     currentUserId=String(user.id)
 
-    const body=await req.json().catch(()=>({}))
-    const resumeJobId=String(body.resume_job_id||'')
     const resuming=Boolean(resumeJobId)
     let projectId='',versionId:any=null,project:any=null,generation:any=null,generationSeed=0,params:any={}
 
@@ -291,7 +305,7 @@ Deno.serve(async(req:Request)=>{
       await admin.from('render_jobs').update({next_retry_at:retryAt,heartbeat_at:new Date().toISOString(),human_message:'Criação salva na fila. A GPU está concluindo outra música.'}).eq('id',jobId).eq('user_id',user.id).eq('status','queued_capacity')
       const {data:current}=await admin.from('render_jobs').select('status,progress').eq('id',jobId).eq('user_id',user.id).maybeSingle()
       if(current&&current.status!=='queued_capacity')return json({ok:true,job_id:jobId,status:current.status,progress:Number(current.progress)||12,provider:'native_music',accepted:true,dispatch_serialized:true,fallback_allowed:false})
-      return json({ok:true,job_id:jobId,status:'queued_capacity',progress:11,provider:'native_music',accepted:true,retry_after_seconds:QUEUE_RETRY_SECONDS,dispatch_serialized:true,fallback_allowed:false},202)
+      return json({ok:true,job_id:jobId,status:'queued_capacity',progress:11,provider:'native_music',accepted:true,retry_after_seconds:QUEUE_RETRY_SECONDS,dispatch_serialized:true,server_handoff:internalHandoff,fallback_allowed:false},202)
     }
 
     const expiresAt=Math.floor(Date.now()/1000)+5400
@@ -313,7 +327,7 @@ Deno.serve(async(req:Request)=>{
       const now=new Date().toISOString(),retryAt=new Date(Date.now()+QUEUE_RETRY_SECONDS*1000).toISOString()
       await admin.from('render_jobs').update({status:'queued_capacity',progress:11,current_stage:'gpu_capacity',error_code:'kaggle_capacity_busy',error_message:'A GPU compartilhada está ocupada; sua criação continua salva na fila.',technical_error:msg,finished_at:null,heartbeat_at:now,next_retry_at:retryAt,human_message:'Criação salva na fila. Aguardando a próxima vaga da GPU.'}).eq('id',jobId).eq('user_id',user.id)
       await releaseLease(admin,jobId);leaseHeld=false
-      return json({ok:true,job_id:jobId,status:'queued_capacity',progress:11,provider:'native_music',accepted:true,retry_after_seconds:QUEUE_RETRY_SECONDS,dispatch_serialized:true,fallback_allowed:false},202)
+      return json({ok:true,job_id:jobId,status:'queued_capacity',progress:11,provider:'native_music',accepted:true,retry_after_seconds:QUEUE_RETRY_SECONDS,dispatch_serialized:true,server_handoff:internalHandoff,fallback_allowed:false},202)
     }
 
     let push:any
@@ -336,7 +350,7 @@ Deno.serve(async(req:Request)=>{
     await touchLease(admin,jobId)
     await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',heartbeat_at:now,next_retry_at:null,error_code:null,error_message:null,technical_error:null,human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v2_3',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
     handedOff=true
-    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,dispatch_serialized:true,durable_capacity_queue:true,fallback_allowed:false})
+    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,dispatch_serialized:true,durable_capacity_queue:true,server_handoff:internalHandoff,fallback_allowed:false})
   }catch(e){
     const message=String(e instanceof Error?e.message:e).slice(0,1400)
     if(admin&&jobPersisted&&jobId&&currentUserId){
