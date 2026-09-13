@@ -7,7 +7,7 @@ function unexpectedErrors(errors) {
   );
 }
 
-test('SONG CREATION GATE: one connected high-quality Studio with no login or offline draft mode', async ({ page, context }) => {
+test('SONG CREATION GATE: one song-first Studio keeps the same Creator online and offline', async ({ page, context }) => {
   test.setTimeout(90_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -30,40 +30,38 @@ test('SONG CREATION GATE: one connected high-quality Studio with no login or off
 
   await page.locator('.pv-vnext-nav [data-vnext-route-command="create"]').click();
   await expect(page.locator('#lyrics')).toBeVisible();
-  await page.locator('#lyrics').fill('Quando a cidade apaga eu vejo você\nChega mais perto, deixa acontecer\nHoje eu não prometo o que vem depois\nQuando amanhecer, amanhã a gente vê');
+  await page.locator('#lyrics').fill('[VERSE 1 — 8 bars]\nQuando a cidade apaga eu vejo você\nChega mais perto, deixa acontecer\n\n[CHORUS — 8 bars]\nHoje eu não prometo o que vem depois\nQuando amanhecer, amanhã a gente vê');
 
   const form = page.locator('[data-song-create-form]');
   await expect(form).toBeVisible({ timeout: 10_000 });
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
-  await expect(form).toHaveAttribute('data-pv-execution-policy', 'high_quality_only');
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
+  await expect(form.locator('[data-song-create-hq]')).toBeVisible();
+  await expect(form.locator('[data-song-create-hq]')).toContainText('Criar 2 versões');
+  await expect(form.locator('[data-pv-unified-create]')).toHaveCount(0);
   await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
-  await expect(form.locator('[data-song-create-button]')).toBeHidden();
   await expect(page.locator('input[type="email"]')).toHaveCount(0);
   await expect(page.getByText(/Liberar meu estúdio/i)).toHaveCount(0);
 
-  await form.locator('input[name="brief"]').fill('Pop R&B noturno, synths suaves, grave redondo e refrão aberto');
-  await form.locator('.pv-intimate-advanced > summary').click();
+  await form.locator('textarea[name="brief"]').fill('Pop R&B noturno, synths suaves, grave redondo e refrão aberto');
+  await form.locator('.pv-create-adjustments > summary').click();
   await form.locator('select[name="genre"]').selectOption('rnb');
   await form.locator('input[name="bpm"]').fill('112');
-  await form.locator('select[name="duration"]').selectOption('60');
+  await form.locator('select[name="duration"]').selectOption('200');
   await form.locator('select[name="key"]').selectOption('A');
   await form.locator('input[name="mood"]').fill('íntimo, elegante, noturno');
 
   await context.setOffline(true);
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
-  await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
-  await form.locator('[data-pv-unified-create]').click();
-  await expect(page.locator('#pv-song-create-status')).toContainText('precisa de conexão', { timeout: 10_000 });
-  await expect(page.locator('#pv-remote-pairing')).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'offline');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'true');
+  await expect(form.locator('[data-song-create-hq]')).toBeVisible();
+  await form.locator('[data-song-create-hq]').click();
+  await expect(page.locator('#pv-song-create-status')).toContainText('pedido ficou salvo', { timeout: 10_000 });
+  await expect(page.locator('#pv-song-creator')).toBeVisible();
 
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
-  await expect(page.locator('.pv-health')).not.toContainText(/OFFLINE|LOCAL/i);
-  const networkCopy = page.locator('[data-pv-network-copy]');
-  for (let index = 0; index < await networkCopy.count(); index += 1) {
-    await expect(networkCopy.nth(index)).not.toContainText(/local|offline/i);
-  }
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
+  await expect(page.locator('#pv-song-create-status')).toContainText('pedido(s) salvo(s)', { timeout: 10_000 });
 
   expect(unexpectedErrors(errors)).toEqual([]);
 });
