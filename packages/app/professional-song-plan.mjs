@@ -2,14 +2,17 @@ import { createSongCreationPlan } from './song-creation-engine.mjs';
 
 const BEATS_PER_BAR = 4;
 const HEADER = /^\s*\[([^\]]+)\]\s*$/;
-const BAR_HINT = /(\d+)\s*(?:bars?|compassos?)/i;
+const BAR_HINT = /(\d+)\s*(?:bars?|compassos?)/ig;
 
 export function createProfessionalSongPlan(input = {}) {
-  const base = createSongCreationPlan(input);
+  const artistBrief = String(input.brief || '').trim().slice(0, 4000);
+  const base = createSongCreationPlan({ ...input, brief: artistBrief.slice(0, 1200) });
   const parsed = parseStructuredLyrics(input.lyrics);
   if (parsed.sections.length < 2) {
     return Object.freeze({
       ...base,
+      artistBrief,
+      authoredLyrics: String(input.lyrics || '').trim().slice(0, 16000),
       professionalBlueprint: Object.freeze({
         schema: 'pablovoice_song_blueprint_v2',
         source: 'inferred',
@@ -47,6 +50,7 @@ export function createProfessionalSongPlan(input = {}) {
   const durationSeconds = cursorBar * BEATS_PER_BAR * 60 / base.bpm;
   return Object.freeze({
     ...base,
+    artistBrief,
     durationSeconds,
     totalBars: cursorBar,
     totalBeats: cursorBar * BEATS_PER_BAR,
@@ -73,7 +77,7 @@ export function parseStructuredLyrics(lyrics = '') {
     if (match) {
       current = {
         header: match[1].trim(),
-        declaredBars: Number(match[1].match(BAR_HINT)?.[1]) || null,
+        declaredBars: parseDeclaredBars(match[1]),
         lines: [],
       };
       sections.push(current);
@@ -87,6 +91,13 @@ export function parseStructuredLyrics(lyrics = '') {
     current.lines.push(line);
   }
   return Object.freeze({ sections: sections.map((section) => Object.freeze({ ...section, lines: Object.freeze([...section.lines]) })) });
+}
+
+function parseDeclaredBars(header = '') {
+  const matches = [...String(header || '').matchAll(BAR_HINT)];
+  if (!matches.length) return null;
+  const total = matches.reduce((sum, match) => sum + Math.max(0, Number(match[1]) || 0), 0);
+  return total > 0 ? total : null;
 }
 
 function resolveSectionBars(sections, targetBars) {
@@ -164,7 +175,14 @@ function semanticSectionId(header = '', index = 0) {
 function sectionDirective(header = '') {
   const raw = String(header || '').trim();
   const value = normalize(raw);
-  const descriptors = raw.split(/[-—,]/).slice(1).join(',').replace(BAR_HINT, '').trim();
+  const descriptors = raw
+    .split(/[-—,]/)
+    .slice(1)
+    .join(', ')
+    .replace(BAR_HINT, '')
+    .replace(/^\s*[,;+]+|[,;+]+\s*$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
   if (descriptors) return descriptors.slice(0, 180);
   if (value.includes('intro')) return 'estabelecer atmosfera e identidade; sem antecipar toda a energia';
   if (value.includes('pre')) return 'aumentar tensão e preparar a entrada do refrão';
@@ -178,7 +196,14 @@ function sectionDirective(header = '') {
 }
 
 function cleanHeaderLabel(header = '') {
-  return String(header || '').replace(BAR_HINT, '').replace(/[-—,]+\s*$/, '').replace(/\s{2,}/g, ' ').trim().slice(0, 80) || 'Seção';
+  return String(header || '')
+    .replace(BAR_HINT, '')
+    .replace(/\b(?:silence|pickup|instrumental|vocal ad-libs|slow and intimate|intimate)\b/gi, '')
+    .replace(/[-—,+]+\s*$/g, '')
+    .replace(/\s*[-—,+]+\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 80) || 'Seção';
 }
 
 function normalize(value = '') {
@@ -189,6 +214,8 @@ export const PROFESSIONAL_SONG_PLAN = Object.freeze({
   schema: 'pablovoice_song_blueprint_v2',
   authoredStructureWins: true,
   preservesDeclaredBars: true,
+  sumsCompoundBarDeclarations: true,
   preservesSectionOrder: true,
+  preservesArtistBrief: true,
   fallback: 'legacy_inference_only_without_structured_lyrics',
 });
