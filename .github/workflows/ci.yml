@@ -108,10 +108,16 @@ jobs:
           script: |
             set -euo pipefail
             APK="$(cat /tmp/pv-apk-path)"
+            reset_app_state() {
+              local package
+              package="$(aapt dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
+              test -n "$package"
+              adb shell pm clear "$package" >/dev/null || true
+            }
             bash scripts/android-emulator-gate.sh "$APK"
-            adb shell pm clear studio.pablovoice.app >/dev/null || true
+            reset_app_state
             bash scripts/android-import-emulator-gate.sh "$APK"
-            adb shell pm clear studio.pablovoice.app >/dev/null || true
+            reset_app_state
             bash scripts/android-open-with-project-emulator-gate.sh "$APK"
             bash scripts/android-complete-user-flow-gate.sh
       - uses: actions/upload-artifact@v4
