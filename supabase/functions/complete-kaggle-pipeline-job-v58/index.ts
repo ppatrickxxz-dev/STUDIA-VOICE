@@ -7,6 +7,7 @@ const ACE_MODEL='acestep-v15-turbo'
 const ACTIVE_MUSIC_STATUSES=['waiting_kaggle','queued','queued_kaggle','dispatched','provisioning','downloading_inputs','running','stalled','retrying']
 async function sha256Text(value:string){const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('')}
 async function releaseLease(admin:any,jobId:string){const {error}=await admin.rpc('release_music_generation_dispatch_lease',{p_job_id:jobId});if(error)console.error('music_lease_release_failed',error.message)}
+async function kickNext(url:string,secret:string){try{const response=await fetch(`${url}/functions/v1/compute-kaggle-v58`,{method:'POST',headers:{apikey:secret,'content-type':'application/json'},body:JSON.stringify({resume_next:true})});if(!response.ok)console.error('music_queue_handoff_failed',response.status,(await response.text()).slice(0,300))}catch(error){console.error('music_queue_handoff_failed',String(error instanceof Error?error.message:error).slice(0,300))}}
 
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return json({ok:false,error:'method_not_allowed'},405)
@@ -69,11 +70,12 @@ Deno.serve(async(req:Request)=>{
     const {error:finishErr}=await admin.from('render_jobs').update({status:'completed',progress:100,current_stage:'completed',heartbeat_at:now,human_message:'Música criada',engine:'ace_step_1_5_turbo',provider:'kaggle',output_asset_ids:[asset.id],proof,error_code:null,error_message:null,technical_error:null,next_retry_at:null,finished_at:now,parameters:cleaned}).eq('id',jobId).eq('status','finalizing')
     if(finishErr)throw new Error(`job_finalize_failed: ${finishErr.message}`)
     await releaseLease(admin,jobId)
-    return json({ok:true,job_id:jobId,asset_id:asset.id,proof})
+    await kickNext(supabaseUrl,adminKey)
+    return json({ok:true,job_id:jobId,asset_id:asset.id,proof,queue_handoff:true})
   }catch(e){
     const message=String(e instanceof Error?e.message:e).slice(0,1200)
     if(claimed&&jobId)try{await admin.from('render_jobs').update({status:'error',progress:0,current_stage:'finalize_failed',error_code:'music_finalize_failed',error_message:'A geração terminou, mas a validação final falhou.',technical_error:message,finished_at:new Date().toISOString()}).eq('id',jobId).eq('status','finalizing')}catch{}
-    if(jobId)await releaseLease(admin,jobId)
+    if(jobId){await releaseLease(admin,jobId);await kickNext(supabaseUrl,adminKey)}
     return json({ok:false,error:message},500)
   }
 })
