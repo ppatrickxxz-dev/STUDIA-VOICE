@@ -67,6 +67,22 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
+test('ACE caption keeps configured vocal range, falsetto policy and explicit exclusions inside the 512 character budget', async () => {
+  const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
+  assert.match(dispatcher, /const lowMidi=clamp\(Math\.round\(Number\(singer\.lowMidi\)\|\|48\),24,96\)/);
+  assert.match(dispatcher, /const highMidi=clamp\(Math\.round\(Number\(singer\.highMidi\)\|\|67\),lowMidi,108\)/);
+  assert.match(dispatcher, /`MIDI \$\{lowMidi\}-\$\{highMidi\}`/);
+  assert.match(dispatcher, /singer\.falsetto\?'falsetto ok':'no falsetto'/);
+  assert.match(dispatcher, /map\(v=>clean\(v,24\)\)\.filter\(Boolean\)\.slice\(0,5\)/);
+  assert.match(dispatcher, /singerDirection\?`Vocal: \$\{singerDirection\}`:''/);
+  assert.match(dispatcher, /avoid\?`Avoid: \$\{avoid\}`:''/);
+  assert.match(dispatcher, /songDna\?`Direction: \$\{songDna\}`:''/);
+  const vocalAt = dispatcher.indexOf("singerDirection?`Vocal:");
+  const avoidAt = dispatcher.indexOf("avoid?`Avoid:");
+  const directionAt = dispatcher.indexOf("songDna?`Direction:");
+  assert.ok(vocalAt >= 0 && avoidAt > vocalAt && directionAt > avoidAt, 'vocal controls and exclusions must precede optional Song DNA');
+});
+
 test('native music worker pins ACE-Step, forces audited fp32 on Kaggle T4 and retries only inside the same worker', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
