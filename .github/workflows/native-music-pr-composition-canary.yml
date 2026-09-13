@@ -3,6 +3,7 @@ name: PabloVoice real composition canary
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/native-music-pr-composition-canary.yml'
       - 'packages/app/native-music-generation-client.mjs'
@@ -24,6 +25,7 @@ permissions:
 
 jobs:
   real-composition:
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
