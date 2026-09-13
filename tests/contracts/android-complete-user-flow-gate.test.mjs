@@ -37,9 +37,10 @@ test('Canonical CI runs open-with then complete flow in the same unified emulato
   assert.ok(unifiedStart >= 0, 'unified Android emulator job must exist');
   const unifiedJob = ci.slice(unifiedStart);
   assert.match(unifiedJob, /needs: android-build/);
-  const openWithAt = unifiedJob.indexOf('bash scripts/android-open-with-project-emulator-gate.sh "$APK"');
+  const openWithAt = unifiedJob.indexOf('bash scripts/android-open-with-project-emulator-gate.sh');
   const completeAt = unifiedJob.indexOf('bash scripts/android-complete-user-flow-gate.sh');
   assert.ok(openWithAt >= 0 && completeAt > openWithAt, 'open-with must run before complete flow in the same emulator session');
+  assert.match(unifiedJob, /android-open-with-project-emulator-gate\.sh "\$\(cat \/tmp\/pv-apk-path\)"/);
   assert.match(unifiedJob, /test-results\/android-open-with-project-emulator/);
   assert.match(unifiedJob, /test-results\/android-complete-user-flow/);
 });
