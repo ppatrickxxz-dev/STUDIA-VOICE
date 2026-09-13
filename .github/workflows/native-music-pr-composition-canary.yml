@@ -14,7 +14,7 @@ on:
 
 concurrency:
   group: pablovoice-real-composition-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   PV_STUDIO_ORIGIN: https://studia-voice.ppatrickxxz.workers.dev
