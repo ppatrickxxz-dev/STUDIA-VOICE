@@ -5,23 +5,36 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/native-music-pr-composition-canary.yml'
-
-permissions:
-  contents: read
+      - 'packages/app/native-music-generation-client.mjs'
+      - 'packages/app/native-music-result-runtime.mjs'
+      - 'supabase/functions/compute-kaggle-v58/index.ts'
+      - 'supabase/functions/kaggle-worker-source-v58/index.ts'
+      - 'supabase/functions/progress-kaggle-pipeline-job-v58/index.ts'
+      - 'supabase/functions/complete-kaggle-pipeline-job-v58/index.ts'
 
 env:
   PV_STUDIO_ORIGIN: https://studia-voice.ppatrickxxz.workers.dev
 
+permissions:
+  contents: read
+
 jobs:
   real-composition:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Initialize evidence directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/real-composition
+          printf '{"verdict":"STARTED","github_sha":"%s","github_run_id":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > test-results/real-composition/start.json
 
       - name: Ensure audio inspection tools
         shell: bash
@@ -36,7 +49,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p test-results/real-composition
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
@@ -62,158 +74,175 @@ jobs:
           };
           const location = { origin: ORIGIN, pathname: '/', search: '', hash: '', history: { replaceState() {} } };
           const auth = new RemoteAuthAdapter({ storage, location, fetchImpl });
-          const session = await auth.ensureSession();
-          assert.ok(session?.accessToken, 'transparent device session was not created');
-
-          const localProject = {
-            id: `physical-composition-${process.env.GITHUB_RUN_ID}-${Date.now()}`,
-            name: 'Canary · composição real PabloVoice',
-          };
-          const linked = await auth.ensureRemoteProject(localProject);
-          assert.equal(linked?.ok, true, `remote project link failed: ${linked?.error || 'unknown'}`);
-          assert.ok(linked?.project?.id, 'remote project id missing');
-
-          const lyrics = `[Verso]\nEu jurei que era só mais uma noite\nSem nome na agenda, sem querer lembrar\nMas quando você chega muda o meu roteiro\nE eu finjo que não vou me entregar\n\n[Pré-Refrão]\nSe essa boca já deu pista\nChega perto pra eu entender\n\n[Refrão]\nSem promessa de outro dia\nHoje é só eu e você\nQuando o sol entrar no quarto\nAmanhã a gente vê`;
-
-          const plan = createSongCreationPlan({
-            brief: 'Pop R&B brasileiro com estética Y2K/2000s, sensual e noturno, groove de funk melody/pagofunk bem sutil, bateria solta com grave tum tum ta, baixo synth redondo, pads e plucks brilhantes, versos íntimos, pré-refrão crescente e refrão forte e chiclete. Voz masculina tenor/barítono em PT-BR, dicção clara, interpretação quente. Pouco violão e pouco piano. Nada de dembow pesado, trap, batestaca, tropical, salsa ou drop EDM.',
-            lyrics,
-            genre: 'rnb',
-            mood: 'sensual, noturno, íntimo, confiante',
-            bpm: 104,
-            durationSeconds: 32,
-            key: 'A',
-            singerProfile: {
-              voiceType: 'masculina tenor/barítono',
-              lowMidi: 48,
-              highMidi: 67,
-              language: 'pt-BR',
-              tone: 'quente, natural, próximo e masculino',
-              delivery: 'dicção clara, fraseado R&B, refrão aberto, ad-libs contidos',
-              falsetto: true,
-            },
-          });
-
           const progress = [];
-          const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 5000 });
-          const result = await client.generate({
-            localProject,
-            plan,
-            negativeStyles: ['heavy dembow', 'trap beat', 'batestaca', 'tropical beach', 'salsa', 'EDM drop', 'female vocal'],
-            instrumental: false,
-            variation: 0.78,
-            onProgress: (state) => {
-              progress.push({
-                status: state?.status || null,
-                progress: Number(state?.progress || 0),
-                stage: state?.current_stage || null,
-                message: state?.human_message || null,
-              });
-              console.log('PV_COMPOSITION_PROGRESS', JSON.stringify(progress.at(-1)));
-            },
-          });
+          let linked = null;
+          let localProject = null;
+          try {
+            const session = await auth.ensureSession();
+            assert.ok(session?.accessToken, 'transparent device session was not created');
 
-          if (!result?.ok) {
-            fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({ result, progress }, null, 2));
-          }
-          assert.equal(result?.ok, true, `music generation failed: ${result?.error || 'unknown'} ${result?.detail || ''}`);
-          assert.equal(result?.fallback_allowed, false);
-          assert.ok(String(result?.aiDirection?.text || '').length >= 40, 'real AI production direction missing');
-          assert.ok(String(result?.aiDirection?.text || '').length <= 430, 'AI direction exceeded product limit');
-          assert.match(String(result?.director?.fingerprint || ''), /^pv2_[0-9a-f]{8}$/);
-          assert.ok(result?.blob?.size > 100_000, `generated audio too small: ${result?.blob?.size || 0}`);
+            localProject = {
+              id: `physical-composition-${process.env.GITHUB_RUN_ID}-${Date.now()}`,
+              name: 'Canary · composição real PabloVoice',
+            };
+            linked = await auth.ensureRemoteProject(localProject);
+            assert.equal(linked?.ok, true, `remote project link failed: ${linked?.error || 'unknown'}`);
+            assert.ok(linked?.project?.id, 'remote project id missing');
 
-          const audioPath = `${outDir}/composition.flac`;
-          const bytes = Buffer.from(await result.blob.arrayBuffer());
-          fs.writeFileSync(audioPath, bytes);
+            const lyrics = `[Verso]\nEu jurei que era só mais uma noite\nSem nome na agenda, sem querer lembrar\nMas quando você chega muda o meu roteiro\nE eu finjo que não vou me entregar\n\n[Pré-Refrão]\nSe essa boca já deu pista\nChega perto pra eu entender\n\n[Refrão]\nSem promessa de outro dia\nHoje é só eu e você\nQuando o sol entrar no quarto\nAmanhã a gente vê`;
 
-          const probeRun = spawnSync('ffprobe', ['-v','error','-select_streams','a:0','-show_entries','stream=sample_rate,channels:format=duration','-of','json',audioPath], { encoding: 'utf8' });
-          assert.equal(probeRun.status, 0, probeRun.stderr || 'ffprobe failed');
-          const probe = JSON.parse(probeRun.stdout || '{}');
-          const duration = Number(probe?.format?.duration || 0);
-          const sampleRate = Number(probe?.streams?.[0]?.sample_rate || 0);
-          const channels = Number(probe?.streams?.[0]?.channels || 0);
-          assert.ok(duration >= 20, `physical song duration too short: ${duration}`);
-          assert.ok(sampleRate >= 32000, `sample rate too low: ${sampleRate}`);
-          assert.ok(channels >= 1, `invalid channels: ${channels}`);
+            const plan = createSongCreationPlan({
+              brief: 'Pop R&B brasileiro com estética Y2K/2000s, sensual e noturno, groove de funk melody/pagofunk bem sutil, bateria solta com grave tum tum ta, baixo synth redondo, pads e plucks brilhantes, versos íntimos, pré-refrão crescente e refrão forte e chiclete. Voz masculina tenor/barítono em PT-BR, dicção clara, interpretação quente. Pouco violão e pouco piano. Nada de dembow pesado, trap, batestaca, tropical, salsa ou drop EDM.',
+              lyrics,
+              genre: 'rnb',
+              mood: 'sensual, noturno, íntimo, confiante',
+              bpm: 104,
+              durationSeconds: 32,
+              key: 'A',
+              singerProfile: {
+                voiceType: 'masculina tenor/barítono',
+                lowMidi: 48,
+                highMidi: 67,
+                language: 'pt-BR',
+                tone: 'quente, natural, próximo e masculino',
+                delivery: 'dicção clara, fraseado R&B, refrão aberto, ad-libs contidos',
+                falsetto: true,
+              },
+            });
 
-          const pcmRun = spawnSync('ffmpeg', ['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 64 * 1024 * 1024 });
-          assert.equal(pcmRun.status, 0, String(pcmRun.stderr || 'ffmpeg decode failed'));
-          const pcm = pcmRun.stdout;
-          const sampleCount = Math.floor(pcm.length / 2);
-          assert.ok(sampleCount > 16000, 'decoded audio is empty');
-          let sumSq = 0;
-          let peak = 0;
-          let clipped = 0;
-          const windowSize = 4000;
-          let activeWindows = 0;
-          let totalWindows = 0;
-          const windowRms = [];
-          for (let start = 0; start < sampleCount; start += windowSize) {
-            const end = Math.min(sampleCount, start + windowSize);
-            let localSq = 0;
-            let localN = 0;
-            for (let i = start; i < end; i += 1) {
-              const value = pcm.readInt16LE(i * 2) / 32768;
-              const abs = Math.abs(value);
-              sumSq += value * value;
-              localSq += value * value;
-              localN += 1;
-              if (abs > peak) peak = abs;
-              if (abs >= 0.999) clipped += 1;
+            const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 5000 });
+            const result = await client.generate({
+              localProject,
+              plan,
+              negativeStyles: ['heavy dembow', 'trap beat', 'batestaca', 'tropical beach', 'salsa', 'EDM drop', 'female vocal'],
+              instrumental: false,
+              variation: 0.78,
+              onProgress: (state) => {
+                progress.push({
+                  status: state?.status || null,
+                  progress: Number(state?.progress || 0),
+                  stage: state?.current_stage || null,
+                  message: state?.human_message || null,
+                });
+                console.log('PV_COMPOSITION_PROGRESS', JSON.stringify(progress.at(-1)));
+              },
+            });
+
+            if (!result?.ok) {
+              fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({ result, progress, remote_project_id: linked?.project?.id || null }, null, 2));
             }
-            if (localN) {
-              const r = Math.sqrt(localSq / localN);
-              windowRms.push(r);
-              totalWindows += 1;
-              if (r >= 0.008) activeWindows += 1;
-            }
-          }
-          const rms = Math.sqrt(sumSq / sampleCount);
-          const activeRatio = totalWindows ? activeWindows / totalWindows : 0;
-          const clipRatio = clipped / sampleCount;
-          const sorted = [...windowRms].sort((a,b) => a-b);
-          const p10 = sorted[Math.floor((sorted.length - 1) * 0.10)] || 0;
-          const p90 = sorted[Math.floor((sorted.length - 1) * 0.90)] || 0;
-          const rmsContrast = p90 - p10;
-          assert.ok(rms >= 0.01, `audio is effectively silent: rms=${rms}`);
-          assert.ok(peak >= 0.08, `audio has insufficient peak energy: peak=${peak}`);
-          assert.ok(activeRatio >= 0.55, `too much silence: activeRatio=${activeRatio}`);
-          assert.ok(clipRatio <= 0.03, `audio is excessively clipped: clipRatio=${clipRatio}`);
+            assert.equal(result?.ok, true, `music generation failed: ${result?.error || 'unknown'} ${result?.detail || ''}`);
+            assert.equal(result?.fallback_allowed, false);
+            assert.ok(String(result?.aiDirection?.text || '').length >= 40, 'real AI production direction missing');
+            assert.ok(String(result?.aiDirection?.text || '').length <= 430, 'AI direction exceeded product limit');
+            assert.match(String(result?.director?.fingerprint || ''), /^pv2_[0-9a-f]{8}$/);
+            assert.ok(result?.blob?.size > 100_000, `generated audio too small: ${result?.blob?.size || 0}`);
 
-          const evidence = {
-            verdict: 'REAL_COMPOSITION_PATH_VERIFIED',
-            github_sha: process.env.GITHUB_SHA,
-            local_project_id: localProject.id,
-            remote_project_id: linked.project.id,
-            request_id: result.requestId || null,
-            provider: result.provider || null,
-            model: result.model || null,
-            model_revision: result.modelRevision || null,
-            source: result.source || null,
-            audio_sha256: result.sha256 || null,
-            audio_bytes: result.blob.size,
-            duration_seconds: duration,
-            sample_rate: sampleRate,
-            channels,
-            signal: {
-              rms: Number(rms.toFixed(6)),
-              peak: Number(peak.toFixed(6)),
-              active_ratio: Number(activeRatio.toFixed(4)),
-              clip_ratio: Number(clipRatio.toFixed(6)),
-              rms_contrast: Number(rmsContrast.toFixed(6)),
-            },
-            ai_direction: {
-              chars: String(result.aiDirection.text).length,
-              provider: result.aiDirection.provider || null,
-              model: result.aiDirection.model || null,
-            },
-            director: result.director,
-            progress,
-          };
-          fs.writeFileSync(`${outDir}/evidence.json`, JSON.stringify(evidence, null, 2));
-          fs.writeFileSync(`${outDir}/probe.json`, JSON.stringify(probe, null, 2));
-          console.log('PV_REAL_COMPOSITION_OK', JSON.stringify(evidence));
+            const audioPath = `${outDir}/composition.flac`;
+            const bytes = Buffer.from(await result.blob.arrayBuffer());
+            fs.writeFileSync(audioPath, bytes);
+
+            const probeRun = spawnSync('ffprobe', ['-v','error','-select_streams','a:0','-show_entries','stream=sample_rate,channels:format=duration','-of','json',audioPath], { encoding: 'utf8' });
+            assert.equal(probeRun.status, 0, probeRun.stderr || 'ffprobe failed');
+            const probe = JSON.parse(probeRun.stdout || '{}');
+            const duration = Number(probe?.format?.duration || 0);
+            const sampleRate = Number(probe?.streams?.[0]?.sample_rate || 0);
+            const channels = Number(probe?.streams?.[0]?.channels || 0);
+            assert.ok(duration >= 20, `physical song duration too short: ${duration}`);
+            assert.ok(sampleRate >= 32000, `sample rate too low: ${sampleRate}`);
+            assert.ok(channels >= 1, `invalid channels: ${channels}`);
+
+            const pcmRun = spawnSync('ffmpeg', ['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 64 * 1024 * 1024 });
+            assert.equal(pcmRun.status, 0, String(pcmRun.stderr || 'ffmpeg decode failed'));
+            const pcm = pcmRun.stdout;
+            const sampleCount = Math.floor(pcm.length / 2);
+            assert.ok(sampleCount > 16000, 'decoded audio is empty');
+            let sumSq = 0;
+            let peak = 0;
+            let clipped = 0;
+            const windowSize = 4000;
+            let activeWindows = 0;
+            let totalWindows = 0;
+            const windowRms = [];
+            for (let start = 0; start < sampleCount; start += windowSize) {
+              const end = Math.min(sampleCount, start + windowSize);
+              let localSq = 0;
+              let localN = 0;
+              for (let i = start; i < end; i += 1) {
+                const value = pcm.readInt16LE(i * 2) / 32768;
+                const abs = Math.abs(value);
+                sumSq += value * value;
+                localSq += value * value;
+                localN += 1;
+                if (abs > peak) peak = abs;
+                if (abs >= 0.999) clipped += 1;
+              }
+              if (localN) {
+                const r = Math.sqrt(localSq / localN);
+                windowRms.push(r);
+                totalWindows += 1;
+                if (r >= 0.008) activeWindows += 1;
+              }
+            }
+            const rms = Math.sqrt(sumSq / sampleCount);
+            const activeRatio = totalWindows ? activeWindows / totalWindows : 0;
+            const clipRatio = clipped / sampleCount;
+            const sorted = [...windowRms].sort((a,b) => a-b);
+            const p10 = sorted[Math.floor((sorted.length - 1) * 0.10)] || 0;
+            const p90 = sorted[Math.floor((sorted.length - 1) * 0.90)] || 0;
+            const rmsContrast = p90 - p10;
+            assert.ok(rms >= 0.01, `audio is effectively silent: rms=${rms}`);
+            assert.ok(peak >= 0.08, `audio has insufficient peak energy: peak=${peak}`);
+            assert.ok(activeRatio >= 0.55, `too much silence: activeRatio=${activeRatio}`);
+            assert.ok(clipRatio <= 0.03, `audio is excessively clipped: clipRatio=${clipRatio}`);
+
+            const evidence = {
+              verdict: 'REAL_COMPOSITION_PATH_VERIFIED',
+              github_sha: process.env.GITHUB_SHA,
+              local_project_id: localProject.id,
+              remote_project_id: linked.project.id,
+              request_id: result.requestId || null,
+              provider: result.provider || null,
+              model: result.model || null,
+              model_revision: result.modelRevision || null,
+              source: result.source || null,
+              audio_sha256: result.sha256 || null,
+              audio_bytes: result.blob.size,
+              duration_seconds: duration,
+              sample_rate: sampleRate,
+              channels,
+              generation_seed: result?.job?.proof?.generation_seed ?? null,
+              generation_shift: result?.job?.proof?.generation_shift ?? null,
+              signal: {
+                rms: Number(rms.toFixed(6)),
+                peak: Number(peak.toFixed(6)),
+                active_ratio: Number(activeRatio.toFixed(4)),
+                clip_ratio: Number(clipRatio.toFixed(6)),
+                rms_contrast: Number(rmsContrast.toFixed(6)),
+              },
+              ai_direction: {
+                chars: String(result.aiDirection.text).length,
+                provider: result.aiDirection.provider || null,
+                model: result.aiDirection.model || null,
+              },
+              director: result.director,
+              progress,
+            };
+            fs.writeFileSync(`${outDir}/evidence.json`, JSON.stringify(evidence, null, 2));
+            fs.writeFileSync(`${outDir}/probe.json`, JSON.stringify(probe, null, 2));
+            console.log('PV_REAL_COMPOSITION_OK', JSON.stringify(evidence));
+          } catch (error) {
+            fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({
+              verdict: 'REAL_COMPOSITION_FAILED',
+              github_sha: process.env.GITHUB_SHA,
+              local_project_id: localProject?.id || null,
+              remote_project_id: linked?.project?.id || null,
+              error: String(error?.message || error),
+              stack: String(error?.stack || '').slice(0, 6000),
+              progress,
+            }, null, 2));
+            throw error;
+          }
           NODE
 
       - name: Retain the exact composition sample and evidence
