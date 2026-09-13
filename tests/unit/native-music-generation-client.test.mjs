@@ -6,13 +6,22 @@ import { NativeMusicGenerationClient, NATIVE_MUSIC_ENDPOINTS } from '../../packa
 function authFixture() {
   return {
     session: { accessToken: 'native-token' },
+    directionCalls: [],
     async ensureRemoteProject(localProject) {
       assert.equal(localProject.id, 'local-native');
       return { ok: true, project: { id: '11111111-1111-4111-8111-111111111111' } };
     },
     async ensureSession() { return this.session; },
     clearSession() {},
-    async loginWithDevice() { return null; },
+    async agentTurn(payload, options) {
+      this.directionCalls.push({ payload, options });
+      return {
+        ok: true,
+        provider: 'cloudflare_workers_ai',
+        model: '@cf/test-director',
+        reply: 'R&B 2000s sensual com baixo synth redondo, bateria solta, versos íntimos, pré crescente e refrão largo; synths escuros, fills entre seções e sem dembow pesado.',
+      };
+    },
   };
 }
 
@@ -30,11 +39,12 @@ const plan = {
   guideLines: [{ text: 'Amanhã a gente vê', sectionId: 'refrão' }],
 };
 
-test('native music client dispatches privately, directs Song DNA, polls verified job and downloads exact asset', async () => {
+test('native music client asks remote AI for production direction, dispatches privately, polls proof and downloads exact asset', async () => {
   const bytes = new Uint8Array([10, 20, 30, 40, 50, 60]);
   const sha = createHash('sha256').update(bytes).digest('hex');
   const calls = [];
   const progress = [];
+  const auth = authFixture();
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url: String(url), options });
     if (String(url) === NATIVE_MUSIC_ENDPOINTS.dispatch) {
@@ -64,7 +74,7 @@ test('native music client dispatches privately, directs Song DNA, polls verified
     throw new Error(`unexpected fetch ${url}`);
   };
 
-  const client = new NativeMusicGenerationClient({ authAdapter: authFixture(), fetchImpl, pollIntervalMs: 0 });
+  const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 0 });
   const result = await client.generate({
     localProject: { id: 'local-native', name: 'Native test' }, plan,
     negativeStyles: ['heavy dembow'], instrumental: false,
@@ -73,7 +83,7 @@ test('native music client dispatches privately, directs Song DNA, polls verified
 
   assert.equal(result.ok, true);
   assert.equal(result.schema, 'pablovoice_native_music_generation_v2');
-  assert.equal(result.source, 'pablovoice_native_music_v2');
+  assert.equal(result.source, 'pablovoice_native_music_v2_2');
   assert.equal(result.provider, 'kaggle');
   assert.equal(result.model, 'acestep-v15-turbo');
   assert.equal(result.modelRevision, 'ca1e85fe9430179831e6bc6be790c332190a3866');
@@ -82,6 +92,13 @@ test('native music client dispatches privately, directs Song DNA, polls verified
   assert.equal(result.sha256, sha);
   assert.equal(result.director?.schema, 'pablovoice_song_director_v2');
   assert.match(result.director?.fingerprint || '', /^pv2_[0-9a-f]{8}$/);
+  assert.equal(result.aiDirection?.ok, true);
+  assert.match(result.aiDirection?.text || '', /baixo synth redondo/i);
+  assert.equal(auth.directionCalls.length, 1);
+  assert.equal(auth.directionCalls[0].payload.command, 'generate');
+  assert.equal(auth.directionCalls[0].options.bypassGeneratorAdapter, true);
+  assert.match(auth.directionCalls[0].payload.task, /Retorne somente uma frase/i);
+  assert.equal(progress.includes(5), true);
   assert.equal(progress.includes(15), true);
   assert.equal(progress.includes(100), true);
 
@@ -90,6 +107,7 @@ test('native music client dispatches privately, directs Song DNA, polls verified
   const body = JSON.parse(dispatch.options.body);
   assert.equal(body.project_id, '11111111-1111-4111-8111-111111111111');
   assert.equal(body.plan.schema, 'pablovoice_song_creation_v1');
+  assert.match(body.plan.brief, /AI production direction:/);
   assert.match(body.plan.brief, /PabloVoice 2\.0 Song DNA:/);
   assert.equal(body.plan.pabloVoice2.fingerprint, body.pablovoice_director.fingerprint);
   assert.equal(Number.isInteger(body.variation_seed), true);
@@ -97,6 +115,76 @@ test('native music client dispatches privately, directs Song DNA, polls verified
   assert.deepEqual(body.negative_styles, ['heavy dembow']);
   assert.equal(JSON.stringify(body).includes('native-token'), false);
   assert.equal(calls.every((call) => !String(call.url).includes('native-token')), true);
+});
+
+test('native music client relinks the remote project once when dispatch reports project_not_found', async () => {
+  const bytes = new Uint8Array([9, 8, 7, 6, 5, 4]);
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  const oldProjectId = '11111111-1111-4111-8111-111111111111';
+  const newProjectId = '44444444-4444-4444-8444-444444444444';
+  const auth = authFixture();
+  let linkCalls = 0;
+  auth.ensureRemoteProject = async (localProject) => {
+    assert.equal(localProject.id, 'local-native');
+    linkCalls += 1;
+    return { ok: true, project: { id: linkCalls === 1 ? oldProjectId : newProjectId } };
+  };
+  const dispatchBodies = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url) === NATIVE_MUSIC_ENDPOINTS.dispatch) {
+      dispatchBodies.push(JSON.parse(options.body));
+      if (dispatchBodies.length === 1) return Response.json({ ok: false, error: 'project_not_found' }, { status: 404 });
+      return Response.json({ ok: true, job_id: '55555555-5555-4555-8555-555555555555', status: 'waiting_kaggle', progress: 15 });
+    }
+    if (String(url).includes('/rest/v1/render_jobs')) {
+      return Response.json([{
+        id: '55555555-5555-4555-8555-555555555555', project_id: newProjectId,
+        job_type: 'music_generation', status: 'completed', progress: 100,
+        engine: 'ace_step_1_5_turbo', provider: 'kaggle', output_asset_ids: ['66666666-6666-4666-8666-666666666666'],
+        proof: { verified: true, model: 'acestep-v15-turbo', model_revision: 'ca1e85fe9430179831e6bc6be790c332190a3866' },
+      }]);
+    }
+    if (String(url).includes('/rest/v1/audio_assets')) {
+      return Response.json([{
+        id: '66666666-6666-4666-8666-666666666666', project_id: newProjectId,
+        kind: 'full_mix', storage_bucket: 'audio-private', storage_path: 'user/project/music/relinked.flac',
+        original_name: 'relinked.flac', mime_type: 'audio/flac', size_bytes: bytes.length, duration_seconds: 60,
+        sample_rate: 48000, channels: 2, sha256: sha,
+        metadata: { model: 'acestep-v15-turbo', model_revision: 'ca1e85fe9430179831e6bc6be790c332190a3866' },
+      }]);
+    }
+    if (String(url).includes('/storage/v1/object/authenticated/audio-private/')) {
+      return new Response(bytes, { status: 200, headers: { 'content-type': 'audio/flac' } });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 0 });
+  const result = await client.generate({ localProject: { id: 'local-native', name: 'Relink test' }, plan });
+
+  assert.equal(result.ok, true);
+  assert.equal(linkCalls, 2);
+  assert.equal(auth.directionCalls.length, 1);
+  assert.equal(dispatchBodies.length, 2);
+  assert.equal(dispatchBodies[0].project_id, oldProjectId);
+  assert.equal(dispatchBodies[1].project_id, newProjectId);
+  assert.equal(result.remoteProjectId, newProjectId);
+  assert.equal(result.sha256, sha);
+  assert.equal(result.fallback_allowed, false);
+});
+
+test('native music generation fails closed when AI direction cannot be produced', async () => {
+  const auth = authFixture();
+  auth.agentTurn = async () => ({ ok: false, error: 'provider_unavailable' });
+  const client = new NativeMusicGenerationClient({
+    authAdapter: auth,
+    fetchImpl: async () => { throw new Error('dispatch must not run without direction'); },
+    pollIntervalMs: 0,
+  });
+  const result = await client.generate({ localProject: { id: 'local-native' }, plan });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'creative_direction_unavailable');
+  assert.equal(result.fallback_allowed, false);
 });
 
 test('native music result fails closed when persisted bytes do not match SHA-256 proof', async () => {

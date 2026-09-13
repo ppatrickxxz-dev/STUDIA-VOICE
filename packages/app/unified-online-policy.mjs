@@ -26,7 +26,7 @@ function applyPolicy() {
   setDataset(html, 'pvOfflineMode', 'false');
 
   document.querySelectorAll('#pv-remote-pairing,[data-remote-pair-form],[data-pv-local-draft]').forEach((node) => node.remove());
-  document.querySelectorAll('[data-song-create-button]').forEach((button) => {
+  document.querySelectorAll('[data-song-create-button],[data-song-create-hq]').forEach((button) => {
     hide(button);
     hide(button.closest('.pv-song-mode-card'));
   });
@@ -39,12 +39,14 @@ function applyPolicy() {
 }
 
 function queueApply() {
-  if (queued) return;
-  queued = true;
-  queueMicrotask(() => {
-    queued = false;
-    applyPolicy();
-  });
+  if (!queued) {
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      applyPolicy();
+    });
+  }
+  setTimeout(applyPolicy, 0);
 }
 
 export function installUnifiedOnlinePolicy() {

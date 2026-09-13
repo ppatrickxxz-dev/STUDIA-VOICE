@@ -1,6 +1,8 @@
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
-const TERMINAL = new Set(['completed', 'error', 'failed', 'cancelled']);
+// music_generation has no second-dispatch daemon. A backend "retrying" state
+// therefore means the worker already failed and must not hold the Creator open.
+const TERMINAL = new Set(['completed', 'error', 'failed', 'cancelled', 'retrying']);
 
 function authHeaders(token = '') {
   const headers = { apikey: PUBLISHABLE_KEY };
@@ -23,7 +25,7 @@ async function sha256Blob(blob) {
 export async function getNativeMusicJob({ token, jobId, fetchImpl = globalThis.fetch }) {
   if (!token) throw new Error('auth_required');
   if (!jobId) throw new Error('job_id_required');
-  const select = 'id,project_id,job_type,status,progress,engine,provider,external_job_id,output_asset_ids,parameters,proof,error_code,error_message,human_message,current_stage,created_at,started_at,finished_at';
+  const select = 'id,project_id,job_type,status,progress,engine,provider,external_job_id,output_asset_ids,parameters,proof,error_code,error_message,technical_error,human_message,current_stage,created_at,started_at,finished_at';
   const url = `${PROJECT_URL}/rest/v1/render_jobs?select=${encodeURIComponent(select)}&id=eq.${encodeURIComponent(jobId)}&limit=1`;
   const rows = await readJson(await fetchImpl(url, { headers: authHeaders(token) }), 'job_lookup');
   const job = Array.isArray(rows) ? rows[0] : null;
@@ -32,13 +34,17 @@ export async function getNativeMusicJob({ token, jobId, fetchImpl = globalThis.f
   return job;
 }
 
-export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 45 * 60 * 1000, onProgress = () => {} }) {
+export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 20 * 60 * 1000, onProgress = () => {} }) {
   const started = Date.now();
   for (;;) {
     const job = await getNativeMusicJob({ token, jobId, fetchImpl });
     onProgress(job);
     if (TERMINAL.has(String(job.status))) {
-      if (job.status !== 'completed') throw new Error(job.error_message || job.error_code || `music_job_${job.status}`);
+      if (job.status !== 'completed') {
+        const error = new Error(job.error_code || job.error_message || `music_job_${job.status}`);
+        error.detail = job.technical_error || job.error_message || null;
+        throw error;
+      }
       if (!Array.isArray(job.output_asset_ids) || job.output_asset_ids.length !== 1) throw new Error('music_output_incomplete');
       if (job.proof?.verified !== true) throw new Error('music_proof_missing');
       return job;
@@ -97,5 +103,6 @@ export const NATIVE_MUSIC_RESULT_RUNTIME = Object.freeze({
   jobType: 'music_generation',
   outputKind: 'full_mix',
   bucket: 'audio-private',
+  maxWaitMs: 20 * 60 * 1000,
   terminalStates: [...TERMINAL],
 });

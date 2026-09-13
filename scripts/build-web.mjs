@@ -37,6 +37,10 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
+// Strip only source-layout indentation and blank lines from shipped CSS. This keeps
+// every selector/declaration/token intact while avoiding source-formatting bytes in
+// the production artifact.
+await compactCssLayout(out);
 await assertBuiltRelativeImportsResolve(out);
 
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
@@ -46,6 +50,23 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   builtAt: new Date().toISOString(),
 }, null, 2)}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
+
+async function compactCssLayout(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactCssLayout(path);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.css')) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/\r/g, '')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{2,}/g, '\n');
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
 
 async function assertBuiltRelativeImportsResolve(directory) {
   const files = await collectModules(directory);
