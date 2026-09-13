@@ -2,6 +2,7 @@ name: Cloudflare Runtime Gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'cloudflare/**'
       - 'wrangler.jsonc'
@@ -46,7 +47,7 @@ jobs:
         run: npx --yes wrangler@4.127.1 deploy --dry-run --outdir .cloudflare-dry-run
 
   physical-preview:
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
