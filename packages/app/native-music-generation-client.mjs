@@ -6,6 +6,7 @@ import { resolveNativeMusicResult, waitForNativeMusic } from './native-music-res
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
 const DISPATCH_ENDPOINT = `${PROJECT_URL}/functions/v1/compute-kaggle-v58`;
+const CAPACITY_WAIT_MS = 8 * 60 * 1000;
 export const NATIVE_MUSIC_GENERATION_SCHEMA = 'pablovoice_native_music_generation_v2';
 
 function headers(token) {
@@ -19,6 +20,22 @@ function freshVariationSeed() {
 }
 async function readJson(response) {
   return response.json().catch(() => ({}));
+}
+function waitWithAbort(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve(false);
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve(value);
+    };
+    const onAbort = () => done(false);
+    const timer = setTimeout(() => done(true), Math.max(0, Number(ms) || 0));
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+  });
 }
 function rememberedFingerprints(localProject, sessionFingerprints) {
   const persisted = (localProject?.songCreation?.takes || [])
@@ -241,13 +258,39 @@ export class NativeMusicGenerationClient {
     };
     const request = () => this.fetch(this.endpoint, { method: 'POST', headers: headers(this.auth.session?.accessToken || session.accessToken), body: JSON.stringify(body), signal });
     onProgress({ status: 'dispatching', progress: 10, current_stage: 'gpu_dispatch', human_message: 'Direção pronta. Enviando a música para o motor de alta qualidade' });
-    let response = await request();
-    if (response.status === 401 && !signal?.aborted) {
-      this.auth.clearSession({ keepDevice: true });
-      session = await this.auth.ensureSession().catch(() => null);
-      if (session?.accessToken) response = await request();
+
+    const capacityDeadline = Date.now() + CAPACITY_WAIT_MS;
+    let response = null;
+    let dispatch = null;
+    for (;;) {
+      if (signal?.aborted) return { ok: false, error: 'request_cancelled', director, aiDirection, generatedLyrics, fallback_allowed: false };
+      response = await request();
+      if (response.status === 401 && !signal?.aborted) {
+        this.auth.clearSession({ keepDevice: true });
+        session = await this.auth.ensureSession().catch(() => null);
+        if (session?.accessToken) response = await request();
+      }
+      dispatch = await readJson(response);
+      const busy = dispatch?.error === 'music_compute_busy' || response.status === 429;
+      if (!busy) break;
+      if (Date.now() >= capacityDeadline) {
+        return {
+          ok: false,
+          error: 'music_compute_busy_timeout',
+          detail: dispatch?.detail || 'shared_gpu_capacity',
+          requestId: dispatch?.job_id || null,
+          director,
+          aiDirection,
+          generatedLyrics,
+          fallback_allowed: false,
+        };
+      }
+      const retrySeconds = Math.max(10, Math.min(45, Number(dispatch?.retry_after_seconds) || 30));
+      onProgress({ status: 'waiting_for_gpu', progress: 11, current_stage: 'gpu_capacity', human_message: 'A GPU está terminando outra criação. Sua música entra automaticamente na próxima vaga.' });
+      const shouldContinue = await waitWithAbort(retrySeconds * 1000, signal);
+      if (!shouldContinue) return { ok: false, error: 'request_cancelled', director, aiDirection, generatedLyrics, fallback_allowed: false };
     }
-    const dispatch = await readJson(response);
+
     if (!response.ok || dispatch?.ok !== true || !dispatch?.job_id) {
       return {
         ok: false,
@@ -276,7 +319,7 @@ export class NativeMusicGenerationClient {
         ok: true,
         schema: NATIVE_MUSIC_GENERATION_SCHEMA,
         ...result,
-        source: 'pablovoice_native_music_v2_1',
+        source: 'pablovoice_native_music_v2_2',
         songId: null,
         remoteProjectId: linked.project.id,
         director,
@@ -286,19 +329,20 @@ export class NativeMusicGenerationClient {
         fallback_allowed: false,
       };
     } catch (error) {
-      return { ok: false, error: error?.message || 'native_music_failed', requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
+      return { ok: false, error: error?.message || 'native_music_failed', detail: error?.detail || null, requestId: dispatch.job_id, director, aiDirection, generatedLyrics, fallback_allowed: false };
     }
   }
 }
 
 export const NATIVE_MUSIC_ENDPOINTS = Object.freeze({ dispatch: DISPATCH_ENDPOINT });
 export const PABLOVOICE_MUSIC_RUNTIME = Object.freeze({
-  version: '2.1.0',
+  version: '2.2.0',
   directionEngine: 'pablovoice_ai_direction_plus_song_director_v2',
-  primaryExecution: 'transparent_device_open_model_gpu',
+  primaryExecution: 'transparent_device_serialized_open_model_gpu',
   userLoginRequired: false,
   passwordPrompt: false,
   offlineMode: false,
   localDraft: 'disabled',
   fabricatedFallback: false,
+  capacityWaitMs: CAPACITY_WAIT_MS,
 });
