@@ -12,6 +12,10 @@ on:
       - 'supabase/functions/progress-kaggle-pipeline-job-v58/index.ts'
       - 'supabase/functions/complete-kaggle-pipeline-job-v58/index.ts'
 
+concurrency:
+  group: pablovoice-real-composition-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 env:
   PV_STUDIO_ORIGIN: https://studia-voice.ppatrickxxz.workers.dev
 
