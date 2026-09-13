@@ -28,6 +28,7 @@ Deno.serve(async(req:Request)=>{
     const aceRevision=String(body?.ace_revision||'')
     const aceModel=String(body?.ace_model||'')
     const seed=Number(body?.generation_seed)
+    const shift=Number(body?.generation_shift)
     if(!/^[0-9a-f-]{36}$/i.test(jobId))return json({ok:false,error:'invalid_job_id'},400)
     if(token.length<32||token.length>512)return json({ok:false,error:'invalid_callback_token'},401)
     if(!isSha(audioSha))return json({ok:false,error:'invalid_sha256_proof'},400)
@@ -54,11 +55,12 @@ Deno.serve(async(req:Request)=>{
     const {data:claim}=await admin.from('render_jobs').update({status:'finalizing',progress:95,current_stage:'verifying',heartbeat_at:now,human_message:'Validando o áudio gerado',error_code:null,error_message:null,technical_error:null,next_retry_at:null}).eq('id',jobId).in('status',ACTIVE_MUSIC_STATUSES).select('id')
     if(!claim?.length)return json({ok:false,error:'job_already_claimed'},409)
     claimed=true
-    const metadata={engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,worker:'kaggle_ticketed',provider:'kaggle',purpose:'generated_reference_mix',generation_seed:Number.isFinite(seed)?seed:null,bpm:Number(p.bpm)||null,keyscale:String(p.keyscale||''),instrumental:Boolean(p.instrumental),proof_version:'pablovoice_native_music_v2'}
+    const executedShift=Number.isFinite(shift)?shift:(Number.isFinite(Number(p.shift))?Number(p.shift):null)
+    const metadata={engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,worker:'kaggle_ticketed',provider:'kaggle',purpose:'generated_reference_mix',generation_seed:Number.isFinite(seed)?seed:null,generation_shift:executedShift,bpm:Number(p.bpm)||null,keyscale:String(p.keyscale||''),instrumental:Boolean(p.instrumental),proof_version:'pablovoice_native_music_v2_1'}
     const {data:asset,error:assetErr}=await admin.from('audio_assets').insert({project_id:job.project_id,version_id:job.version_id,user_id:job.user_id,kind:'full_mix',storage_bucket:'audio-private',storage_path:outputPath,original_name:`generated-music-${jobId.slice(0,8)}.flac`,mime_type:mimeType,size_bytes:audioSize,duration_seconds:duration,sample_rate:Math.round(sampleRate),channels:Math.round(channels),sha256:audioSha,metadata}).select('id').maybeSingle()
     if(assetErr||!asset?.id)throw new Error(`asset_insert_failed: ${assetErr?.message||'unknown'}`)
-    const cleaned={...p};delete cleaned.kaggle_callback_hash
-    const proof={verified:true,worker:'kaggle_ticketed',engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,audio_sha256:audioSha,audio_size_bytes:audioSize,duration_seconds:duration,sample_rate:Math.round(sampleRate),channels:Math.round(channels),output_asset_id:asset.id,generation_seed:Number.isFinite(seed)?seed:null}
+    const cleaned={...p,generation_seed:Number.isFinite(seed)?seed:p.generation_seed,generation_shift:executedShift};delete cleaned.kaggle_callback_hash
+    const proof={verified:true,worker:'kaggle_ticketed',engine:'ACE-Step 1.5',model:ACE_MODEL,model_revision:ACE_REVISION,audio_sha256:audioSha,audio_size_bytes:audioSize,duration_seconds:duration,sample_rate:Math.round(sampleRate),channels:Math.round(channels),output_asset_id:asset.id,generation_seed:Number.isFinite(seed)?seed:null,generation_shift:executedShift}
     const {error:finishErr}=await admin.from('render_jobs').update({status:'completed',progress:100,current_stage:'completed',heartbeat_at:now,human_message:'Música criada',engine:'ace_step_1_5_turbo',provider:'kaggle',output_asset_ids:[asset.id],proof,error_code:null,error_message:null,technical_error:null,next_retry_at:null,finished_at:now,parameters:cleaned}).eq('id',jobId).eq('status','finalizing')
     if(finishErr)throw new Error(`job_finalize_failed: ${finishErr.message}`)
     return json({ok:true,job_id:jobId,asset_id:asset.id,proof})
