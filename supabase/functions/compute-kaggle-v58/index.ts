@@ -45,13 +45,27 @@ function captionFromPlan(plan:any,negativeStyles:any[]){
   const rawBrief=String(plan?.brief||'').trim()
   const marker='PabloVoice 2.0 Song DNA:'
   const markerAt=rawBrief.indexOf(marker)
-  const userBrief=clean(markerAt>=0?rawBrief.slice(0,markerAt):rawBrief,285)
-  const songDna=clean(markerAt>=0?rawBrief.slice(markerAt+marker.length):'',145)
-  const style=[clean(plan?.genre,48),clean(plan?.mood,72)].filter(Boolean).join(', ')
+  const userBrief=clean(markerAt>=0?rawBrief.slice(0,markerAt):rawBrief,120)
+  const songDna=clean(markerAt>=0?rawBrief.slice(markerAt+marker.length):'',75)
+  const style=[clean(plan?.genre,24),clean(plan?.mood,28)].filter(Boolean).join(', ')
   const singer=plan?.singerProfile||{}
-  const singerDirection=[clean(singer.voiceType,16),clean(singer.tone,55),clean(singer.delivery,65)].filter(Boolean).join(', ')
-  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,60)).filter(Boolean).slice(0,6).join(', ')
-  const parts=[userBrief,style?`Style: ${style}`:'',songDna?`Direction: ${songDna}`:'',singerDirection?`Vocal: ${singerDirection}`:'',avoid?`Avoid: ${avoid}`:''].filter(Boolean)
+  const lowMidi=clamp(Math.round(Number(singer.lowMidi)||48),24,96)
+  const highMidi=clamp(Math.round(Number(singer.highMidi)||67),lowMidi,108)
+  const singerDirection=[
+    clean(singer.voiceType,12),
+    clean(singer.tone,20),
+    clean(singer.delivery,24),
+    `MIDI ${lowMidi}-${highMidi}`,
+    singer.falsetto?'falsetto ok':'no falsetto',
+  ].filter(Boolean).join(', ')
+  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,24)).filter(Boolean).slice(0,5).join(', ')
+  const parts=[
+    userBrief,
+    style?`Style: ${style}`:'',
+    singerDirection?`Vocal: ${singerDirection}`:'',
+    avoid?`Avoid: ${avoid}`:'',
+    songDna?`Direction: ${songDna}`:'',
+  ].filter(Boolean)
   return parts.join('. ').slice(0,512)
 }
 async function kaggleRpc(token:string,method:string,payload:any){
