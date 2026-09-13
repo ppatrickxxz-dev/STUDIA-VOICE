@@ -79,7 +79,7 @@ def write_generation_script(repo,tmp):
     generation=TICKET['generation']
     script=tmp/'generate_once.py'
     payload=json.dumps(generation,ensure_ascii=False)
-    script.write_text("""import json, os, traceback
+    script.write_text("""import json, os, traceback, torch
 from pathlib import Path
 from acestep.handler import AceStepHandler
 from acestep.inference import GenerationParams, GenerationConfig, generate_music
@@ -87,35 +87,78 @@ from acestep.inference import GenerationParams, GenerationConfig, generate_music
 g=json.loads(os.environ['PV_GENERATION_JSON'])
 repo=Path(os.environ['PV_ACE_REPO'])
 out=Path(os.environ['PV_OUTPUT_DIR']); out.mkdir(parents=True,exist_ok=True)
+
+def next_seed(base, attempt):
+    # Keep retries deterministic enough for provenance while escaping a
+    # numerically unstable latent sample.
+    return ((int(base) + attempt * 104729) % 2147483646) + 1
+
+def numeric_failure(value):
+    text=str(value or '').lower()
+    return 'nan or inf latents' in text or 'nan=' in text or 'float16 overflow' in text
+
 try:
     handler=AceStepHandler()
     status,ok=handler.initialize_service(project_root=str(repo),config_path='acestep-v15-turbo',device='cuda',use_flash_attention=False,compile_model=False,offload_to_cpu=False,offload_dit_to_cpu=False,prefer_source='modelscope')
     if not ok: raise RuntimeError('ace_init_failed: '+str(status))
-    params=GenerationParams(
-        caption=g['caption'],
-        lyrics=g['lyrics'],
-        instrumental=bool(g['instrumental']),
-        bpm=int(g['bpm']),
-        keyscale=g.get('keyscale',''),
-        timesignature=g.get('timesignature','4'),
-        vocal_language=g.get('vocal_language','unknown'),
-        duration=float(g['duration']),
-        thinking=False,
-        use_cot_metas=False,
-        use_cot_caption=False,
-        use_cot_language=False,
-        use_constrained_decoding=bool(g.get('use_constrained_decoding',True)),
-        inference_steps=int(g.get('inference_steps',8)),
-        shift=float(g.get('shift',3.0)),
-        seed=int(g['seed']),
-        task_type='text2music',
-        dcw_enabled=False,
-    )
-    config=GenerationConfig(batch_size=1,seeds=[int(g['seed'])],use_random_seed=False,audio_format='flac')
-    result=generate_music(handler,None,params,config,save_dir=str(out))
-    if not result.success: raise RuntimeError('ace_generation_failed: '+str(result.error or result.status_message))
-    if not result.audios or not result.audios[0].get('path'): raise RuntimeError('ace_output_missing')
-    print('PV_OUTPUT_PATH='+str(result.audios[0]['path']))
+
+    requested_shift=float(g.get('shift',3.0))
+    major,minor=torch.cuda.get_device_capability() if torch.cuda.is_available() else (0,0)
+    # Kaggle's fixed T4 is pre-Ampere (SM 7.5). ACE-Step 1.5 runs its DiT in
+    # float16 there; shift=3 can overflow entire latent tensors. Use the
+    # conservative dataclass default on pre-Ampere while retaining the requested
+    # turbo shift on Ampere+ hardware.
+    safe_shift=1.0 if major and major < 8 else requested_shift
+    base_seed=int(g['seed'])
+    generated=None
+    used_seed=None
+    last_error=None
+
+    for attempt in range(3):
+        seed=next_seed(base_seed,attempt)
+        params=GenerationParams(
+            caption=g['caption'],
+            lyrics=g['lyrics'],
+            instrumental=bool(g['instrumental']),
+            bpm=int(g['bpm']),
+            keyscale=g.get('keyscale',''),
+            timesignature=g.get('timesignature','4'),
+            vocal_language=g.get('vocal_language','unknown'),
+            duration=float(g['duration']),
+            thinking=False,
+            use_cot_metas=False,
+            use_cot_caption=False,
+            use_cot_language=False,
+            use_constrained_decoding=bool(g.get('use_constrained_decoding',True)),
+            inference_steps=int(g.get('inference_steps',8)),
+            shift=safe_shift,
+            seed=seed,
+            task_type='text2music',
+            dcw_enabled=False,
+        )
+        config=GenerationConfig(batch_size=1,seeds=[seed],use_random_seed=False,audio_format='flac')
+        try:
+            result=generate_music(handler,None,params,config,save_dir=str(out))
+            if not result.success:
+                raise RuntimeError('ace_generation_failed: '+str(result.error or result.status_message))
+            if not result.audios or not result.audios[0].get('path'):
+                raise RuntimeError('ace_output_missing')
+            generated=Path(result.audios[0]['path'])
+            used_seed=seed
+            break
+        except Exception as exc:
+            last_error=exc
+            if not numeric_failure(exc) or attempt >= 2:
+                raise
+            print('PV_NUMERIC_RETRY attempt='+str(attempt+1)+' seed='+str(seed)+' reason='+str(exc)[:500],flush=True)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    if generated is None or used_seed is None:
+        raise RuntimeError('ace_generation_failed_after_numeric_retries: '+str(last_error or 'unknown'))
+    print('PV_OUTPUT_PATH='+str(generated),flush=True)
+    print('PV_GENERATION_SEED='+str(used_seed),flush=True)
+    print('PV_GENERATION_SHIFT='+str(safe_shift),flush=True)
 except Exception:
     traceback.print_exc()
     raise
@@ -150,8 +193,12 @@ def run():
             raise RuntimeError('ace_generation_process_failed: '+diagnostic)
         post_progress('heartbeat')
         output_line=next((line for line in completed.stdout.splitlines() if line.startswith('PV_OUTPUT_PATH=')),None)
+        seed_line=next((line for line in completed.stdout.splitlines() if line.startswith('PV_GENERATION_SEED=')),None)
+        shift_line=next((line for line in completed.stdout.splitlines() if line.startswith('PV_GENERATION_SHIFT=')),None)
         if not output_line: raise RuntimeError('ace_output_path_missing '+completed.stdout[-1200:])
         generated=Path(output_line.split('=',1)[1].strip())
+        used_seed=int(seed_line.split('=',1)[1].strip()) if seed_line else int(TICKET['generation']['seed'])
+        used_shift=float(shift_line.split('=',1)[1].strip()) if shift_line else float(TICKET['generation'].get('shift',3.0))
         if not generated.exists(): raise RuntimeError('generated_file_missing')
         if generated.stat().st_size<=4096: raise RuntimeError('generated_file_too_small')
         meta=probe_audio(generated)
@@ -169,7 +216,8 @@ def run():
             'mime_type':'audio/flac',
             'ace_revision':ACE_REVISION,
             'ace_model':ACE_MODEL,
-            'generation_seed':int(TICKET['generation']['seed']),
+            'generation_seed':used_seed,
+            'generation_shift':used_shift,
         })
         print('PABLOVOICE_NATIVE_MUSIC_OK',json.dumps(result,ensure_ascii=False),flush=True)
     except Exception as exc:
@@ -185,5 +233,5 @@ run()
 
 Deno.serve((req: Request) => {
   if (req.method !== 'GET') return new Response('method_not_allowed', { status: 405 });
-  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v4-diagnostics' } });
+  return new Response(PY, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-pablovoice-worker': 'native-music-ace-step-v5-t4-stable' } });
 });
