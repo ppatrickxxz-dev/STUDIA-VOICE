@@ -52,7 +52,7 @@ test('native music creation obtains remote AI production direction, uses Song DN
   assert.doesNotMatch(dispatcher, /seed:Number\.isFinite\(Number\(plan\.seed\)\)/);
 });
 
-test('native music worker pins ACE-Step source identity and uses turbo prompt-adherence settings', async () => {
+test('native music worker pins ACE-Step, protects Kaggle T4 from fp16 latent overflow and retries only inside the same worker', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));
@@ -61,7 +61,13 @@ test('native music worker pins ACE-Step source identity and uses turbo prompt-ad
   assert.match(text, /prefer_source='modelscope'/);
   assert.match(text, /thinking=False/);
   assert.match(text, /use_constrained_decoding=bool\(g\.get\('use_constrained_decoding',True\)\)/);
-  assert.match(text, /shift=float\(g\.get\('shift',3\.0\)\)/);
+  assert.match(text, /requested_shift=float\(g\.get\('shift',3\.0\)\)/);
+  assert.match(text, /safe_shift=1\.0 if major and major < 8 else requested_shift/);
+  assert.match(text, /for attempt in range\(3\)/);
+  assert.match(text, /PV_NUMERIC_RETRY/);
+  assert.match(text, /torch\.cuda\.empty_cache/);
+  assert.match(text, /PV_GENERATION_SEED=/);
+  assert.match(text, /PV_GENERATION_SHIFT=/);
   assert.match(text, /caption_too_long/);
   assert.match(text, /task_type='text2music'/);
   assert.match(text, /audio_format='flac'/);
@@ -70,6 +76,13 @@ test('native music worker pins ACE-Step source identity and uses turbo prompt-ad
   assert.match(text, /upload_to_signed_url/);
   assert.match(text, /callback_token/);
   assert.doesNotMatch(text, /KAGGLE_KEY|KAGGLE_USERNAME|service_role/i);
+});
+
+test('music progress endpoint never advertises a retry that has no second dispatch executor', async () => {
+  const text = await source('supabase/functions/progress-kaggle-pipeline-job-v58/index.ts');
+  assert.match(text, /music_numeric_instability/);
+  assert.match(text, /job\.job_type!=='music_generation'&&!!c\.transient/);
+  assert.match(text, /Tente novamente em instantes/);
 });
 
 test('native music callback verifies identity, callback, storage and hash before asset persistence', async () => {
@@ -81,6 +94,7 @@ test('native music callback verifies identity, callback, storage and hash before
   assert.match(text, /audio-private/);
   assert.match(text, /kind:'full_mix'/);
   assert.match(text, /sha256:audioSha/);
+  assert.match(text, /generation_shift:executedShift/);
   assert.match(text, /proof=\{verified:true/);
   assert.match(text, /status:'finalizing'/);
   assert.match(text, /status:'completed'/);
@@ -88,11 +102,14 @@ test('native music callback verifies identity, callback, storage and hash before
   assert.match(text, new RegExp(MODEL));
 });
 
-test('browser runtime can only address owned RLS job/asset rows and verifies downloaded bytes', async () => {
+test('browser runtime can only address owned RLS job/asset rows, bounds waiting and verifies downloaded bytes', async () => {
   const resultRuntime = await source('packages/app/native-music-result-runtime.mjs');
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(resultRuntime, /authorization = `Bearer \$\{token\}`/);
   assert.match(resultRuntime, /job_type !== 'music_generation'/);
+  assert.match(resultRuntime, /'retrying'/);
+  assert.match(resultRuntime, /maxWaitMs = 20 \* 60 \* 1000/);
+  assert.match(resultRuntime, /technical_error/);
   assert.match(resultRuntime, /asset\.kind !== 'full_mix'/);
   assert.match(resultRuntime, /asset\.storage_bucket !== 'audio-private'/);
   assert.match(resultRuntime, /music_sha256_mismatch/);
