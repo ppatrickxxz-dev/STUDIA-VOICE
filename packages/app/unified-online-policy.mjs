@@ -59,7 +59,10 @@ export function installUnifiedOnlinePolicy() {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['data-pv-network-policy', 'data-pv-network-mode', 'data-pv-offline-mode'],
+    // Deliberately observe only the form policy marker. Watching attributes
+    // that applyPolicy itself owns can create observer feedback and starve the
+    // Creator click path under render churn.
+    attributeFilter: ['data-pv-network-policy'],
   });
   window.addEventListener('online', queueApply);
   window.addEventListener('offline', queueApply);
