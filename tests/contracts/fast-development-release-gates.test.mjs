@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const compositionCanary = await readFile(new URL('../../.github/workflows/native-music-pr-composition-canary.yml', import.meta.url), 'utf8');
+const compositionCanaryScript = await readFile(new URL('../../.github/scripts/real-composition-canary.mjs', import.meta.url), 'utf8');
 const cloudflareGate = await readFile(new URL('../../.github/workflows/cloudflare-runtime-gate.yml', import.meta.url), 'utf8');
 
 const readyEvent = /types:\s*\[opened, synchronize, reopened, ready_for_review\]/;
@@ -30,9 +31,12 @@ test('marking a PR ready re-enables the real composition canary instead of delet
   assert.match(compositionCanary, /real-composition:/);
   assert.match(compositionCanary, /github\.event\.pull_request\.draft == false/);
   assert.match(compositionCanary, /Compose a real song through the same transparent-user runtime/);
-  assert.match(compositionCanary, /REAL_COMPOSITION_PATH_VERIFIED/);
-  assert.match(compositionCanary, /ffprobe/);
-  assert.match(compositionCanary, /ffmpeg/);
+  assert.match(compositionCanary, /node \.github\/scripts\/real-composition-canary\.mjs/);
+  assert.match(compositionCanaryScript, /REAL_COMPOSITION_PATH_VERIFIED/);
+  assert.match(compositionCanaryScript, /ACOUSTIC_VOCAL_PRESENCE_VERIFIED/);
+  assert.match(compositionCanaryScript, /ffprobe/);
+  assert.match(compositionCanaryScript, /ffmpeg/);
+  assert.match(compositionCanaryScript, /demucs/);
 });
 
 test('Cloudflare keeps cheap contracts in draft and defers only the physical preview', () => {
@@ -41,7 +45,7 @@ test('Cloudflare keeps cheap contracts in draft and defers only the physical pre
   const physicalStart = cloudflareGate.indexOf('  physical-preview:');
   assert.ok(dryRunStart >= 0 && physicalStart > dryRunStart, 'Cloudflare dry-run and physical preview jobs must exist');
 
-  const dryRun = cloudflareGate.slice(dryRunStart, physicalStart);
+  const dryRun = ci.slice(dryRunStart, physicalStart);
   const physical = cloudflareGate.slice(physicalStart);
   assert.doesNotMatch(dryRun, /pull_request\.draft/, 'Cloudflare build/contracts must still run in draft');
   assert.match(physical, /github\.event_name == 'pull_request' && github\.event\.pull_request\.draft == false/);
