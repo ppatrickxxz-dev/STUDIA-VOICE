@@ -42,6 +42,7 @@ for (const name of await readdir(out)) {
 await compactModuleLayout(out);
 await compactCssLayout(out);
 await compactHtmlLayout(out);
+await compactStructuredAssets(out);
 await assertBuiltRelativeImportsResolve(out);
 
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
@@ -49,7 +50,7 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   version: process.env.PV_VERSION || '2.4.0',
   commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local',
   builtAt: new Date().toISOString(),
-}, null, 2)}\n`, 'utf8');
+})}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
 
 async function compactModuleLayout(directory) {
@@ -109,6 +110,37 @@ async function compactHtmlLayout(directory) {
       .replace(/\n[ \t]+/g, '\n')
       .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{2,}/g, '\n');
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
+
+async function compactStructuredAssets(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactStructuredAssets(path);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (entry.name.endsWith('.json') || entry.name.endsWith('.webmanifest')) {
+      const source = await readFile(path, 'utf8');
+      try {
+        const compacted = `${JSON.stringify(JSON.parse(source))}\n`;
+        if (compacted !== source) await writeFile(path, compacted, 'utf8');
+      } catch {
+        // Non-JSON text with one of these suffixes remains untouched.
+      }
+      continue;
+    }
+    if (!entry.name.endsWith('.svg')) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/>\s+</g, '><')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{2,}/g, '\n')
+      .trim() + '\n';
     if (compacted !== source) await writeFile(path, compacted, 'utf8');
   }
 }
