@@ -41,18 +41,19 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
-// Production CSS keeps the exact rules/tokens while dropping comments and source
-// formatting. Strings are preserved byte-for-byte so visible copy/data URLs cannot
-// be changed by the compactor.
+// Production-only compaction: source remains readable in Git. CSS keeps the same
+// selectors/tokens; HTML preserves raw text blocks; JSON/webmanifest is parsed and
+// serialized so only formatting bytes are removed.
 await compactCssLayout(out);
+await compactStaticMarkup(out);
 await assertBuiltRelativeImportsResolve(out);
 
-await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
+await writeFile(resolve(out, 'build.json'), JSON.stringify({
   product: 'PabloVoice',
   version: process.env.PV_VERSION || '2.4.0',
   commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local',
   builtAt: new Date().toISOString(),
-}, null, 2)}\n`, 'utf8');
+}), 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
 
 async function compactCssLayout(directory) {
@@ -124,7 +125,55 @@ function minifyCssLayout(source) {
     output += char;
   }
 
-  return output.trim();
+  return output.trim().replace(/;}/g, '}');
+}
+
+async function compactStaticMarkup(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactStaticMarkup(path);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+
+    if (entry.name.endsWith('.html')) {
+      const source = await readFile(path, 'utf8');
+      const compacted = minifyHtmlLayout(source);
+      if (compacted !== source) await writeFile(path, compacted, 'utf8');
+      continue;
+    }
+
+    if (entry.name.endsWith('.json') || entry.name.endsWith('.webmanifest')) {
+      const source = await readFile(path, 'utf8');
+      try {
+        const compacted = JSON.stringify(JSON.parse(source));
+        if (compacted !== source) await writeFile(path, compacted, 'utf8');
+      } catch {
+        // Fail-safe: malformed/non-JSON files are left untouched and the existing
+        // build/runtime gates remain responsible for rejecting them.
+      }
+    }
+  }
+}
+
+function minifyHtmlLayout(source) {
+  const protectedBlocks = [];
+  const protectedSource = source.replace(/<(pre|textarea|script|style)\b[\s\S]*?<\/\1>/gi, (block) => {
+    const token = `__PV_RAW_HTML_${protectedBlocks.length}__`;
+    protectedBlocks.push(block);
+    return token;
+  });
+
+  let compacted = protectedSource
+    .replace(/<!--(?!\[if)[\s\S]*?-->/gi, '')
+    .replace(/>\s+</g, '><')
+    .trim();
+
+  protectedBlocks.forEach((block, index) => {
+    compacted = compacted.replace(`__PV_RAW_HTML_${index}__`, block);
+  });
+  return compacted;
 }
 
 async function assertBuiltRelativeImportsResolve(directory) {
