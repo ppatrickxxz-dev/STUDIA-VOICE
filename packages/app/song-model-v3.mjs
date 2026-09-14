@@ -12,12 +12,13 @@ export function ensureSongModelV3(project){
   const instrumental=Boolean(take&&(take.instrumentalOnly===true||take.mode==='instrumental'||take.creationMode==='instrumental_first'));
   const native=take?.vocalPerformance?.status==='ready'||take?.vocalPerformance?.schema===PABLOVOICE_VOCAL_PERFORMANCE_SCHEMA?take.vocalPerformance:vp.status==='ready'&&vp.authority==='master_vocal_performance'?vp:null;
   const sourceTakeId=take?.id||old.sourceTakeId||null,masterTrackId=take?.referenceTrackId||take?.instrumentalTrackId||mix.masterTrackId||project.activeTrackId||null,guideTrackId=take?.guideTrackId||vp.guideTrackId||null;
-  const lyrics=String(project.lyrics??take?.lyricsSnapshot??comp.lyrics??''),sections=copy(take?.sections??comp.sections);
-  project.songModel={...old,schema:PABLOVOICE_SONG_MODEL_SCHEMA,updatedAt:Date.now(),sourceTakeId,
+  const lyrics=String(project.lyrics??take?.lyricsSnapshot??comp.lyrics??''),sections=copy(take?.sections??comp.sections),{updatedAt:oldUpdatedAt,...stableOld}=old;
+  const next={...stableOld,schema:PABLOVOICE_SONG_MODEL_SCHEMA,sourceTakeId,
     composition:{...comp,schema:'pablovoice_composition_v1',sourceTakeId,lyrics,bpm:num(take?.bpm??comp.bpm),key:take?.key??comp.key??null,genre:take?.genre??comp.genre??null,mood:take?.mood??comp.mood??null,durationSeconds:num(take?.durationSeconds??comp.durationSeconds),sections,arrangementMap:project.arrangementMap||comp.arrangementMap||null,status:take?'ready':comp.status||'draft'},
     vocalPerformance:{...vp,schema:PABLOVOICE_VOCAL_PERFORMANCE_SCHEMA,sourceTakeId,guideTrackId,status:instrumental?'not_required':native?'ready':take?'capture_required':'not_created',authority:instrumental?'instrumental_only':native?'master_vocal_performance':'legacy_guide_not_authoritative',source:native?.source||(take?.guideType==='synth_melody'?'legacy_synth_guide':vp.source||null),performance:native?.performance||vp.performance||null,preservationRequired:!instrumental},
     voice:{...voice,schema:PABLOVOICE_VOICE_RENDER_SCHEMA,activeProfileId:voice.activeProfileId||'guide',guideProfile:{id:'guide',label:'Voz guia',authorized:true,kind:'guide',...(voice.guideProfile||{})},personalProfile:voice.personalProfile||null,replacementLock:VOICE_REPLACEMENT_LOCK,replacementStatus:instrumental?'not_applicable':native?(voice.personalProfile?'ready':'needs_personal_voice'):'needs_master_vocal_performance'},
     mix:{...mix,schema:PABLOVOICE_MIX_SCHEMA,masterTrackId,trackIds:(project.tracks||[]).map(t=>t.id).filter(Boolean),stemTrackIds:(project.tracks||[]).filter(t=>String(t.role||'').includes('stem')||/stem|generated_instrumental|guide_vocal|vocal/.test(String(t.kind||''))).map(t=>t.id),status:masterTrackId?'ready':mix.status||'draft',sourceTakeId}};
+  project.songModel={...next,updatedAt:oldUpdatedAt&&JSON.stringify(stableOld)===JSON.stringify(next)?oldUpdatedAt:Date.now()};
   return project;
 }
 
