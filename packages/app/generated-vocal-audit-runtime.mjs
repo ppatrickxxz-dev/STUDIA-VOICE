@@ -49,6 +49,9 @@ export async function auditPendingCandidates() {
     && !running.has(take.id));
   if (!pending.length) return { audited: 0, pending: 0 };
 
+  // Vocal candidates are never selectable merely because a file arrived.
+  for (const take of pending) markCandidate(take.id, 'pending', 'Aguardando confirmação de voz cantada…');
+
   const session = await auth.ensureSession().catch(() => null);
   if (!session?.accessToken) return { audited: 0, pending: pending.length };
 
@@ -122,15 +125,18 @@ function markCandidate(takeId, state, message) {
   const description = card.querySelector('.pv-card-head p');
   if (description) description.textContent = message;
   const choose = card.querySelector('[data-song-select-candidate]');
-  if (choose) {
-    if (state === 'rejected') {
-      choose.disabled = true;
-      choose.textContent = 'Vocal não confirmado';
-    } else if (state === 'verified' && choose.disabled) {
-      choose.disabled = false;
-      choose.textContent = 'Usar esta versão';
-    }
+  if (!choose) return;
+
+  if (state === 'verified') {
+    choose.disabled = false;
+    choose.textContent = 'Usar esta versão';
+    return;
   }
+
+  choose.disabled = true;
+  if (state === 'rejected') choose.textContent = 'Vocal não confirmado';
+  else if (state === 'auditing') choose.textContent = 'Confirmando vocal…';
+  else choose.textContent = 'Aguardando confirmação vocal';
 }
 
 function updateCreatorStatus(project) {
@@ -158,7 +164,7 @@ installGeneratedVocalAuditRuntime();
 
 export const GENERATED_VOCAL_AUDIT_RUNTIME_POLICY = Object.freeze({
   automatic: true,
-  blocksCandidateSelectionOnFailure: true,
+  blocksCandidateSelectionUntilPass: true,
   preservesRejectedAudioForInspection: true,
   projectProofPersisted: true,
   lyricAdherence: 'pending_transcription_after_acoustic_pass',
