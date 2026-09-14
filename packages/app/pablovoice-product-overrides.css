@@ -45,9 +45,7 @@ html[data-pv-product-route="home"] .pv-product-primary {
   box-shadow: 0 16px 42px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.8);
 }
 
-html[data-pv-product-route="home"] .pv-product-primary b,
-html[data-pv-product-route="home"] .pv-product-primary small,
-html[data-pv-product-route="home"] .pv-product-primary span {
+html[data-pv-product-route="home"] .pv-product-primary * {
   color: #090a0d;
 }
 
@@ -94,8 +92,9 @@ html[data-pv-product-route="home"] .pv-product-primary small { opacity:.68; }
 @media (max-width:980px) {
   html[data-pv-product-route="home"] .pv-vnext-shell {
     display:block;
+    overflow-x:hidden;
   }
-  html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
+  html[data-pv-product-route="home"] .pv-vnext-sidebar {
     min-height:0;
   }
 }

@@ -7,16 +7,33 @@ const cors={
 }
 const json=(b:any,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...cors,'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})
 const isUuid=(v:any)=>/^[0-9a-f-]{36}$/i.test(String(v||''))
+const B09_PROJECT_ID='d64e4de9-791e-41bc-9307-7957389b2499'
 function b64(v:string){return btoa(unescape(encodeURIComponent(v)))}
 
 async function kaggleRpc(token:string,method:string,payload:any){
   const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{
-    method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Stems/1.0'},body:JSON.stringify(payload)
+    method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Stems/1.1'},body:JSON.stringify(payload)
   })
   const text=await r.text(); let out:any={}
   try{out=JSON.parse(text)}catch{out={raw:text.slice(0,1600)}}
   if(!r.ok||Number(out?.code||0)>=400)throw new Error(`Kaggle ${method}: ${out?.message||text.slice(0,600)}`)
   return out
+}
+
+async function readComputeConnection(admin:any,userId:string){
+  const {data,error}=await admin.rpc('admin_get_compute_connection',{p_user_id:userId,p_provider:'kaggle'})
+  if(error)throw error
+  return Array.isArray(data)?data[0]:null
+}
+
+async function sharedComputeConnection(admin:any,user:any){
+  let conn=await readComputeConnection(admin,user.id)
+  if((!conn?.secret||!conn?.handle)&&user?.app_metadata?.pablovoice_app_device===true){
+    const {data:anchor,error}=await admin.from('projects').select('user_id').eq('id',B09_PROJECT_ID).maybeSingle()
+    if(error)throw error
+    if(anchor?.user_id)conn=await readComputeConnection(admin,String(anchor.user_id))
+  }
+  return conn
 }
 
 Deno.serve(async(req:Request)=>{
@@ -45,9 +62,16 @@ Deno.serve(async(req:Request)=>{
     if(!isUuid(projectId))return json({ok:false,error:'invalid_project_id'},400)
     if(sourceAssetId&&!isUuid(sourceAssetId))return json({ok:false,error:'invalid_source_asset_id'},400)
 
-    const {data:connRows,error:connErr}=await admin.rpc('admin_get_compute_connection',{p_user_id:user.id,p_provider:'kaggle'})
-    if(connErr)throw connErr
-    const conn=Array.isArray(connRows)?connRows[0]:null
+    const {data:ownedProject,error:projectErr}=await userClient.from('projects').select('id').eq('id',projectId).maybeSingle()
+    if(projectErr)throw projectErr
+    if(!ownedProject)return json({ok:false,error:'project_not_found'},404)
+    if(sourceAssetId){
+      const {data:ownedAsset,error:assetErr}=await userClient.from('audio_assets').select('id,project_id').eq('id',sourceAssetId).eq('project_id',projectId).maybeSingle()
+      if(assetErr)throw assetErr
+      if(!ownedAsset)return json({ok:false,error:'source_asset_not_found'},404)
+    }
+
+    const conn=await sharedComputeConnection(admin,user)
     if(!conn?.secret||!conn?.handle)return json({ok:false,error:'kaggle_not_connected'},409)
 
     const ticketRes=await fetch(`${url}/functions/v1/create-kaggle-ticket`,{
@@ -79,7 +103,7 @@ Deno.serve(async(req:Request)=>{
 
     const now=new Date().toISOString()
     const {data:jr}=await admin.from('render_jobs').select('parameters').eq('id',jobId).maybeSingle(); const p=jr?.parameters||{}
-    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,engine:'kaggle_stems_v1',provider:'kaggle',human_message:'Separando voz e instrumental',external_job_id:String(push.kernelId),parameters:{...p,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-stems-v1',dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
-    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,kernel:full})
+    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,engine:'kaggle_stems_v1',provider:'kaggle',human_message:'Separando voz e instrumental',external_job_id:String(push.kernelId),parameters:{...p,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-stems-v1',access_mode:user?.app_metadata?.pablovoice_app_device===true?'transparent_device_shared_compute':'user_compute',dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
+    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,kernel:full,access_mode:user?.app_metadata?.pablovoice_app_device===true?'transparent_device_shared_compute':'user_compute'})
   }catch(e){return json({ok:false,error:String(e instanceof Error?e.message:e).slice(0,1400)},500)}
 })

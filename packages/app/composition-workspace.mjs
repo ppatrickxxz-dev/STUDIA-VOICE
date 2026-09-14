@@ -1,11 +1,23 @@
-const S={pop:'intro; verso; pré; refrão; verso 2; ponte; refrão final',hook:'hook cedo; refrão; pós; retornos variados',narrativa:'íntimo; cresce; refrão abre; ponte contrasta',groove:'groove conduz; versos enxutos; viradas; refrão maior'};
-let o,q=false;const $=(s,r=document)=>r.querySelector(s);
-function later(){if(q)return;q=true;queueMicrotask(()=>{q=false;sync()})}
-function sync(){const f=$('[data-song-create-form]');if(!f)return;const b=f.elements.brief;if(b){b.dataset.artist??=b.value||'';b.placeholder='Gênero, groove, timbres, energia, refrão, voz e o que evitar.'}if(!$('[data-pv-kind-switch]',f)){const n=document.createElement('div');n.className='pv-kind-switch';n.dataset.pvKindSwitch='1';n.innerHTML='<button type="button" data-pv-kind="song"><b>♪ Música</b></button><button type="button" data-pv-kind="instrumental"><b>▥ Instrumental</b></button>';b?.closest('label')?.before(n)}let w=$('[data-pv-composition]',f);if(!w){w=document.createElement('section');w.className='pv-composition';w.dataset.pvComposition='1';w.innerHTML='<header><b>COMPOSIÇÃO</b><span>Ideia → Letra → Arranjo → Voz → Produzir</span></header><article data-c="idea"><h4>01 · Ideia</h4><div data-slot="idea"></div></article><article data-c="lyrics"><h4>02 · Letra & hook</h4><button class="pv-btn" type="button" data-edit-lyrics>Editar letra</button></article><article data-c="arr"><h4>03 · Arranjo</h4><div class="pv-comp-fields"><label>Forma<select class="pv-field" data-structure><option value="">IA propõe</option><option value="pop">Pop</option><option value="hook">Hook cedo</option><option value="narrativa">Crescendo</option><option value="groove">Groove</option></select></label><label>Direção<textarea class="pv-field" rows="2" maxlength="420" data-arr placeholder="Verso íntimo; pré sobe; refrão abre…"></textarea></label><label>Preservar<input class="pv-field" maxlength="240" data-keep placeholder="letra, BPM, motivo, voz…"></label></div><div class="pv-comp-chips"><button type="button" data-chip="verso íntimo; pré cresce; refrão abre">verso → refrão</button><button type="button" data-chip="pós memorável; ponte contrasta">pós + ponte</button><button type="button" data-chip="evitar loop; variar fills e transições">menos repetição</button></div><div data-slot="adv"></div></article><article data-c="voice"><h4>04 · Voz</h4><div data-slot="voice"></div></article><article data-c="make"><h4>05 · Produzir take</h4><div data-slot="make"></div></article>';f.prepend(w)}move(f,w);const inst=!!f.elements.instrumentalFirst?.checked;f.querySelectorAll('[data-pv-kind]').forEach(x=>x.classList.toggle('active',x.dataset.pvKind===(inst?'instrumental':'song')))}
-function move(f,w){const put=(n,s)=>{const p=$(`[data-slot="${s}"]`,w);if(n&&p&&n.parentElement!==p)p.append(n)};put($('[data-pv-kind-switch]',f),'idea');put(f.elements.brief?.closest('label'),'idea');put($('[data-pv-intent-preview]',f),'idea');put($('.pv-intimate-advanced',f),'adv');put($('.pv-song-vocal-profile',f),'voice');put($('[data-pv-unified-create-card]',f),'make');put($('.pv-song-mode-grid',f),'make');put($('#pv-song-create-status',f),'make')}
-function merge(f){const w=$('[data-pv-composition]',f),b=f.elements.brief,a=String(b?.dataset.artist??b?.value??'').trim(),k=$('[data-structure]',w)?.value,r=$('[data-arr]',w)?.value.trim(),p=$('[data-keep]',w)?.value.trim();return[a,k&&`Estrutura: ${S[k]}.`,r&&`Arranjo: ${r}.`,p&&`Preservar: ${p}.`].filter(Boolean).join('\n').slice(0,1200)}
-function prep(f){const b=f?.elements.brief;if(!b||f.dataset.comp==='1')return;const a=String(b.dataset.artist??b.value??''),m=merge(f);if(!m||m===b.value)return;f.dataset.comp='1';b.value=m;queueMicrotask(()=>{if(b.value===m)b.value=a;delete f.dataset.comp})}
-function click(e){const f=e.target.closest?.('[data-song-create-form]'),k=e.target.closest?.('[data-pv-kind]');if(k&&f){e.preventDefault();f.elements.instrumentalFirst.checked=k.dataset.pvKind==='instrumental';f.elements.instrumentalFirst.dispatchEvent(new Event('change',{bubbles:true}));later();return}if(e.target.closest?.('[data-edit-lyrics]')){e.preventDefault();const l=$('#lyrics');l?.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>l?.focus(),200);return}const c=e.target.closest?.('[data-chip]');if(c){e.preventDefault();const t=$('[data-arr]',f);if(t){t.value=t.value.trim()?`${t.value.trim()}; ${c.dataset.chip}`:c.dataset.chip;t.focus()}return}if(e.target.closest?.('[data-pv-unified-create],[data-song-create-hq]'))prep(f)}
-function input(e){const f=e.target.closest?.('[data-song-create-form]');if(f&&e.target===f.elements.brief&&f.dataset.comp!=='1')e.target.dataset.artist=e.target.value}
-export function installCompositionWorkspace(){if(o)return;o=new MutationObserver(later);o.observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('input',input,true);window.addEventListener('click',click,true);later()}
-installCompositionWorkspace();export const PABLOVOICE_COMPOSITION_WORKSPACE_VERSION='v1';
+let installed = false;
+
+/**
+ * Compatibility installer kept because older boot paths still import this module.
+ * The professional song-first Creator now owns the creation surface directly.
+ * This module must never move fields, inject competing cards, or rewrite the
+ * artist brief before dispatch.
+ */
+export function installCompositionWorkspace() {
+  if (installed) return;
+  installed = true;
+  document.documentElement.dataset.pvCompositionWorkspace = 'song-first-v2';
+}
+
+installCompositionWorkspace();
+
+export const PABLOVOICE_COMPOSITION_WORKSPACE_VERSION = 'v2-song-first';
+export const PABLOVOICE_COMPOSITION_WORKSPACE_POLICY = Object.freeze({
+  injectsParallelCreator: false,
+  movesCreatorFields: false,
+  rewritesArtistBrief: false,
+  owner: 'song-creation-studio',
+});

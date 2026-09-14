@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studio', async ({ page }) => {
+test('PRODUCT UX GATE: Home starts with the song and continues into one professional Studio', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
@@ -12,16 +12,16 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
 
   const home = page.locator('#pv-product-home');
   await expect(home).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Crie a música/i })).toBeVisible();
-  await expect(home.getByRole('heading', { name: 'O que você quer criar?' })).toBeVisible();
+  await expect(home.getByRole('heading', { name: 'Comece pela música.' })).toBeVisible();
+  await expect(home.getByRole('heading', { name: 'Como ela deve soar?' })).toBeVisible();
   await expect(home.locator('[data-pv-product-prompt]')).toBeVisible();
-  await expect(home.locator('[data-pv-product-create="song"]')).toContainText('Criar música com IA');
-  await expect(home.locator('[data-pv-product-create="instrumental"]')).toContainText('Criar instrumental');
-  await expect(home).toContainText('Letra & direção');
-  await expect(home).toContainText('Beat & instrumentos');
-  await expect(home).toContainText('Arranjo & seções');
-  await expect(home).toContainText('Voice Lab & mix');
-  await expect(home).toContainText('Stems, master & export');
+  await expect(home.locator('[data-pv-product-prompt]')).toHaveAttribute('maxlength', '4000');
+  await expect(home.locator('[data-pv-product-create="song"]')).toContainText('Música com voz');
+  await expect(home.locator('[data-pv-product-create="instrumental"]')).toContainText('Instrumental');
+  await expect(home).toContainText('Continuar produzindo');
+  await expect(home).toContainText('Seu companheiro criativo');
+  await expect(home.getByText('Beat & instrumentos', { exact: true })).toHaveCount(0);
+  await expect(home.getByText('Voice Lab & mix', { exact: true })).toHaveCount(0);
 
   await expect(page.locator('#pv-intimate-home')).toBeHidden();
   await expect(page.locator('.pv-home-grid')).toBeHidden();
@@ -30,17 +30,16 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
   await expect(page.locator('[data-vnext-companion-dock]')).toBeHidden();
 
   const renderedStyles = await page.evaluate(() => {
-    const workspace = document.querySelector('.pv-product-workspace');
+    const card = document.querySelector('.pv-product-create-card');
     const prompt = document.querySelector('[data-pv-product-prompt]');
     const primary = document.querySelector('[data-pv-product-create="song"]');
-    if (!workspace || !prompt || !primary) return null;
-    const workspaceStyle = getComputedStyle(workspace);
+    if (!card || !prompt || !primary) return null;
+    const cardStyle = getComputedStyle(card);
     const promptStyle = getComputedStyle(prompt);
     const primaryStyle = getComputedStyle(primary);
     return {
-      workspaceDisplay: workspaceStyle.display,
-      workspaceBackgroundImage: workspaceStyle.backgroundImage,
-      workspaceRadius: parseFloat(workspaceStyle.borderRadius || '0'),
+      cardBackgroundImage: cardStyle.backgroundImage,
+      cardRadius: parseFloat(cardStyle.borderRadius || '0'),
       promptBackground: promptStyle.backgroundColor,
       promptRadius: parseFloat(promptStyle.borderRadius || '0'),
       primaryDisplay: primaryStyle.display,
@@ -49,9 +48,8 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
     };
   });
   expect(renderedStyles).not.toBeNull();
-  expect(renderedStyles.workspaceDisplay).toBe('grid');
-  expect(renderedStyles.workspaceBackgroundImage).toContain('linear-gradient');
-  expect(renderedStyles.workspaceRadius).toBeGreaterThanOrEqual(18);
+  expect(renderedStyles.cardBackgroundImage).toContain('linear-gradient');
+  expect(renderedStyles.cardRadius).toBeGreaterThanOrEqual(18);
   expect(renderedStyles.promptBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(renderedStyles.promptRadius).toBeGreaterThanOrEqual(18);
   expect(renderedStyles.primaryDisplay).toBe('grid');
@@ -63,13 +61,13 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
   await home.locator('[data-pv-product-create="song"]').click();
   const form = page.locator('[data-song-create-form]');
   await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
-  await expect(form.locator('input[name="brief"]')).toHaveValue(prompt);
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
-  await expect(form).toHaveAttribute('data-pv-execution-policy', 'high_quality_only');
-  await expect(form.locator('[data-pv-unified-create]')).toBeVisible();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('textarea[name="brief"]')).toHaveValue(prompt);
+  await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
+  await expect(form.locator('[data-song-create-hq]')).toBeVisible();
+  await expect(form.locator('[data-song-create-hq]')).toContainText('Criar 2 versões');
+  await expect(form.locator('[data-pv-unified-create]')).toHaveCount(0);
   await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
-  await expect(form.locator('[data-song-create-button]')).toBeHidden();
+  await expect(form.locator('.pv-create-adjustments')).not.toHaveAttribute('open', '');
   await expect(page.locator('#pv-remote-pairing')).toHaveCount(0);
   await expect(page.locator('[data-remote-pair-form]')).toHaveCount(0);
   await expect(page.locator('input[type="email"]')).toHaveCount(0);

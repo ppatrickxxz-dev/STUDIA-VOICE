@@ -31,66 +31,64 @@ test('Intimate Recorder canon keeps Pablo, all companions and living state syste
   assert.match(canon, /violet\/purple is no longer the primary product color/i);
 });
 
-test('PabloVoice exposes one connected Studio with no login prompt and no offline/local product mode', async () => {
-  const [creator, auth, access, productCanon, index, unifiedCss] = await Promise.all([
+test('PabloVoice is one Studio whose local project survives offline while professional generation queues for connection', async () => {
+  const [creator, auth, access, productCanon, index, songCreator] = await Promise.all([
     read('packages/app/creator-unified-runtime.mjs'),
     read('packages/app/remote-auth-ui.mjs'),
     read('packages/app/unified-online-policy.mjs'),
     read('docs/PRODUCT_CANON.md'),
     read('packages/app/index.html'),
-    read('packages/app/pablovoice-unified-ui.css'),
+    read('packages/app/song-creation-studio.mjs'),
   ]);
 
+  // Connectivity is a state of the same product, not a second local/offline product.
   assert.match(creator, /pvStudioMode/);
   assert.match(creator, /['\"]unified['\"]/);
   assert.match(creator, /pvNetworkMode/);
-  assert.match(creator, /['\"]online['\"]/);
-  assert.match(creator, /online_only/);
-  assert.match(creator, /high_quality_only/);
-  assert.match(creator, /data-pv-unified-create/);
-  assert.match(creator, /querySelectorAll\('\[data-pv-local-draft\]'\).*remove/);
-  assert.doesNotMatch(creator, /data-pv-local-draft>Rascunho local/);
-  assert.match(creator, /data-song-create-hq/);
-  assert.match(creator, /ensureSession\(\)/);
-  assert.match(creator, /localDraftAvailable:\s*false/);
+  assert.match(creator, /navigator\.onLine !== false/);
+  assert.match(creator, /online \? 'online' : 'offline'/);
+  assert.match(creator, /connectivityIsImplementationDetail:\s*true/);
+  assert.match(creator, /injectsAlternativeCreator:\s*false/);
+  assert.match(creator, /hidesProfessionalCreator:\s*false/);
+  assert.match(creator, /localToyFallback:\s*false/);
+  assert.match(creator, /pendingNetworkActionsArePreserved:\s*true/);
   assert.match(creator, /userLoginRequired:\s*false/);
   assert.match(creator, /passwordPrompt:\s*false/);
   assert.match(creator, /transparentDeviceAccess:\s*true/);
-  assert.match(creator, /offlineMode:\s*false/);
-  assert.match(creator, /remoteFailureNeverFabricatesSuccess:\s*true/);
 
+  // No owner login/code wall is allowed back into the product.
   assert.match(auth, /transparentDeviceAccess:\s*true/);
   assert.match(auth, /userLoginUI:\s*false/);
   assert.match(auth, /creatorSurfaceVisible:\s*false/);
   assert.doesNotMatch(auth, /Acesso do proprietário|Liberar meu estúdio|autocomplete="email"/);
 
+  // Legacy online-only policy may not hide the professional Creator anymore.
   assert.match(access, /productMode:\s*'unified'/);
-  assert.match(access, /creationMode:\s*'online_high_quality_only'/);
-  assert.match(access, /userLoginRequired:\s*false/);
-  assert.match(access, /passwordPrompt:\s*false/);
-  assert.match(access, /offlineMode:\s*false/);
-  assert.match(access, /localDraftAvailable:\s*false/);
-  assert.match(access, /data-pv-local-draft/);
-  assert.match(access, /data-song-create-button/);
-  assert.match(access, /pvOfflineMode', 'false'/);
-  assert.match(access, /pvAccessMode', 'transparent-device'/);
-  assert.match(access, /pvNetworkPolicy', 'online_only'/);
-  assert.match(access, /pvExecutionPolicy', 'high_quality_only'/);
-  assert.match(access, /function setDataset/);
-  assert.match(access, /dataset\?\.\[key\] !== value/);
-  assert.match(access, /if \(node && !node\.hidden\) node\.hidden = true/);
-  assert.match(access, /attributeFilter:\s*\['data-pv-network-policy'\]/);
-  assert.doesNotMatch(access, /html\.dataset\.pvNetworkMode = 'online'/);
+  assert.match(access, /creationMode:\s*'professional_remote_with_offline_queue'/);
+  assert.match(access, /localProjectAvailableOffline:\s*true/);
+  assert.match(access, /localToyFallback:\s*false/);
+  assert.match(access, /pendingNetworkActionsArePreserved:\s*true/);
+  assert.match(access, /pvNetworkPolicy', 'offline_queue'/);
+  assert.match(access, /pvExecutionPolicy', 'professional_only'/);
+  assert.match(access, /pvConnectivity', online \? 'online' : 'offline'/);
+  assert.doesNotMatch(access, /querySelectorAll\('\[data-song-create-hq\]'\).*hidden/);
+  assert.doesNotMatch(access, /online_only|high_quality_only/);
+
+  // Creation itself queues the exact request offline instead of fabricating audio.
+  assert.match(songCreator, /if \(navigator\.onLine === false\)/);
+  assert.match(songCreator, /await queueOfflineGeneration\(request\)/);
+  assert.match(songCreator, /pedido ficou salvo neste aparelho/i);
+  assert.match(songCreator, /localToyFallback:\s*false/);
+  assert.match(songCreator, /offlineGenerationRequestQueue:\s*true/);
+  assert.match(songCreator, /data-song-create-hq>✦ Criar 2 versões/);
 
   assert.match(productCanon, /one Studio, one project model and one creative flow/i);
   assert.match(productCanon, /Online\/offline are not product modes/i);
   assert.match(index, /data-pv-studio-mode="unified"/);
   assert.match(index, /data-pv-access-mode="transparent-device"/);
-  assert.match(index, /data-pv-offline-mode="false"/);
   assert.match(index, /creator-unified-runtime\.mjs/);
   assert.match(index, /unified-online-policy\.mjs/);
   assert.doesNotMatch(index, /src=\"\.\/creator-online-language\.mjs\"/);
-  assert.match(unifiedCss, /STUDIO · PRONTO/);
 });
 
 test('Companions are wired to real existing product destinations instead of decorative fake controls', async () => {

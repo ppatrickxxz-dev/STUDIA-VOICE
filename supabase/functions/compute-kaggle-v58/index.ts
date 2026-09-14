@@ -14,6 +14,8 @@ const WORKER_SLUG='kaggle-worker-source-v58'
 const COMPLETE_SLUG='complete-kaggle-pipeline-job-v58'
 const B09_PROJECT_ID='d64e4de9-791e-41bc-9307-7957389b2499'
 const LEASE_TTL_SECONDS=1800
+const CLIENT_VERSION='pablovoice_native_music_v2_3'
+const CAPTION_COMPILER='professional_song_prompt_v2_3'
 
 function b64(v:string){return btoa(unescape(encodeURIComponent(v)))}
 function randomToken(bytes=32){const buf=new Uint8Array(bytes);crypto.getRandomValues(buf);return btoa(String.fromCharCode(...buf)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'')}
@@ -23,53 +25,86 @@ function clamp(n:number,min:number,max:number){return Math.max(min,Math.min(max,
 function clean(value:any,max:number){return String(value||'').trim().replace(/\s+/g,' ').slice(0,max)}
 function normalizeLanguage(value:any){const raw=clean(value,16).toLowerCase();if(!raw)return'pt';if(raw.startsWith('pt'))return'pt';if(raw.startsWith('en'))return'en';if(raw.startsWith('es'))return'es';if(raw.startsWith('fr'))return'fr';if(raw.startsWith('de'))return'de';if(raw.startsWith('it'))return'it';return raw.split(/[-_]/)[0].slice(0,8)||'pt'}
 function isCapacityError(value:any){return /maximum batch gpu session count|gpu session count|capacity|too many.*gpu|concurrent.*gpu/i.test(String(value||''))}
-function sectionTag(id:string){
-  const v=String(id||'').toLowerCase()
-  if(v.includes('refr')||v.includes('chorus'))return 'Chorus'
-  if(v.includes('pre'))return 'Pre-Chorus'
-  if(v.includes('ponte')||v.includes('bridge'))return 'Bridge'
-  if(v.includes('intro'))return 'Intro'
-  if(v.includes('outro'))return 'Outro'
-  return 'Verse'
+function normalized(value:any){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+function ordinalFrom(value:any){const n=String(value||'').match(/\b(\d+)\b/)?.[1];return n?` ${n}`:''}
+function sectionTag(section:any){
+  const id=normalized(section?.id),label=normalized(section?.label||section?.authoredHeader)
+  const value=`${id} ${label}`
+  const ordinal=ordinalFrom(section?.label||section?.authoredHeader||section?.id)
+  if(value.includes('intro'))return 'Intro'
+  if(value.includes('outro'))return 'Outro'
+  if(value.includes('post')||value.includes('pos_refr'))return `Post-Chorus${ordinal}`
+  if(value.includes('pre'))return `Pre-Chorus${ordinal}`
+  if(value.includes('refr')||value.includes('chorus'))return `Chorus${ordinal}`
+  if(value.includes('break')||value.includes('cut')||value.includes('pickup'))return 'Instrumental Break'
+  if(value.includes('instrumental'))return 'Instrumental'
+  if(value.includes('ponte')||value.includes('bridge')||value.includes('rap'))return `Bridge${ordinal}`
+  return `Verse${ordinal}`
+}
+function lyricHeader(section:any){
+  const tag=sectionTag(section)
+  const directive=clean(section?.directive,72)
+  return directive?`[${tag} - ${directive}]`:`[${tag}]`
 }
 function buildLyrics(plan:any,instrumental:boolean){
   if(instrumental)return '[Instrumental]'
+  const sections=Array.isArray(plan?.sections)?plan.sections:[]
   const lines=Array.isArray(plan?.guideLines)?plan.guideLines:[]
-  const usable=lines.map((line:any)=>({text:clean(line?.text,600),sectionId:clean(line?.sectionId,80)})).filter((line:any)=>line.text)
-  if(!usable.length)return '[Instrumental]'
-  let current='',out:string[]=[]
-  for(const line of usable){const tag=sectionTag(line.sectionId);if(tag!==current){out.push(`[${tag}]`);current=tag}out.push(line.text)}
+  if(!sections.length||!lines.length)return '[Instrumental]'
+  const out:string[]=[]
+  for(const section of sections){
+    out.push(lyricHeader(section))
+    const local=lines.filter((line:any)=>String(line?.sectionId||'')===String(section?.id||''))
+    for(const line of local){const text=String(line?.text||'').trim();if(text)out.push(text.slice(0,600))}
+  }
   return out.join('\n').slice(0,4096)
 }
-function captionFromPlan(plan:any,negativeStyles:any[]){
-  const rawBrief=String(plan?.brief||'').trim()
-  const marker='PabloVoice 2.0 Song DNA:'
-  const markerAt=rawBrief.indexOf(marker)
-  const userBrief=clean(markerAt>=0?rawBrief.slice(0,markerAt):rawBrief,120)
-  const songDna=clean(markerAt>=0?rawBrief.slice(markerAt+marker.length):'',75)
-  const style=[clean(plan?.genre,24),clean(plan?.mood,28)].filter(Boolean).join(', ')
+function artistRequest(plan:any){
+  const explicit=String(plan?.artistBrief||'').trim()
+  if(explicit)return explicit
+  const raw=String(plan?.brief||'').trim()
+  const marker='. Artist request:'
+  const at=raw.indexOf(marker)
+  return at>=0?raw.slice(at+marker.length).trim():raw
+}
+function aiProductionDirection(plan:any,body:any){
+  const direct=String(body?.pablovoice_ai_direction?.text||plan?.pabloVoiceAiDirection||'').trim()
+  if(direct)return direct
+  const raw=String(plan?.brief||'').trim()
+  const prefix='AI production direction:'
+  const marker='. Artist request:'
+  if(raw.startsWith(prefix)){
+    const rest=raw.slice(prefix.length)
+    const at=rest.indexOf(marker)
+    return (at>=0?rest.slice(0,at):rest).trim()
+  }
+  return ''
+}
+function compactPart(label:string,value:any,max:number){const text=clean(value,Math.max(0,max-label.length-2));return text?`${label}: ${text}`:''}
+function formSummary(plan:any){
+  const sections=Array.isArray(plan?.sections)?plan.sections:[]
+  if(!sections.length)return''
+  return sections.map((section:any)=>`${sectionTag(section).replace(/\s+/g,'')}${Number(section?.bars)||''}`).join('>')
+}
+function captionFromPlan(plan:any,negativeStyles:any[],body:any){
   const singer=plan?.singerProfile||{}
   const lowMidi=clamp(Math.round(Number(singer.lowMidi)||48),24,96)
   const highMidi=clamp(Math.round(Number(singer.highMidi)||67),lowMidi,108)
-  const singerDirection=[
-    clean(singer.voiceType,12),
-    clean(singer.tone,20),
-    clean(singer.delivery,24),
-    `MIDI ${lowMidi}-${highMidi}`,
-    singer.falsetto?'falsetto ok':'no falsetto',
-  ].filter(Boolean).join(', ')
-  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,24)).filter(Boolean).slice(0,5).join(', ')
+  const style=[clean(plan?.genre,30),clean(plan?.mood,44)].filter(Boolean).join(', ')
+  const vocal=[clean(singer.voiceType,18),clean(singer.tone,42),clean(singer.delivery,58),`MIDI ${lowMidi}-${highMidi}`,singer.falsetto?'falsetto controlled':'avoid falsetto'].filter(Boolean).join(', ')
+  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,34)).filter(Boolean).slice(0,10).join(', ')
   const parts=[
-    userBrief,
-    style?`Style: ${style}`:'',
-    singerDirection?`Vocal: ${singerDirection}`:'',
-    avoid?`Avoid: ${avoid}`:'',
-    songDna?`Direction: ${songDna}`:'',
+    compactPart('Artist',artistRequest(plan),112),
+    compactPart('Production',aiProductionDirection(plan,body),158),
+    compactPart('Style',style,58),
+    compactPart('Vocal',vocal,88),
+    compactPart('Form',formSummary(plan),66),
+    compactPart('Avoid',avoid,70),
   ].filter(Boolean)
   return parts.join('. ').slice(0,512)
 }
 async function kaggleRpc(token:string,method:string,payload:any){
-  const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Music/2.2'},body:JSON.stringify(payload)})
+  const r=await fetch(`https://api.kaggle.com/v1/kernels.KernelsApiService/${method}`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','user-agent':'PabloVoice-Music/2.3'},body:JSON.stringify(payload)})
   const text=await r.text();let out:any={};try{out=JSON.parse(text)}catch{out={raw:text.slice(0,1600)}}
   if(!r.ok||Number(out?.code||0)>=400)throw new Error(`Kaggle ${method}: ${out?.message||text.slice(0,600)}`)
   return out
@@ -118,6 +153,8 @@ async function readiness(){
   return json({
     ok:true,
     service:'pablovoice-native-music',
+    product_method:'song_first_v3',
+    caption_compiler:CAPTION_COMPILER,
     provider:'kaggle',
     engine:'ACE-Step 1.5',
     model:ACE_MODEL,
@@ -170,6 +207,7 @@ Deno.serve(async(req:Request)=>{
     if(plan?.schema!=='pablovoice_song_creation_v1'||!Array.isArray(plan?.sections)||!plan.sections.length)return json({ok:false,error:'invalid_music_plan'},400)
     const {data:project}=await admin.from('projects').select('id,title').eq('id',projectId).eq('user_id',user.id).maybeSingle()
     if(!project)return json({ok:false,error:'project_not_found'},404)
+
     let conn:any=null
     try{conn=await sharedComputeConnection(admin,user)}catch(error){
       const detail=String(error instanceof Error?error.message:error).slice(0,600)
@@ -183,14 +221,14 @@ Deno.serve(async(req:Request)=>{
     const instrumental=Boolean(body.instrumental)
     const duration=clamp(Math.round(Number(plan.durationSeconds)||120),10,600)
     const bpm=clamp(Math.round(Number(plan.bpm)||112),30,300)
-    const key=clean(plan.key,8), mode=String(plan.mode||'minor')==='major'?'Major':'Minor'
+    const key=clean(plan.key,8),mode=String(plan.mode||'minor')==='major'?'Major':'Minor'
     const requestedVariation=Number(body.variation_seed)
-    const generationSeed=Number.isFinite(requestedVariation)&&requestedVariation>0
-      ? Math.abs(Math.trunc(requestedVariation))%2147483647||1
-      : randomGenerationSeed()
+    const generationSeed=Number.isFinite(requestedVariation)&&requestedVariation>0?Math.abs(Math.trunc(requestedVariation))%2147483647||1:randomGenerationSeed()
+    const lyrics=buildLyrics(plan,instrumental)
+    const caption=captionFromPlan(plan,body.negative_styles,body)
     const generation={
-      caption:captionFromPlan(plan,body.negative_styles),
-      lyrics:buildLyrics(plan,instrumental),
+      caption,
+      lyrics,
       instrumental,
       bpm,
       keyscale:key?`${key} ${mode}`:'',
@@ -203,6 +241,7 @@ Deno.serve(async(req:Request)=>{
       use_constrained_decoding:true,
     }
     if(!generation.caption)return json({ok:false,error:'music_caption_required'},400)
+    if(!instrumental&&(!lyrics||lyrics==='[Instrumental]'))return json({ok:false,error:'music_vocal_lyrics_required'},400)
 
     jobId=crypto.randomUUID()
     try{leaseHeld=await acquireLease(admin,jobId)}catch(error){return json({ok:false,error:'music_dispatch_lease_failed',detail:String(error instanceof Error?error.message:error).slice(0,400),fallback_allowed:false},503)}
@@ -214,9 +253,35 @@ Deno.serve(async(req:Request)=>{
     const {data:upload,error:uploadErr}=await admin.storage.from('audio-private').createSignedUploadUrl(outputPath)
     if(uploadErr||!upload?.token)throw new Error('signed_upload_failed')
     const progressUrl=`${url}/functions/v1/progress-kaggle-pipeline-job-v58`
-    const ticket={version:3,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,progress_url:progressUrl,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
-    const params={client:'pablovoice_native_music_v2_2',access_mode:'transparent_device',dispatch_serialized:true,kaggle_callback_hash:callbackHash,kaggle_expires_at:expiresAt,kaggle_output_path:outputPath,ace_revision:ACE_REVISION,ace_model:ACE_MODEL,duration_seconds:duration,bpm,keyscale:generation.keyscale,instrumental,generation_seed:generationSeed,caption_chars:generation.caption.length,shift:generation.shift,constrained_decoding:generation.use_constrained_decoding}
-    const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:'music_generation',engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:[],output_asset_ids:[],parameters:params,proof:{required:true},provider:'kaggle',current_stage:'dispatch',human_message:'Preparando a geração musical',started_at:new Date().toISOString(),heartbeat_at:new Date().toISOString()})
+    const ticket={version:4,job_type:'music_generation',job_id:jobId,project_title:project.title,expires_at:expiresAt,generation,outputs:{full_mix:{bucket:'audio-private',path:outputPath,token:upload.token}},supabase_url:url,supabase_publishable_key:pub,complete_url:`${url}/functions/v1/${COMPLETE_SLUG}`,progress_url:progressUrl,callback_token:callbackToken,engine:{provider:'kaggle',name:'ACE-Step 1.5',model:ACE_MODEL,source_repo:ACE_REPO,source_revision:ACE_REVISION,download_source:'modelscope'}}
+    const params={
+      client:CLIENT_VERSION,
+      product_method:'song_first_v3',
+      caption_compiler:CAPTION_COMPILER,
+      access_mode:'transparent_device',
+      dispatch_serialized:true,
+      kaggle_callback_hash:callbackHash,
+      kaggle_expires_at:expiresAt,
+      kaggle_output_path:outputPath,
+      ace_revision:ACE_REVISION,
+      ace_model:ACE_MODEL,
+      duration_seconds:duration,
+      bpm,
+      keyscale:generation.keyscale,
+      instrumental,
+      vocal_expected:!instrumental,
+      vocal_language:generation.vocal_language,
+      generation_seed:generationSeed,
+      caption_chars:generation.caption.length,
+      lyrics_chars:generation.lyrics.length,
+      section_count:Array.isArray(plan.sections)?plan.sections.length:0,
+      blueprint_schema:plan?.professionalBlueprint?.schema||null,
+      authored_structure:plan?.professionalBlueprint?.authoredStructure===true,
+      shift:generation.shift,
+      inference_steps:generation.inference_steps,
+      constrained_decoding:generation.use_constrained_decoding,
+    }
+    const {error:jobErr}=await admin.from('render_jobs').insert({id:jobId,project_id:projectId,version_id:versionId,user_id:user.id,job_type:'music_generation',engine:'ace_step_1_5_turbo',status:'waiting_kaggle',progress:10,input_asset_ids:[],output_asset_ids:[],parameters:params,proof:{required:true,vocal_expected:!instrumental},provider:'kaggle',current_stage:'dispatch',human_message:'Preparando a geração musical',started_at:new Date().toISOString(),heartbeat_at:new Date().toISOString()})
     if(jobErr)throw new Error(`job_insert_failed: ${jobErr.message}`)
 
     const short=jobId.replace(/-/g,'').slice(0,10),owner=String(conn.handle),slug=`pablovoice-music-${short}`,full=`${owner}/${slug}`
@@ -246,9 +311,9 @@ Deno.serve(async(req:Request)=>{
     }
     const now=new Date().toISOString()
     await touchLease(admin,jobId)
-    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',heartbeat_at:now,human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v2_2',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
+    await admin.from('render_jobs').update({status:'waiting_kaggle',progress:15,current_stage:'gpu_queued',heartbeat_at:now,human_message:'Criando a música na GPU',external_job_id:String(push.kernelId),parameters:{...params,kaggle_owner:owner,kaggle_slug:slug,kaggle_ref:push.ref,kaggle_url:push.url||null,kaggle_kernel_id:push.kernelId,kaggle_version_number:push.versionNumber,dispatcher:'compute-kaggle-v58:native-music-v2_3',worker_slug:WORKER_SLUG,complete_slug:COMPLETE_SLUG,dispatched_at:now}}).eq('id',jobId).eq('user_id',user.id)
     handedOff=true
-    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,dispatch_serialized:true,fallback_allowed:false})
+    return json({ok:true,job_id:jobId,status:'waiting_kaggle',progress:15,provider:'native_music',kernel:full,dispatcher:'compute-kaggle-v58',worker:WORKER_SLUG,generation_seed:generationSeed,caption_chars:caption.length,lyrics_chars:lyrics.length,section_count:params.section_count,dispatch_serialized:true,fallback_allowed:false})
   }catch(e){
     if(admin&&leaseHeld&&!handedOff&&jobId)await releaseLease(admin,jobId)
     return json({ok:false,error:String(e instanceof Error?e.message:e).slice(0,1400),job_id:jobId||null,fallback_allowed:false},500)

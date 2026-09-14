@@ -14,7 +14,7 @@ async function expectImageLoaded(locator) {
   await expect.poll(() => locator.evaluate((img) => Boolean(img.complete && img.naturalWidth > 0)), { timeout: 10_000 }).toBe(true);
 }
 
-test('VNEXT UNIFIED UI GATE: one connected Studio with transparent access and no offline/local product mode', async ({ page, context }) => {
+test('VNEXT UNIFIED UI GATE: Pablo art stays canonical while Creator remains one product online and offline', async ({ page, context }) => {
   test.setTimeout(120_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -64,48 +64,45 @@ test('VNEXT UNIFIED UI GATE: one connected Studio with transparent access and no
   await expect(visualizer).toHaveAttribute('data-vnext-reactive', 'music-graph');
 
   const form = page.locator('[data-song-create-form]');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
-  await expect(form).toHaveAttribute('data-pv-execution-policy', 'high_quality_only');
-  await expect(form.locator('[data-pv-unified-create-card]')).toBeVisible();
-  await expect(form.locator('[data-pv-unified-create]')).toBeVisible();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('alta qualidade');
+  await expect(form.locator('[data-song-create-hq]')).toBeVisible();
+  await expect(form.locator('[data-song-create-hq]')).toContainText('Criar 2 versões');
+  await expect(form.locator('[data-pv-unified-create-card]')).toHaveCount(0);
+  await expect(form.locator('[data-pv-unified-create]')).toHaveCount(0);
   await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
-  await expect(form.locator('[data-song-create-button]')).toBeHidden();
-  await expect(form.locator('[data-song-create-hq]')).toBeHidden();
   await expect(form.locator('[data-pv-kind="song"]')).toHaveClass(/active/);
-  await expect(form.locator('.pv-intimate-advanced')).not.toHaveAttribute('open', '');
+  await expect(form.locator('.pv-create-adjustments')).not.toHaveAttribute('open', '');
 
   await expect(page.locator('#pv-remote-pairing')).toHaveCount(0);
   await expect(page.locator('[data-remote-pair-form]')).toHaveCount(0);
   await expect(page.locator('input[type="email"]')).toHaveCount(0);
   await expect(page.getByText(/Acesso do proprietário|Liberar meu estúdio|código de ativação/i)).toHaveCount(0);
 
-  await form.locator('input[name="brief"]').fill('R&B 2000s sensual, menos batestaca, baixo mais solto e refrão abrindo');
-  await expect(form.locator('[data-pv-intent-copy]')).toContainText('refrão localizado');
-  await expect(form.locator('[data-pv-intent-copy]')).toContainText('baixo');
-  await form.locator('.pv-intimate-advanced > summary').click();
-  await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20 · completa');
+  await page.locator('#lyrics').fill('[VERSE 1 — 8 bars]\nEu vejo você chegar\n\n[CHORUS — 8 bars]\nTudo isso é tão eu');
+  await form.locator('textarea[name="brief"]').fill('R&B 2000s sensual, menos batestaca, baixo mais solto e refrão abrindo');
+  await form.locator('.pv-create-adjustments > summary').click();
+  await expect(form.locator('select[name="duration"] option[value="200"]')).toHaveText('3:20');
   await shot(page, 'creator-product-unified-online-desktop');
 
   await form.locator('[data-pv-kind="instrumental"]').click();
   await expect(form.locator('input[name="instrumentalFirst"]')).toBeChecked();
-  await expect(form.locator('[data-pv-unified-create]')).toContainText('instrumental em alta qualidade');
+  await expect(form.locator('[data-pv-kind="instrumental"]')).toHaveClass(/active/);
+  await expect(form.locator('[data-song-create-hq]')).toContainText('Criar 2 versões');
 
   await context.setOffline(true);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
-  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
-  await expect(form.locator('[data-pv-local-draft]')).toHaveCount(0);
-  await expect(shell.locator('[data-vnext-network]')).not.toContainText(/OFFLINE|LOCAL/i);
-  await expect(shell.locator('[data-vnext-online]')).not.toContainText(/OFFLINE|LOCAL/i);
-  await form.locator('[data-pv-unified-create]').click();
-  await expect(page.locator('#pv-song-create-status')).toContainText('precisa de conexão', { timeout: 10_000 });
-  await shot(page, 'creator-unified-studio-connection-required');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'offline');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'true');
+  await expect(form.locator('[data-song-create-hq]')).toBeVisible();
+  await form.locator('[data-song-create-hq]').click();
+  await expect(page.locator('#pv-song-create-status')).toContainText('pedido ficou salvo', { timeout: 10_000 });
+  await expect(page.locator('#pv-song-creator')).toBeVisible();
+  await shot(page, 'creator-unified-studio-offline-queued');
 
   await context.setOffline(false);
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
-  await expect(form).toHaveAttribute('data-pv-network-policy', 'online_only');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
+  await expect(form).toBeVisible();
 
   await nav.locator('[data-route="pablo"]').click();
   await expect(page.locator('[data-pv-pablo-intimacy]')).toBeVisible({ timeout: 10_000 });
