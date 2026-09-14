@@ -13,6 +13,19 @@ test('standalone dispatcher authenticates user and reuses canonical ticket issue
   assert.match(dispatcher,/SaveKernel/);
 });
 
+test('transparent PabloVoice users can use shared compute only after owned project and asset checks',()=>{
+  assert.match(dispatcher,/pablovoice_app_device===true/);
+  assert.match(dispatcher,/B09_PROJECT_ID/);
+  assert.match(dispatcher,/transparent_device_shared_compute/);
+  assert.match(dispatcher,/userClient\.from\('projects'\)[\s\S]*?\.eq\('id',projectId\)\.maybeSingle\(\)/);
+  assert.match(dispatcher,/userClient\.from\('audio_assets'\)[\s\S]*?\.eq\('id',sourceAssetId\)\.eq\('project_id',projectId\)\.maybeSingle\(\)/);
+  assert.match(dispatcher,/if\(!ownedProject\)return json\(\{ok:false,error:'project_not_found'\},404\)/);
+  assert.match(dispatcher,/if\(!ownedAsset\)return json\(\{ok:false,error:'source_asset_not_found'\},404\)/);
+  assert.match(dispatcher,/if\(!conn\?\.secret\|\|!conn\?\.handle\)return json\(\{ok:false,error:'kaggle_not_connected'\},409\)/);
+  assert.ok(dispatcher.indexOf("userClient.from('projects')") < dispatcher.indexOf('sharedComputeConnection(admin,user)'), 'project ownership must be proven before shared compute is resolved');
+  assert.ok(dispatcher.indexOf("userClient.from('audio_assets')") < dispatcher.indexOf('sharedComputeConnection(admin,user)'), 'asset ownership must be proven before shared compute is resolved');
+});
+
 test('dispatcher never serializes service role into the Kaggle ticket bootstrap',()=>{
   assert.doesNotMatch(dispatcher,/SERVICE_ROLE_KEY[^\n]*TICKET_B64/);
   assert.match(dispatcher,/TICKET_B64/);
