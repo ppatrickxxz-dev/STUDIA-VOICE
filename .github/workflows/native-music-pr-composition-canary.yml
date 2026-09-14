@@ -30,13 +30,18 @@ jobs:
   real-composition:
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
 
       - name: Initialize evidence directory
         shell: bash
@@ -45,7 +50,7 @@ jobs:
           mkdir -p test-results/real-composition
           printf '{"verdict":"STARTED","github_sha":"%s","github_run_id":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > test-results/real-composition/start.json
 
-      - name: Ensure audio inspection tools
+      - name: Ensure audio inspection and vocal separation tools
         shell: bash
         run: |
           set -euo pipefail
@@ -53,6 +58,8 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y ffmpeg
           fi
+          python -m pip install --disable-pip-version-check 'demucs==4.0.1'
+          python -m demucs --help >/dev/null
 
       - name: Compose a real song through the same transparent-user runtime and verify acoustic vocal presence
         shell: bash
