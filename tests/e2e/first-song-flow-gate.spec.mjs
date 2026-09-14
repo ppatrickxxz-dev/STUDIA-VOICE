@@ -97,8 +97,6 @@ test('FIRST SONG FLOW GATE: idea creates its project, survives reopen and export
   expect(model.readiness.firstSongReady).toBe(true);
   expect(model.readiness.voiceReplacementReady).toBe(false);
 
-  await page.locator('[data-action="save"]').click();
-  await expect(page.getByText('Projeto salvo neste aparelho.')).toBeVisible();
   await page.locator('[data-route="projects"]').first().click();
   await expect(page.getByText(model.name).first()).toBeVisible();
 
@@ -109,6 +107,15 @@ test('FIRST SONG FLOW GATE: idea creates its project, survives reopen and export
   await expect(page.getByRole('heading', { name: model.name })).toBeVisible();
   await expect(page.getByText('tao-eu-generated-master.wav').first()).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-cut', 'song_completion_v1');
+
+  const persisted = await page.evaluate(async () => {
+    const storage = await import('./storage.mjs');
+    const { songModelReadiness } = await import('./song-model-v3.mjs');
+    const project = await storage.getProject(storage.activeProjectSessionId());
+    return { schema: project?.songModel?.schema, readiness: songModelReadiness(project) };
+  });
+  expect(persisted.schema).toBe('pablovoice_song_model_v3');
+  expect(persisted.readiness.firstSongReady).toBe(true);
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-action="export"]').first().click();
