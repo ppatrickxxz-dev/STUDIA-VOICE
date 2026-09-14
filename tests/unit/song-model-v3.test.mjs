@@ -54,13 +54,13 @@ test('v3 song model separates composition, vocal performance, voice identity and
   assert.equal(project.songModel.voice.replacementStatus, 'needs_master_vocal_performance');
 });
 
-test('legacy synth guide is never promoted to a master sung performance', () => {
+test('first song remains usable even while voice replacement still needs the master performance', () => {
   const readiness = songModelReadiness(generatedProject());
   assert.equal(readiness.compositionReady, true);
   assert.equal(readiness.mixReady, true);
+  assert.equal(readiness.firstSongReady, true);
   assert.equal(readiness.vocalPerformanceReady, false);
   assert.equal(readiness.voiceReplacementReady, false);
-  assert.equal(readiness.firstSongReady, false);
 });
 
 test('native performance plus authorized personal voice unlocks identity-only replacement', () => {
