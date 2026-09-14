@@ -37,10 +37,11 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
-// Production keeps source semantics but drops source-only layout bytes. Source files
-// in packages/ remain untouched for review/audit; only the generated artifact is compacted.
+// Production keeps source semantics but drops source-only layout/comment bytes.
+// Source files in packages/ remain untouched for review/audit.
 await compactModuleLayout(out);
 await compactCssLayout(out);
+await compactHtmlLayout(out);
 await assertBuiltRelativeImportsResolve(out);
 
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
@@ -85,7 +86,28 @@ async function compactCssLayout(directory) {
     const source = await readFile(path, 'utf8');
     const compacted = source
       .replace(/\r/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\n[ \t]+/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{2,}/g, '\n');
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
+
+async function compactHtmlLayout(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactHtmlLayout(path);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.html')) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/\r/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{2,}/g, '\n');
     if (compacted !== source) await writeFile(path, compacted, 'utf8');
   }
