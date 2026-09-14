@@ -37,9 +37,9 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
-// Strip only source-layout indentation and blank lines from shipped CSS. This keeps
-// every selector/declaration/token intact while avoiding source-formatting bytes in
-// the production artifact.
+// Production keeps source semantics but drops source-only layout bytes. Source files
+// in packages/ remain untouched for review/audit; only the generated artifact is compacted.
+await compactModuleLayout(out);
 await compactCssLayout(out);
 await assertBuiltRelativeImportsResolve(out);
 
@@ -50,6 +50,29 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   builtAt: new Date().toISOString(),
 }, null, 2)}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
+
+async function compactModuleLayout(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactModuleLayout(path);
+      continue;
+    }
+    if (!entry.isFile() || (!entry.name.endsWith('.mjs') && !entry.name.endsWith('.js'))) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/\r/g, '')
+      .split('\n')
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        if (!trimmed.startsWith('//')) return true;
+        return /^\/\/[#@]\s*(sourceURL|sourceMappingURL)=/.test(trimmed);
+      })
+      .join('\n') + '\n';
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
 
 async function compactCssLayout(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
