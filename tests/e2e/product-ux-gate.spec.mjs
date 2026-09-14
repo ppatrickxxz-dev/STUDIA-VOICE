@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studio', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v30', { timeout: 12_000 });
   await expect(page.locator('html')).toHaveAttribute('data-pv-product-route', 'home');
   await expect(page.locator('html')).toHaveAttribute('data-pv-studio-mode', 'unified');
   await expect(page.locator('html')).toHaveAttribute('data-pv-network-mode', 'online');
@@ -81,4 +81,20 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
   await expect(page.locator('[data-pv-product-create="song"]')).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('PRODUCT STUDIO CUT GATE: Studio starts with the song-finishing controls, not a wall of labs', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Studio Cut Gate');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('.pv-nav [data-route="studio"]').last().click();
+
+  await expect(page.locator('html')).toHaveAttribute('data-pv-studio-cut', 'song_completion_v1');
+  await expect(page.locator('main')).toHaveAttribute('data-pv-studio-first-cut', 'true');
+  await expect(page.locator('[data-pv-studio-core-action="import"]')).toBeVisible();
+  await expect(page.locator('[data-pv-studio-core-action="record"]')).toBeVisible();
+  await expect(page.locator('[data-pv-studio-core-action="save"]')).toBeVisible();
+  await expect(page.locator('[data-pv-studio-core-action="export"]')).toBeVisible();
+  await expect(page.getByText('Voice Lab', { exact: true })).toHaveCount(0);
 });
