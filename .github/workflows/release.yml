@@ -35,7 +35,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
@@ -66,7 +68,7 @@ jobs:
           OIDC_JSON="$(curl --fail-with-body --silent --show-error \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
-          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          OIDC_TOKEN="$(printf '%s' "$OIDIDC_JSON" | jq -er '.value')"
           RESPONSE="$(curl --fail-with-body --silent --show-error \
             -X POST "$SIGNING_BROKER_URL" \
             -H "Authorization: Bearer $OIDC_TOKEN" \
@@ -179,7 +181,9 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - uses: actions/download-artifact@v4
         with:
           name: pablovoice-signed-${{ github.sha }}
