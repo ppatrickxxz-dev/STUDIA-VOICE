@@ -20,9 +20,13 @@ test('draft PRs keep fast Web feedback while deferring physical Android gates', 
 
   assert.doesNotMatch(webJob, /pull_request\.draft/, 'fast Web/contracts feedback must still run for draft PRs');
   assert.match(androidJobs, /github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.draft == false/);
-  assert.match(androidJobs, /android-emulator:/);
-  assert.match(androidJobs, /android-import-emulator:/);
-  assert.match(androidJobs, /android-open-with-project-emulator:/);
+  assert.match(androidJobs, /android-emulator:/, 'one physical Android emulator gate must remain');
+  assert.match(androidJobs, /android-emulator-gate\.sh/, 'canonical launch gate must run');
+  assert.match(androidJobs, /android-import-emulator-gate\.sh/, 'import flow must run in the unified emulator');
+  assert.match(androidJobs, /android-open-with-project-emulator-gate\.sh/, 'open-with project flow must run in the unified emulator');
+  assert.match(androidJobs, /android-complete-user-flow-gate\.sh/, 'complete user flow must run in the unified emulator');
+  assert.doesNotMatch(androidJobs, /\n  android-import-emulator:/, 'import must not boot a second emulator job');
+  assert.doesNotMatch(androidJobs, /\n  android-open-with-project-emulator:/, 'open-with must not boot a third emulator job');
 });
 
 test('marking a PR ready re-enables the real composition canary instead of deleting the release proof', () => {
