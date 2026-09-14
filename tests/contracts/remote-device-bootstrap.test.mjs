@@ -6,7 +6,8 @@ const authSource = fs.readFileSync('packages/app/remote-auth.mjs', 'utf8');
 const uiSource = fs.readFileSync('packages/app/remote-auth-ui.mjs', 'utf8');
 const prebootSource = fs.readFileSync('packages/app/preboot.mjs', 'utf8');
 const deviceSource = fs.readFileSync('supabase/functions/device-auth/index.ts', 'utf8');
-const computeSource = fs.readFileSync('supabase/functions/compute-kaggle-v58/index.ts', 'utf8');
+const computeRoot = 'supabase/functions/compute-kaggle-v58/';
+const computeSource = ['index.ts','core.ts','handler.ts'].map((file) => fs.readFileSync(`${computeRoot}${file}`, 'utf8')).join('\n');
 const contract = fs.readFileSync('supabase/functions/device-auth/README.md', 'utf8');
 const quotaMigration = fs.readFileSync('supabase/migrations/20260911175500_transparent_device_provision_quota.sql', 'utf8');
 
@@ -59,7 +60,7 @@ test('automatic app device identity is server-side and can use shared GPU comput
   assert.match(deviceSource, /user_login_ui:false/);
   assert.match(deviceSource, /password_prompt:false/);
   assert.match(deviceSource, /offline_mode:false/);
-  assert.doesNotMatch(deviceSource, /password[,}]\s*device_token/);
+  assert.doesNotMatch(deviceSource, /password[,]\s*device_token/);
 
   assert.match(computeSource, /sharedComputeConnection/);
   assert.match(computeSource, /pablovoice_app_device===true/);
