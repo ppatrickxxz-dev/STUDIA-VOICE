@@ -92,29 +92,18 @@ html[data-pv-product-route="home"] .pv-product-primary small { opacity:.68; }
 }
 
 @media (max-width:980px) {
-  html[data-pv-product-route="home"],
-  html[data-pv-product-route="home"] body {
-    max-width: 100%;
-    overflow-x: clip;
-  }
   html[data-pv-product-route="home"] .pv-vnext-shell {
     display:block;
-    width: 100%;
-    max-width: 100vw;
-    min-width: 0;
-    overflow-x: clip;
-    box-sizing: border-box;
+    max-width:100%!important;
+    overflow-x:hidden;
   }
-  html[data-pv-product-route="home"] .pv-vnext-shell > main,
-  html[data-pv-product-route="home"] #pv-product-home {
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
+  html[data-pv-product-route="home"] .pv-vnext-shell * {
+    min-width:0;
+    max-width:100%;
+    box-sizing:border-box;
   }
   html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
     min-height:0;
-    max-width: 100%;
-    box-sizing: border-box;
   }
 }
 
