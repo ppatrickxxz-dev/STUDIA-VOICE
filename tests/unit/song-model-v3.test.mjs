@@ -54,6 +54,15 @@ test('v3 song model separates composition, vocal performance, voice identity and
   assert.equal(project.songModel.voice.replacementStatus, 'needs_master_vocal_performance');
 });
 
+test('unchanged song model reads preserve the timestamp and exact state', () => {
+  const project = ensureSongModelV3(generatedProject());
+  const first = JSON.stringify(project.songModel);
+  const updatedAt = project.songModel.updatedAt;
+  ensureSongModelV3(project);
+  assert.equal(project.songModel.updatedAt, updatedAt);
+  assert.equal(JSON.stringify(project.songModel), first);
+});
+
 test('first song remains usable even while voice replacement still needs the master performance', () => {
   const readiness = songModelReadiness(generatedProject());
   assert.equal(readiness.compositionReady, true);
