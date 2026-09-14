@@ -1,4 +1,4 @@
-const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v30';
+const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v21';
 const PROMPT_KEY = 'pablovoice.product.createPrompt';
 const KIND_KEY = 'pablovoice.product.createKind';
 
