@@ -138,7 +138,8 @@ export function songModelReadiness(project) {
     vocalPerformanceReady,
     voiceReplacementReady,
     mixReady,
-    firstSongReady: compositionReady && mixReady && vocalPerformanceReady,
+    // A finished guide-voice song must be usable before My Voice is ready.
+    firstSongReady: compositionReady && mixReady,
   };
 }
 
