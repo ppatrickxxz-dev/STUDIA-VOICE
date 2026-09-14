@@ -94,7 +94,7 @@ html[data-pv-product-route="home"] .pv-product-primary small { opacity:.68; }
     display:block;
     overflow-x:hidden;
   }
-  html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
+  html[data-pv-product-route="home"] .pv-vnext-sidebar {
     min-height:0;
   }
 }
