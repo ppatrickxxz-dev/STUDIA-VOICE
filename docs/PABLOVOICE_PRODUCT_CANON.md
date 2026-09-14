@@ -68,20 +68,38 @@ The primary fields are:
 
 BPM, key, duration, negative directions, vocal range, detailed sections and references are advanced controls, not prerequisites.
 
-### Studio
-The Studio is where the chosen song continues:
-- timeline and sections;
-- versions/takes;
-- stems;
-- record/import vocal;
-- replace guide singer with My Voice;
-- instruments/MIDI;
-- section regeneration;
-- mixer/effects/automation;
-- history/undo;
-- export.
+Starting a song from Home must create and bind its project automatically when no project exists. A first-time user must never hit an internal “create/open a project first” requirement after already choosing Create Song.
 
-## 5. Voice model
+### Studio
+The Studio is where the chosen song continues.
+
+The first professional Studio cut is `song_completion_v1` and puts only the finishing path at the front:
+- current song/player and A/B;
+- sections/timeline when available;
+- import and recording;
+- **Música** for song/section edits;
+- **Voz** for vocal work;
+- **Mix** for tracks and balance;
+- **Exportar** for the deliverable.
+
+Stems belong to the same project and feed these surfaces. Beat Lab, Instrument Lab, Piano Roll, Sampler and other deep tools remain available as advanced production tools inside the Studio; they are not primary navigation competing with the song.
+
+## 5. Song data model
+
+Composition, vocal performance, voice identity and mix are different layers and must never be collapsed into one opaque result.
+
+Every persisted song is normalized to `pablovoice_song_model_v3`:
+
+1. **Composition** — lyrics, BPM, key, sections, arrangement, duration and musical intent.
+2. **Master Vocal Performance** — what was sung and how it was sung: lyrics/phonemes, melody/notes, pitch contour, timing, durations, phrasing, dynamics, breaths, vibrato intent, harmonies and ad-libs as those representations become available.
+3. **Voice** — who is singing: Guide Voice or an authorized private My Voice profile.
+4. **Mix** — master mix, tracks/stems, balances and production state.
+
+A legacy synthetic melody guide is never promoted to Master Vocal Performance. If the native generator currently returns only a flattened sung mix, the actual sung vocal stem separated from that mix may become the audio authority for Master Vocal Performance, while richer symbolic analysis can be added later.
+
+The first finished song does **not** wait for My Voice or voice replacement readiness. A verified complete guide-voice mix can be saved, reopened and exported while the Master Vocal Performance / My Voice path continues to mature.
+
+## 6. Voice model
 
 Voice must never block music creation.
 
@@ -97,11 +115,11 @@ Two user flows are valid:
 1. Create with Guide Voice → choose the song → Replace Voice → My Voice.
 2. Create with My Voice selected from the start when generation-time voice conditioning is available.
 
-For post-generation replacement, preserve the song's lyrics, melody, phrasing/timing, BPM, key, arrangement, instrumental and duration. Change singer identity/timbre, not the composition.
+For post-generation replacement, the `Voice Replacement Lock` uses `identity_only`: lyrics, phonemes, vocal melody, notes, pitch contour, timing, durations, phrasing, dynamics, breath placement, vibrato intent, harmonies, ad-libs, song structure, BPM, key, instrumental, arrangement and song duration are immutable. Only vocal identity characteristics may change. Any forbidden delta rejects the render.
 
 Old voice-cloning benchmark failures do not block the music-first product. They remain evidence for improving Voice quality, not a reason to prevent song generation.
 
-## 6. Versions, not destructive regeneration
+## 7. Versions, not destructive regeneration
 
 Every professional generation is a version attached to the same song.
 
@@ -111,7 +129,7 @@ Editing a section should preserve unrelated approved sections whenever the engin
 
 A result becomes Final only when the artist explicitly approves it.
 
-## 7. Professional music quality
+## 8. Professional music quality
 
 The main Create action uses the professional music path.
 
@@ -119,7 +137,7 @@ Local/simple synthesis may be used for metronome, MIDI audition, melody sketch a
 
 For a requested song with vocals, success requires a sung vocal using the intended lyrics closely enough to be useful. If no sung vocal is present, the request did not succeed.
 
-## 8. Professional visual direction
+## 9. Professional visual direction
 
 PabloVoice is a music-production application, not a gamified dashboard.
 
@@ -137,7 +155,7 @@ Visual rules:
 
 The approved Pablo character remains part of the identity; the old interface layout is not protected.
 
-## 9. Conflict-resolution rules
+## 10. Conflict-resolution rules
 
 When old requirements conflict, apply these rules in order:
 
@@ -152,7 +170,7 @@ When old requirements conflict, apply these rules in order:
 9. Do not weaken integrity/security gates that prevent corrupt or substituted audio, but do separate those gates from unrelated legacy requirements.
 10. Do not call work complete based only on UI, mocks, green builds or file existence; require the real user path for the capability being claimed.
 
-## 10. Release priorities
+## 11. Release priorities
 
 P0 — make a real song:
 - create from lyrics + detailed prompt;
@@ -179,24 +197,27 @@ P3 — collaboration, advanced assistants and secondary labs.
 
 No P2/P3 item may prevent P0 from shipping and being used.
 
-## 11. Canonical acceptance song
+## 12. Canonical first-song flow
 
 Use `Tão eu` as the first full user-path benchmark because it represents the intended Brazilian pop/R&B/funk workflow.
 
-Acceptance means the user can:
-1. open/create the song;
-2. use the real lyrics;
-3. give the intended production direction;
-4. create at least one usable professional song with vocals;
-5. audition it;
-6. choose and preserve it;
-7. continue in Studio;
-8. save/reopen;
-9. export.
+The mandatory flow is:
 
-Voice replacement and deeper editing follow without invalidating the first musical result.
+1. **Idea** — type the musical direction on Home.
+2. **Project** — PabloVoice creates/binds the song project automatically if needed.
+3. **Composition** — add/use lyrics and musical direction.
+4. **Generate** — obtain a physically verified professional full mix from the real music runtime.
+5. **Listen** — audition the resulting version; generating again must preserve older takes.
+6. **Continue** — open the same song in Studio, not another product.
+7. **Edit optionally** — sections, stems, recording, voice and mix do not erase the approved result.
+8. **Persist** — close/reopen and recover the same song and audio.
+9. **Export** — produce playable output from that reopened project.
 
-## 12. Definition of done
+My Voice is intentionally outside the blocking path for step 9. It is an upgrade to the approved song, not permission to have a song at all.
+
+Browser continuity gates may use deterministic audio fixtures only **after** the verified-generation boundary so they can test persistence/reopen/export without pretending a fixture proves AI generation. Physical music generation remains a separate live canary and must remain real.
+
+## 13. Definition of done
 
 A feature is done only at the layer being claimed.
 
