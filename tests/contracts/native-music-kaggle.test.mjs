@@ -6,9 +6,13 @@ const REVISION = 'ca1e85fe9430179831e6bc6be790c332190a3866';
 const MODEL = 'acestep-v15-turbo';
 
 async function source(path) { return readFile(new URL(`../../${path}`, import.meta.url), 'utf8'); }
+async function computeSource() {
+  const root = 'supabase/functions/compute-kaggle-v58/';
+  return (await Promise.all(['index.ts','core.ts','handler.ts'].map((file) => source(`${root}${file}`)))).join('\n');
+}
 
 test('native music dispatcher uses service-role durable capacity claim and private ticketed Kaggle v58 without exposing credentials', async () => {
-  const text = await source('supabase/functions/compute-kaggle-v58/index.ts');
+  const text = await computeSource();
   const lease = await source('supabase/migrations/20260913174500_music_generation_dispatch_lease.sql');
   const queue = await source('supabase/migrations/20260913211000_music_generation_capacity_queue.sql');
   assert.match(text, /job_type:'music_generation'/);
@@ -47,7 +51,7 @@ test('native music dispatcher uses service-role durable capacity claim and priva
 });
 
 test('native music creation uses AI direction and resumes the same persisted job instead of timing out while GPU is busy', async () => {
-  const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
+  const dispatcher = await computeSource();
   const client = await source('packages/app/native-music-generation-client.mjs');
   assert.match(client, /remoteProductionDirection/);
   assert.match(client, /bypassGeneratorAdapter: true/);
@@ -85,7 +89,7 @@ test('native music creation uses AI direction and resumes the same persisted job
 });
 
 test('ACE caption keeps configured vocal range, falsetto policy and explicit exclusions inside the 512 character budget', async () => {
-  const dispatcher = await source('supabase/functions/compute-kaggle-v58/index.ts');
+  const dispatcher = await computeSource();
   assert.match(dispatcher, /const lowMidi=clamp\(Math\.round\(Number\(singer\.lowMidi\)\|\|48\),24,96\)/);
   assert.match(dispatcher, /const highMidi=clamp\(Math\.round\(Number\(singer\.highMidi\)\|\|67\),lowMidi,108\)/);
   assert.match(dispatcher, /`MIDI \$\{lowMidi\}-\$\{highMidi\}`/);
@@ -100,7 +104,7 @@ test('ACE caption keeps configured vocal range, falsetto policy and explicit exc
   assert.ok(vocalAt >= 0 && avoidAt > vocalAt && directionAt > avoidAt, 'vocal controls and exclusions must precede optional Song DNA');
 });
 
-test('native music worker pins ACE-Step, forces audited fp32 on Kaggle T4 and retries only inside the same worker', async () => {
+test('ACE worker pins ACE-Step, forces audited fp32 on Kaggle T4 and retries only inside the same worker', async () => {
   const text = await source('supabase/functions/kaggle-worker-source-v58/index.ts');
   assert.match(text, new RegExp(REVISION));
   assert.match(text, new RegExp(MODEL));

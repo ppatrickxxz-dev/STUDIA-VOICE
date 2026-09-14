@@ -5,8 +5,12 @@ import { readFile } from 'node:fs/promises';
 async function source(path) {
   return readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 }
+async function computeSource() {
+  const root = 'supabase/functions/compute-kaggle-v58/';
+  return (await Promise.all(['index.ts','core.ts','handler.ts'].map((file) => source(`${root}${file}`)))).join('\n');
+}
 
-const compute = await source('supabase/functions/compute-kaggle-v58/index.ts');
+const compute = await computeSource();
 const complete = await source('supabase/functions/complete-kaggle-pipeline-job-v58/index.ts');
 const progress = await source('supabase/functions/progress-kaggle-pipeline-job-v58/index.ts');
 
