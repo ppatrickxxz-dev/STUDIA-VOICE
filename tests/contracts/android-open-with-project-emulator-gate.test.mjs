@@ -48,9 +48,13 @@ test('Android open-with project gate retries DevTools while the WebView is still
   assert.match(gate, /while time\.monotonic\(\) < deadline/);
 });
 
-test('Canonical CI runs Android open-with project gate after validation APK build', () => {
-  assert.match(ci, /android-open-with-project-emulator:/);
-  assert.match(ci, /needs: android-build/);
-  assert.match(ci, /scripts\/android-open-with-project-emulator-gate\.sh/);
-  assert.match(ci, /pablovoice-android-open-with-project-emulator-evidence/);
+test('Canonical CI runs Android open-with project gate after validation APK build in the unified emulator job', () => {
+  const unifiedStart = ci.indexOf('  android-emulator:');
+  assert.ok(unifiedStart >= 0, 'unified Android emulator job must exist');
+  const unifiedJob = ci.slice(unifiedStart);
+  assert.match(unifiedJob, /needs: android-build/);
+  assert.match(unifiedJob, /scripts\/android-open-with-project-emulator-gate\.sh/);
+  assert.match(unifiedJob, /pablovoice-android-emulator-evidence/);
+  assert.match(unifiedJob, /test-results\/android-open-with-project-emulator/);
+  assert.doesNotMatch(ci, /\n  android-open-with-project-emulator:/, 'open-with must not require a third emulator boot');
 });

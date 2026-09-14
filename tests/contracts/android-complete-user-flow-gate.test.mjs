@@ -32,11 +32,17 @@ test('Android complete flow validates the actual exported WAV file', () => {
   assert.match(gate, /ANDROID_COMPLETE_USER_FLOW_GATE_PASSED/);
 });
 
-test('Canonical CI runs open-with then complete flow in the same emulator session', () => {
-  assert.match(ci, /android-open-with-project-emulator:/);
-  assert.match(ci, /script:\s*\|[\s\S]*android-open-with-project-emulator-gate\.sh[\s\S]*android-complete-user-flow-gate\.sh/);
-  assert.match(ci, /test-results\/android-open-with-project-emulator/);
-  assert.match(ci, /test-results\/android-complete-user-flow/);
+test('Canonical CI runs open-with then complete flow in the same unified emulator session', () => {
+  const unifiedStart = ci.indexOf('  android-emulator:');
+  assert.ok(unifiedStart >= 0, 'unified Android emulator job must exist');
+  const unifiedJob = ci.slice(unifiedStart);
+  assert.match(unifiedJob, /needs: android-build/);
+  const openWithAt = unifiedJob.indexOf('bash scripts/android-open-with-project-emulator-gate.sh');
+  const completeAt = unifiedJob.indexOf('bash scripts/android-complete-user-flow-gate.sh');
+  assert.ok(openWithAt >= 0 && completeAt > openWithAt, 'open-with must run before complete flow in the same emulator session');
+  assert.match(unifiedJob, /android-open-with-project-emulator-gate\.sh "\$\(cat \/tmp\/pv-apk-path\)"/);
+  assert.match(unifiedJob, /test-results\/android-open-with-project-emulator/);
+  assert.match(unifiedJob, /test-results\/android-complete-user-flow/);
 });
 
 test('complete flow is chained exactly once instead of spawning a duplicate emulator path', () => {
