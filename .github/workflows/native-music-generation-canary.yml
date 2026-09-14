@@ -29,7 +29,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: pablovoice-production
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -92,7 +92,8 @@ jobs:
         run: |
           set -euo pipefail
           JOB_URL="$SUPABASE_URL/rest/v1/render_jobs?id=eq.$PV_JOB_ID&select=id,status,progress,current_stage,error_code,error_message,parameters,proof,output_asset_ids"
-          for attempt in $(seq 1 120); do
+          STATUS='missing'
+          for attempt in $(seq 1 240); do
             curl --fail-with-body --silent --show-error "$JOB_URL" \
               -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
               -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
@@ -105,6 +106,11 @@ jobs:
             fi
             sleep 10
           done
+          if [ "$STATUS" != 'completed' ]; then
+            echo "Timed out waiting for durable physical music job $PV_JOB_ID; last status: $STATUS" >&2
+            jq '.' test-results/native-music-generation/job.json >&2
+            exit 1
+          fi
           jq -e --arg model "$ACE_MODEL" --arg revision "$ACE_REVISION" '
             .[0].status == "completed" and
             .[0].proof.verified == true and
