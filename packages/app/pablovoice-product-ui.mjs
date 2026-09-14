@@ -1,6 +1,7 @@
-const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v21';
+const PRODUCT_UI_VERSION = 'pablovoice_product_ui_v30';
 const PROMPT_KEY = 'pablovoice.product.createPrompt';
 const KIND_KEY = 'pablovoice.product.createKind';
+const STUDIO_CUT = 'song_completion_v1';
 
 const runtime = { observer: null, scheduled: false, frame: 0 };
 
@@ -118,7 +119,7 @@ function homeMarkup() {
       <div><span>SUAS MÚSICAS</span><b data-pv-product-project-title>Meus projetos</b><small data-pv-product-project-copy>Abra uma música e continue exatamente de onde parou.</small></div><i>→</i>
     </button>
     <button class="pv-product-project-card pv-product-studio-card" type="button" data-route="studio">
-      <div><span>STUDIO</span><b>Continuar produzindo</b><small>Timeline, voz, instrumentos, stems, mix e versões no mesmo lugar.</small></div><i>→</i>
+      <div><span>STUDIO</span><b>Continuar produzindo</b><small>Seções, voz, pistas, mix e exportação no mesmo projeto.</small></div><i>→</i>
     </button>
     <button class="pv-product-pablo-card" type="button" data-route="pablo">
       <div class="pv-product-pablo-orb">PV</div><div><span>PABLO</span><b>Companheiro criativo</b><small>Peça mudanças em linguagem normal sem sair da música.</small></div><i>→</i>
@@ -172,13 +173,34 @@ function applyPendingCreateIntent(creator) {
 
 function decorateStudio() {
   delete document.documentElement.dataset.pvProductHome;
+  const root = document.documentElement;
+  root.dataset.pvStudioCut = STUDIO_CUT;
   const main = document.querySelector('main');
-  const hero = main?.querySelector('.pv-hero');
+  if (!main) return;
+  main.dataset.pvStudioFirstCut = 'true';
+  const hero = main.querySelector('.pv-hero');
   if (hero) hero.dataset.pvProductHero = 'true';
-  const tabs = main?.querySelector('.pv-tabs');
-  if (tabs) tabs.dataset.pvProductTabs = 'true';
-  const actions = main?.querySelector('.pv-studio-actions');
-  if (actions) actions.dataset.pvProductStudioActions = 'true';
+  const transport = main.querySelector('.pv-transport-card');
+  if (transport) transport.dataset.pvStudioCore = 'player';
+  const actions = main.querySelector('.pv-studio-actions');
+  if (actions) {
+    actions.dataset.pvProductStudioActions = 'true';
+    actions.querySelector('[data-action="import"]')?.setAttribute('data-pv-studio-core-action', 'import');
+    actions.querySelector('[data-action="record"]')?.setAttribute('data-pv-studio-core-action', 'record');
+    actions.querySelector('[data-action="save"]')?.setAttribute('data-pv-studio-core-action', 'save');
+    actions.querySelector('[data-action="export"]')?.setAttribute('data-pv-studio-core-action', 'export');
+  }
+  const tabs = main.querySelector('.pv-tabs');
+  if (!tabs) return;
+  tabs.dataset.pvProductTabs = 'true';
+  tabs.dataset.pvStudioCore = 'finish-song';
+  const labels = { edit: 'Música', voice: 'Voz', mixer: 'Mix', export: 'Exportar' };
+  for (const [value, label] of Object.entries(labels)) {
+    const tab = tabs.querySelector(`[data-action="studio-tab"][data-value="${value}"]`);
+    if (!tab) continue;
+    tab.dataset.pvStudioCoreTab = value;
+    setText(tab, label);
+  }
 }
 
 function onClick(event) {
@@ -210,3 +232,4 @@ function setText(node, value) {
 installPabloVoiceProductUI();
 
 export const PABLOVOICE_PRODUCT_UI_VERSION = PRODUCT_UI_VERSION;
+export const PABLOVOICE_STUDIO_CUT = STUDIO_CUT;
