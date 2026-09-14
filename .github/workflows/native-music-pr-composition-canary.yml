@@ -8,6 +8,8 @@ on:
       - '.github/workflows/native-music-pr-composition-canary.yml'
       - 'packages/app/native-music-generation-client.mjs'
       - 'packages/app/native-music-result-runtime.mjs'
+      - 'packages/app/generated-vocal-audit.mjs'
+      - 'packages/app/stems-result-runtime.mjs'
       - 'supabase/functions/compute-kaggle-v58/index.ts'
       - 'supabase/functions/kaggle-worker-source-v58/index.ts'
       - 'supabase/functions/progress-kaggle-pipeline-job-v58/index.ts'
@@ -51,7 +53,7 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
-      - name: Compose a real song through the same transparent-user runtime
+      - name: Compose a real song and verify acoustic vocal presence
         shell: bash
         run: |
           set -euo pipefail
@@ -62,8 +64,12 @@ jobs:
           import { RemoteAuthAdapter } from './packages/app/remote-auth.mjs';
           import { NativeMusicGenerationClient } from './packages/app/native-music-generation-client.mjs';
           import { createSongCreationPlan } from './packages/app/song-creation-engine.mjs';
+          import { evaluateVocalPresence } from './packages/app/generated-vocal-audit.mjs';
+          import { waitForStandaloneStems, getStandaloneStemsAssets, downloadPrivateStem } from './packages/app/stems-result-runtime.mjs';
 
           const ORIGIN = process.env.PV_STUDIO_ORIGIN;
+          const SUPABASE_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
+          const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
           const outDir = 'test-results/real-composition';
           const map = new Map();
           const storage = {
@@ -81,8 +87,59 @@ jobs:
           const location = { origin: ORIGIN, pathname: '/', search: '', hash: '', history: { replaceState() {} } };
           const auth = new RemoteAuthAdapter({ storage, location, fetchImpl });
           const progress = [];
+          const vocalProgress = [];
           let linked = null;
           let localProject = null;
+
+          function measurePcm(buffer, { sampleRate = 16000, activeThreshold = 0.004, frameSeconds = 0.05 } = {}) {
+            const sampleCount = Math.floor(buffer.length / 2);
+            assert.ok(sampleCount > sampleRate, 'decoded audio is empty');
+            const frameSize = Math.max(256, Math.round(sampleRate * frameSeconds));
+            let sumSq = 0;
+            let peak = 0;
+            let clipped = 0;
+            let activeFrames = 0;
+            let frames = 0;
+            const frameRms = [];
+            for (let start = 0; start < sampleCount; start += frameSize) {
+              const end = Math.min(sampleCount, start + frameSize);
+              let localSq = 0;
+              let localN = 0;
+              for (let i = start; i < end; i += 1) {
+                const value = buffer.readInt16LE(i * 2) / 32768;
+                const abs = Math.abs(value);
+                sumSq += value * value;
+                localSq += value * value;
+                localN += 1;
+                if (abs > peak) peak = abs;
+                if (abs >= 0.999) clipped += 1;
+              }
+              if (localN) {
+                const value = Math.sqrt(localSq / localN);
+                frameRms.push(value);
+                frames += 1;
+                if (value >= activeThreshold) activeFrames += 1;
+              }
+            }
+            const sorted = [...frameRms].sort((a, b) => a - b);
+            const p10 = sorted[Math.floor((sorted.length - 1) * 0.10)] || 0;
+            const p90 = sorted[Math.floor((sorted.length - 1) * 0.90)] || 0;
+            return {
+              rms: Math.sqrt(sumSq / sampleCount),
+              peak,
+              activeRatio: frames ? activeFrames / frames : 0,
+              duration: sampleCount / sampleRate,
+              clipRatio: clipped / sampleCount,
+              rmsContrast: p90 - p10,
+            };
+          }
+
+          function decodePcm(path) {
+            const run = spawnSync('ffmpeg', ['-v','error','-i',path,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 64 * 1024 * 1024 });
+            assert.equal(run.status, 0, String(run.stderr || 'ffmpeg decode failed'));
+            return run.stdout;
+          }
+
           try {
             const session = await auth.ensureSession();
             assert.ok(session?.accessToken, 'transparent device session was not created');
@@ -143,6 +200,7 @@ jobs:
             assert.ok(String(result?.aiDirection?.text || '').length <= 430, 'AI direction exceeded product limit');
             assert.match(String(result?.director?.fingerprint || ''), /^pv2_[0-9a-f]{8}$/);
             assert.ok(result?.blob?.size > 100_000, `generated audio too small: ${result?.blob?.size || 0}`);
+            assert.ok(result?.asset?.id, 'generated remote source asset id missing');
 
             const audioPath = `${outDir}/composition.flac`;
             const bytes = Buffer.from(await result.blob.arrayBuffer());
@@ -158,56 +216,77 @@ jobs:
             assert.ok(sampleRate >= 32000, `sample rate too low: ${sampleRate}`);
             assert.ok(channels >= 1, `invalid channels: ${channels}`);
 
-            const pcmRun = spawnSync('ffmpeg', ['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 64 * 1024 * 1024 });
-            assert.equal(pcmRun.status, 0, String(pcmRun.stderr || 'ffmpeg decode failed'));
-            const pcm = pcmRun.stdout;
-            const sampleCount = Math.floor(pcm.length / 2);
-            assert.ok(sampleCount > 16000, 'decoded audio is empty');
-            let sumSq = 0;
-            let peak = 0;
-            let clipped = 0;
-            const windowSize = 4000;
-            let activeWindows = 0;
-            let totalWindows = 0;
-            const windowRms = [];
-            for (let start = 0; start < sampleCount; start += windowSize) {
-              const end = Math.min(sampleCount, start + windowSize);
-              let localSq = 0;
-              let localN = 0;
-              for (let i = start; i < end; i += 1) {
-                const value = pcm.readInt16LE(i * 2) / 32768;
-                const abs = Math.abs(value);
-                sumSq += value * value;
-                localSq += value * value;
-                localN += 1;
-                if (abs > peak) peak = abs;
-                if (abs >= 0.999) clipped += 1;
-              }
-              if (localN) {
-                const r = Math.sqrt(localSq / localN);
-                windowRms.push(r);
-                totalWindows += 1;
-                if (r >= 0.008) activeWindows += 1;
-              }
-            }
-            const rms = Math.sqrt(sumSq / sampleCount);
-            const activeRatio = totalWindows ? activeWindows / totalWindows : 0;
-            const clipRatio = clipped / sampleCount;
-            const sorted = [...windowRms].sort((a,b) => a-b);
-            const p10 = sorted[Math.floor((sorted.length - 1) * 0.10)] || 0;
-            const p90 = sorted[Math.floor((sorted.length - 1) * 0.90)] || 0;
-            const rmsContrast = p90 - p10;
-            assert.ok(rms >= 0.01, `audio is effectively silent: rms=${rms}`);
-            assert.ok(peak >= 0.08, `audio has insufficient peak energy: peak=${peak}`);
-            assert.ok(activeRatio >= 0.55, `too much silence: activeRatio=${activeRatio}`);
-            assert.ok(clipRatio <= 0.03, `audio is excessively clipped: clipRatio=${clipRatio}`);
+            const mixSignal = measurePcm(decodePcm(audioPath), { activeThreshold: 0.008, frameSeconds: 0.25 });
+            assert.ok(mixSignal.rms >= 0.01, `audio is effectively silent: rms=${mixSignal.rms}`);
+            assert.ok(mixSignal.peak >= 0.08, `audio has insufficient peak energy: peak=${mixSignal.peak}`);
+            assert.ok(mixSignal.activeRatio >= 0.55, `too much silence: activeRatio=${mixSignal.activeRatio}`);
+            assert.ok(mixSignal.clipRatio <= 0.03, `audio is excessively clipped: clipRatio=${mixSignal.clipRatio}`);
+
+            const liveToken = auth.session?.accessToken || session.accessToken;
+            const stemResponse = await fetchImpl(`${SUPABASE_URL}/functions/v1/compute-kaggle-v54`, {
+              method: 'POST',
+              headers: {
+                apikey: PUBLISHABLE_KEY,
+                authorization: `Bearer ${liveToken}`,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ project_id: linked.project.id, source_asset_id: result.asset.id }),
+            });
+            const stemDispatch = await stemResponse.json().catch(() => ({}));
+            assert.equal(stemResponse.ok, true, `vocal separation dispatch failed: ${stemDispatch?.error || stemResponse.status}`);
+            assert.equal(stemDispatch?.ok, true, `vocal separation rejected: ${stemDispatch?.error || 'unknown'}`);
+            assert.ok(stemDispatch?.job_id, 'vocal separation job id missing');
+
+            const stemJob = await waitForStandaloneStems({
+              token: liveToken,
+              jobId: stemDispatch.job_id,
+              fetchImpl,
+              pollIntervalMs: 5000,
+              maxWaitMs: 12 * 60 * 1000,
+              onProgress: (state) => {
+                const entry = {
+                  status: state?.status || null,
+                  progress: Number(state?.progress || 0),
+                  stage: state?.current_stage || null,
+                };
+                vocalProgress.push(entry);
+                console.log('PV_VOCAL_AUDIT_PROGRESS', JSON.stringify(entry));
+              },
+            });
+            const stemAssets = await getStandaloneStemsAssets({ token: liveToken, job: stemJob, fetchImpl });
+            const vocalAsset = stemAssets.find((asset) => asset.kind === 'guide_vocal');
+            assert.ok(vocalAsset?.id, 'verified vocal stem asset missing');
+            const vocalDownload = await downloadPrivateStem({ token: liveToken, asset: vocalAsset, fetchImpl });
+            const vocalPath = `${outDir}/vocal-stem.wav`;
+            fs.writeFileSync(vocalPath, Buffer.from(await vocalDownload.blob.arrayBuffer()));
+            const vocalSignal = measurePcm(decodePcm(vocalPath), { activeThreshold: 0.004, frameSeconds: 0.05 });
+            const vocalPresence = evaluateVocalPresence({
+              vocal: vocalSignal,
+              mix: mixSignal,
+              vocalAsset,
+              job: stemJob,
+            });
+            fs.writeFileSync(`${outDir}/vocal-audit.json`, JSON.stringify({
+              ...vocalPresence,
+              stem_job_id: stemJob.id,
+              vocal_asset_id: vocalAsset.id,
+              vocal_sha256: vocalDownload.sha256,
+              engine: stemJob.proof?.engine || stemJob.engine || 'Demucs',
+              model: stemJob.proof?.model || vocalAsset.metadata?.model || 'htdemucs',
+              lyric_adherence: 'pending_transcription',
+              progress: vocalProgress,
+            }, null, 2));
+            assert.equal(vocalPresence.ok, true, `generated song has no verified acoustic vocal: ${vocalPresence.code || 'unknown'}`);
 
             const evidence = {
               verdict: 'REAL_COMPOSITION_PATH_VERIFIED',
+              acoustic_vocal_verdict: 'ACOUSTIC_VOCAL_PRESENCE_VERIFIED',
+              lyric_adherence: 'pending_transcription',
               github_sha: process.env.GITHUB_SHA,
               local_project_id: localProject.id,
               remote_project_id: linked.project.id,
               request_id: result.requestId || null,
+              remote_asset_id: result.asset.id,
               provider: result.provider || null,
               model: result.model || null,
               model_revision: result.modelRevision || null,
@@ -220,11 +299,22 @@ jobs:
               generation_seed: result?.job?.proof?.generation_seed ?? null,
               generation_shift: result?.job?.proof?.generation_shift ?? null,
               signal: {
-                rms: Number(rms.toFixed(6)),
-                peak: Number(peak.toFixed(6)),
-                active_ratio: Number(activeRatio.toFixed(4)),
-                clip_ratio: Number(clipRatio.toFixed(6)),
-                rms_contrast: Number(rmsContrast.toFixed(6)),
+                rms: Number(mixSignal.rms.toFixed(6)),
+                peak: Number(mixSignal.peak.toFixed(6)),
+                active_ratio: Number(mixSignal.activeRatio.toFixed(4)),
+                clip_ratio: Number(mixSignal.clipRatio.toFixed(6)),
+                rms_contrast: Number(mixSignal.rmsContrast.toFixed(6)),
+              },
+              vocal_audit: {
+                stem_job_id: stemJob.id,
+                vocal_asset_id: vocalAsset.id,
+                vocal_sha256: vocalDownload.sha256,
+                code: vocalPresence.code,
+                checks: vocalPresence.checks,
+                metrics: vocalPresence.metrics,
+                thresholds: vocalPresence.thresholds,
+                engine: stemJob.proof?.engine || stemJob.engine || 'Demucs',
+                model: stemJob.proof?.model || vocalAsset.metadata?.model || 'htdemucs',
               },
               ai_direction: {
                 chars: String(result.aiDirection.text).length,
@@ -246,6 +336,7 @@ jobs:
               error: String(error?.message || error),
               stack: String(error?.stack || '').slice(0, 6000),
               progress,
+              vocal_progress: vocalProgress,
             }, null, 2));
             throw error;
           }
