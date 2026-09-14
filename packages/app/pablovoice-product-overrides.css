@@ -1,110 +1,15 @@
-html[data-pv-product-route="home"] .pv-vnext-shell {
-  grid-template-columns: 190px minmax(0,1fr);
-  grid-template-rows: auto minmax(0,1fr);
-}
-
-html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-brain,
-html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-companion-dock,
-html[data-pv-product-route="home"] .pv-vnext-sidebar [data-vnext-visualizer] {
-  display: none !important;
-}
-
-html[data-pv-product-route="home"] .pv-vnext-shell > .pv-top {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-html[data-pv-product-route="home"] .pv-vnext-shell > main {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
-  grid-column: 1;
-  grid-row: 1 / span 2;
-}
-
-html[data-pv-product-route="home"] .pv-vnext-sidebar {
-  min-height: calc(100dvh - 26px);
-}
-
-html[data-pv-product-route="home"] .pv-vnext-brand small {
-  color: #959aa7;
-}
-
-html[data-pv-product-route="home"] .pv-vnext-nav button.route-active {
-  border-color: rgba(255,255,255,.12);
-  background: linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.015));
-  box-shadow: inset 2px 0 rgba(255,255,255,.55);
-}
-
-html[data-pv-product-route="home"] .pv-product-primary {
-  border-color: rgba(255,255,255,.34);
-  background: linear-gradient(135deg,#e5e7eb,#9ca3af 55%,#555b66);
-  color: #090a0d;
-  box-shadow: 0 16px 42px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.8);
-}
-
-html[data-pv-product-route="home"] .pv-product-primary b,
-html[data-pv-product-route="home"] .pv-product-primary small,
-html[data-pv-product-route="home"] .pv-product-primary span {
-  color: #090a0d;
-}
-
-html[data-pv-product-route="home"] .pv-product-primary small { opacity:.68; }
-
-.pv-product-utilities {
-  display: grid;
-  grid-template-columns: repeat(4,minmax(0,1fr));
-  gap: 8px;
-}
-
-.pv-product-utilities button {
-  min-height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 15px;
-  background: rgba(255,255,255,.025);
-  color: #c5c8d0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.pv-product-utilities button span {
-  color: #989daa;
-  font-size: .95rem;
-}
-
-.pv-product-utilities button b {
-  font-size: .78rem;
-  font-weight: 700;
-}
-
-@media (hover:hover) {
-  .pv-product-utilities button:hover {
-    border-color: rgba(255,255,255,.16);
-    background: rgba(255,255,255,.045);
-  }
-}
-
-@media (max-width:980px) {
-  html[data-pv-product-route="home"] .pv-vnext-shell {
-    display:block;
-  }
-  html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
-    min-height:0;
-  }
-}
-
-@media (max-width:620px) {
-  .pv-product-utilities {
-    grid-template-columns: 1fr 1fr;
-  }
-  .pv-product-utilities button {
-    justify-content: flex-start;
-  }
-}
+html[data-pv-product-route="home"] .pv-vnext-shell{grid-template-columns:212px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+html[data-pv-product-route="home"] .pv-vnext-brain,html[data-pv-product-route="home"] .pv-vnext-companion-dock,html[data-pv-product-route="home"] [data-vnext-visualizer]{display:none!important}
+html[data-pv-product-route="home"] .pv-vnext-shell>.pv-top{grid-column:2;grid-row:1}html[data-pv-product-route="home"] .pv-vnext-shell>main{grid-column:2;grid-row:2}html[data-pv-product-route="home"] .pv-vnext-shell>.pv-vnext-sidebar{grid-column:1;grid-row:1/span 2}
+html[data-pv-product-route="home"] #pv-product-home{width:min(1080px,100%);margin:auto;padding-top:clamp(32px,7vh,76px)}
+html[data-pv-product-route="home"] .pv-product-create-card-v30{border-radius:22px;border-color:#ffffff1a;background:linear-gradient(145deg,#111217,#07080b);box-shadow:0 26px 80px #0006}
+html[data-pv-product-route="home"] .pv-product-title{margin:8px 0 2px;color:#f4f5f7;font-size:clamp(2.25rem,5.5vw,4.6rem);line-height:.96;letter-spacing:-.055em;font-weight:650}
+html[data-pv-product-route="home"] .pv-product-create-head h2{margin-top:10px;color:#b4b8c3;font-size:clamp(1.05rem,2vw,1.35rem);font-weight:520}
+html[data-pv-product-route="home"] .pv-product-context-heading{margin-bottom:0!important;color:#777e8c!important;font-size:.78rem!important;letter-spacing:.08em;text-transform:uppercase}
+html[data-pv-product-route="home"] .pv-product-head-actions{display:grid;justify-items:end;gap:8px}
+html[data-pv-product-route="home"] .pv-product-blank-project{border:0;background:none;color:#9ea3ae;font:inherit;font-size:.76rem;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+html[data-pv-product-route="home"] .pv-product-prompt-wrap textarea{min-height:150px;border-radius:16px;background:#0005;font-size:1.02rem}
+html[data-pv-product-route="home"] .pv-product-primary{background:linear-gradient(135deg,#e5e7eb,#8f96a1);color:#090a0d}html[data-pv-product-route="home"] .pv-product-primary *{color:#090a0d}
+html[data-pv-product-route="home"] .pv-product-song-row{grid-template-columns:repeat(3,minmax(0,1fr))}html[data-pv-product-route="home"] .pv-product-project-card,html[data-pv-product-route="home"] .pv-product-pablo-card{min-height:118px;border-radius:17px;background:#ffffff06;box-shadow:none}
+@media(max-width:980px){html[data-pv-product-route="home"] .pv-vnext-shell{display:block}html[data-pv-product-route="home"] .pv-product-song-row{grid-template-columns:1fr}}
+@media(max-width:620px){html[data-pv-product-route="home"] #pv-product-home{padding-top:20px}html[data-pv-product-route="home"] .pv-product-create-actions{grid-template-columns:1fr}html[data-pv-product-route="home"] .pv-product-head-actions{justify-items:start}}

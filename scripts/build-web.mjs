@@ -9,9 +9,8 @@ await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
 
-// Only the strict-CSP safe vNext implementations are part of the product runtime.
-// Keep the superseded variants in source history for auditability, but do not ship
-// dead duplicate code to Web/Android assets.
+// Only superseded implementations are removed from the shipped artifact.
+// Active runtime modules must stay present so build validation fails closed on drift.
 for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs']) {
   await rm(resolve(out, obsolete), { force: true });
 }
@@ -23,8 +22,6 @@ await cp(resolve(packages, 'providers'), resolve(out, 'providers'), { recursive:
 await cp(resolve(packages, 'music-intelligence'), resolve(out, 'music-intelligence'), { recursive: true });
 await cp(resolve(packages, 'site-vivo'), resolve(out, 'site'), { recursive: true });
 
-// packages/app is flattened into the Web root. Rewrite only root app imports
-// that point to sibling packages, then fail the build if a relative import is unresolved.
 for (const name of await readdir(out)) {
   if (!name.endsWith('.mjs') && !name.endsWith('.js')) continue;
   const file = resolve(out, name);
@@ -37,10 +34,10 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
-// Strip only source-layout indentation and blank lines from shipped CSS. This keeps
-// every selector/declaration/token intact while avoiding source-formatting bytes in
-// the production artifact.
+await compactModuleLayout(out);
 await compactCssLayout(out);
+await compactHtmlLayout(out);
+await compactStructuredAssets(out);
 await assertBuiltRelativeImportsResolve(out);
 
 await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
@@ -48,8 +45,31 @@ await writeFile(resolve(out, 'build.json'), `${JSON.stringify({
   version: process.env.PV_VERSION || '2.4.0',
   commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local',
   builtAt: new Date().toISOString(),
-}, null, 2)}\n`, 'utf8');
+})}\n`, 'utf8');
 console.log(`PabloVoice Web built at ${out}`);
+
+async function compactModuleLayout(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactModuleLayout(path);
+      continue;
+    }
+    if (!entry.isFile() || (!entry.name.endsWith('.mjs') && !entry.name.endsWith('.js'))) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/\r/g, '')
+      .split('\n')
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        if (!trimmed.startsWith('//')) return true;
+        return /^\/\/[#@]\s*(sourceURL|sourceMappingURL)=/.test(trimmed);
+      })
+      .join('\n') + '\n';
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
 
 async function compactCssLayout(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -62,8 +82,61 @@ async function compactCssLayout(directory) {
     const source = await readFile(path, 'utf8');
     const compacted = source
       .replace(/\r/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\n[ \t]+/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{2,}/g, '\n')
+      .replace(/([;{}])\n/g, '$1');
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
+
+async function compactHtmlLayout(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactHtmlLayout(path);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.html')) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/\r/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{2,}/g, '\n');
+    if (compacted !== source) await writeFile(path, compacted, 'utf8');
+  }
+}
+
+async function compactStructuredAssets(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      await compactStructuredAssets(path);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (entry.name.endsWith('.json') || entry.name.endsWith('.webmanifest')) {
+      const source = await readFile(path, 'utf8');
+      try {
+        const compacted = `${JSON.stringify(JSON.parse(source))}\n`;
+        if (compacted !== source) await writeFile(path, compacted, 'utf8');
+      } catch {
+        // Non-JSON text with one of these suffixes remains untouched.
+      }
+      continue;
+    }
+    if (!entry.name.endsWith('.svg')) continue;
+    const source = await readFile(path, 'utf8');
+    const compacted = source
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/>\s+</g, '><')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{2,}/g, '\n')
+      .trim() + '\n';
     if (compacted !== source) await writeFile(path, compacted, 'utf8');
   }
 }

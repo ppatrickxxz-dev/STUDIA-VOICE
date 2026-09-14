@@ -26,7 +26,7 @@ test('VNEXT UNIFIED UI GATE: one connected Studio with transparent access and no
   await expect(page.locator('html')).toHaveAttribute('data-pv-access-mode', 'transparent-device');
   await expect(page.locator('html')).toHaveAttribute('data-pv-offline-mode', 'false');
   await expect(page.locator('html')).toHaveAttribute('data-pv-vnext-boot', 'ready', { timeout: 12_000 });
-  await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v21', { timeout: 12_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-pv-product-ui', 'pablovoice_product_ui_v30', { timeout: 12_000 });
 
   const shell = page.locator('.pv-vnext-shell');
   const nav = shell.locator('.pv-vnext-nav.pv-nav');
