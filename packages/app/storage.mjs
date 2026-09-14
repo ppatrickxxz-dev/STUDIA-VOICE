@@ -1,5 +1,6 @@
 import { migrateProject } from './core/src/project.mjs';
 import { sortProjectsByContext } from './project-context.mjs';
+import { ensureSongModelV3 } from './song-model-v3.mjs';
 
 const DB_NAME = 'pablovoice_mobile_v2';
 const DB_VERSION = 3;
@@ -37,7 +38,7 @@ export function activeProjectSessionId() {
 export { sortProjectsByContext } from './project-context.mjs';
 
 export async function saveProject(project) {
-  const clean = migrateProject(project);
+  const clean = ensureSongModelV3(migrateProject(project));
   await put('projects', clean);
   return clean;
 }
@@ -45,7 +46,7 @@ export async function saveProject(project) {
 export async function getProject(id) {
   const raw = await get('projects', id);
   if (!raw) return null;
-  const project = migrateProject(raw);
+  const project = ensureSongModelV3(migrateProject(raw));
   if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
   if (raw.settings) project.legacySettings = raw.settings;
   return project;
@@ -55,7 +56,7 @@ export async function listProjects() {
   const values = await all('projects');
   const activeId = activeProjectSessionId();
   const projects = values.map((raw) => {
-    const project = migrateProject(raw);
+    const project = ensureSongModelV3(migrateProject(raw));
     if (!project.tracks.length && raw.audioId) project.legacyAudioId = raw.audioId;
     if (raw.settings) project.legacySettings = raw.settings;
     return project;
