@@ -38,17 +38,16 @@ jobs:
         with:
           node-version: 24
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
-
       - name: Initialize evidence directory
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p test-results/real-composition
           printf '{"verdict":"STARTED","github_sha":"%s","github_run_id":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > test-results/real-composition/start.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Ensure audio inspection and vocal separation tools
         shell: bash
