@@ -89,7 +89,7 @@ function homeMarkup() {
     <div class="pv-product-create-head">
       <div>
         <span class="pv-product-eyebrow">PABLOVOICE</span>
-        <h2 class="pv-product-context-heading">Você tá no estúdio.</h2>
+        <h2 class="pv-product-context-heading">Criação musical.</h2>
         <h1 class="pv-product-title">Crie a música primeiro.</h1>
         <h2>Como ela deve soar?</h2>
         <p>Escreva como falaria com um produtor. A letra, a direção, as versões e a produção continuam no mesmo projeto.</p>
