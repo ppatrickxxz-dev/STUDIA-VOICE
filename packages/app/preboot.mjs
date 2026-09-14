@@ -2,35 +2,15 @@ const app = document.querySelector('#app');
 const ACTIVE_PROJECT_SESSION_KEY = 'pablovoice.activeProjectId';
 
 document.addEventListener('click', (event) => {
-  const target = event.target.closest('[data-action="open-project"][data-id]');
-  const id = target?.dataset.id;
+  const id = event.target.closest('[data-action="open-project"][data-id]')?.dataset.id;
   if (!id) return;
-  try { sessionStorage.setItem(ACTIVE_PROJECT_SESSION_KEY, id); }
-  catch { /* session storage can be unavailable in privacy/file contexts */ }
+  try { sessionStorage.setItem(ACTIVE_PROJECT_SESSION_KEY, id); } catch {}
 }, true);
 
 function fallbackShell() {
   if (!app || document.querySelector('.pv-nav')) return;
   const offline = navigator.onLine === false;
-  app.innerHTML = `<div class="pv-shell">
-    <header class="pv-top">
-      <div class="pv-brand"><span>PV</span> PABLOVOICE <small>iniciando</small></div>
-      <div class="pv-top-actions"><span class="pv-health ${offline ? '' : 'connected'}"><span></span>${offline ? 'OFFLINE · LOCAL' : 'ONLINE · FULL'}</span></div>
-    </header>
-    <main>
-      <section class="pv-hero"><div class="pv-kicker">PabloVoice · pocket music studio</div><h1 class="pv-title">Você tá no <em>estúdio</em></h1><p class="pv-lead">${offline ? 'Sem rede agora. Restaurando seus projetos e o motor local no aparelho.' : 'Restaurando seu estúdio, projetos e recursos conectados.'}</p></section>
-      <article class="pv-card chrome"><div class="pv-card-head"><div><h2>Studio pronto para abrir</h2><p>Seu histórico continua sendo carregado em segundo plano.</p></div><span class="pv-tag ok">MEMÓRIA</span></div>
-        <div class="pv-quick"><button class="pv-btn" data-action="new-project">＋ <span>Novo projeto<small>nome e histórico</small></span></button><button class="pv-btn" data-action="import">↥ <span>Importar áudio<small>use um arquivo do aparelho</small></span></button><button class="pv-btn record" data-action="record">● <span>Gravar voz<small>microfone do aparelho</small></span></button><button class="pv-btn" data-route="projects">▤ <span>Meus projetos<small>abrir quando a restauração terminar</small></span></button></div>
-      </article>
-    </main>
-  </div>
-  <nav class="pv-nav" aria-label="Navegação principal">
-    <button class="active" data-route="home" aria-label="Início"><b>⌂</b><span>Início</span></button>
-    <button data-route="studio" aria-label="Studio"><b>◉</b><span>Studio</span></button>
-    <button data-route="projects" aria-label="Projetos"><b>▤</b><span>Projetos</span></button>
-    <button data-route="compose" aria-label="Compor"><b>✎</b><span>Compor</span></button>
-    <button data-route="pablo" aria-label="Pablo"><b>✦</b><span>Pablo</span></button>
-  </nav>`;
+  app.innerHTML = `<div class="pv-shell"><header class="pv-top"><div class="pv-brand"><span>PV</span> PABLOVOICE</div><div class="pv-top-actions"><span class="pv-health ${offline ? '' : 'connected'}"><span></span>${offline ? 'OFFLINE' : 'ONLINE'}</span></div></header><main><section class="pv-hero"><h1 class="pv-title">Você tá no <em>estúdio</em></h1><p class="pv-lead">${offline ? 'Restaurando seu projeto local.' : 'Restaurando seu estúdio.'}</p></section><div class="pv-quick"><button class="pv-btn" data-action="new-project">Novo projeto</button><button class="pv-btn" data-action="import">Importar áudio</button><button class="pv-btn record" data-action="record">Gravar voz</button></div></main></div><nav class="pv-nav" aria-label="Navegação principal"><button class="active" data-route="home"><span>Início</span></button><button data-route="studio"><span>Studio</span></button><button data-route="projects"><span>Projetos</span></button><button data-route="compose"><span>Compor</span></button><button data-route="pablo"><span>Pablo</span></button></nav>`;
 }
 
 try {
