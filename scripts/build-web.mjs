@@ -9,9 +9,9 @@ await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
 
-// Only currently referenced product implementations belong in the shipped artifact.
-// Keep superseded/unreferenced modules in source history for auditability.
-for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs', 'audio-to-piano-roll-ui.mjs']) {
+// Only superseded implementations are removed from the shipped artifact.
+// Active runtime modules must stay present so build validation fails closed on drift.
+for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs']) {
   await rm(resolve(out, obsolete), { force: true });
 }
 
