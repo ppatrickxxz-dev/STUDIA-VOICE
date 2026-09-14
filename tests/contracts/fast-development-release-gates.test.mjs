@@ -45,7 +45,7 @@ test('Cloudflare keeps cheap contracts in draft and defers only the physical pre
   const physicalStart = cloudflareGate.indexOf('  physical-preview:');
   assert.ok(dryRunStart >= 0 && physicalStart > dryRunStart, 'Cloudflare dry-run and physical preview jobs must exist');
 
-  const dryRun = ci.slice(dryRunStart, physicalStart);
+  const dryRun = cloudflareGate.slice(dryRunStart, physicalStart);
   const physical = cloudflareGate.slice(physicalStart);
   assert.doesNotMatch(dryRun, /pull_request\.draft/, 'Cloudflare build/contracts must still run in draft');
   assert.match(physical, /github\.event_name == 'pull_request' && github\.event\.pull_request\.draft == false/);
