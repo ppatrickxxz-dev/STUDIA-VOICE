@@ -94,13 +94,7 @@ html[data-pv-product-route="home"] .pv-product-primary small { opacity:.68; }
 @media (max-width:980px) {
   html[data-pv-product-route="home"] .pv-vnext-shell {
     display:block;
-    max-width:100%!important;
     overflow-x:hidden;
-  }
-  html[data-pv-product-route="home"] .pv-vnext-shell * {
-    min-width:0;
-    max-width:100%;
-    box-sizing:border-box;
   }
   html[data-pv-product-route="home"] .pv-vnext-shell > .pv-vnext-sidebar {
     min-height:0;
