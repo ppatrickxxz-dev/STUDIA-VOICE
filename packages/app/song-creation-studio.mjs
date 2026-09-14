@@ -3,12 +3,12 @@ import { upsertConfirmedSection } from './core/src/section-map.mjs';
 import { NativeMusicGenerationClient } from './native-music-generation-client.mjs';
 import { buildSongCreationIntelligence } from './song-creation-intelligence.mjs';
 import { activeProjectSessionId, getProject, listProjects, rememberActiveProject, saveAudioAsset, saveProject } from './storage.mjs';
-import { describeSongPlan, SONG_CREATION_SCHEMA } from './song-creation-engine.mjs';
 import { createProfessionalSongPlan } from './professional-song-plan.mjs';
 
 const OPEN_STUDIO_KEY = 'pablovoice.songCreation.openStudio';
 const PENDING_GENERATIONS_KEY = 'pablovoice.pendingMusicGenerations.v2';
 const DEFAULT_CANDIDATES = 2;
+const SONG_CREATION_SCHEMA = 'pablovoice_song_creation_v1';
 
 const runtime = {
   observer: null,
@@ -236,8 +236,6 @@ async function runCreation(form) {
       throw new Error(detail || 'Nenhuma versão chegou em condição segura para entrar no projeto.');
     }
 
-    const first = candidates[0];
-    await selectCandidate(project, first.takeId, first.trackId, { saveSnapshot: false });
     await saveSongSnapshot(project, `${candidates.length} versões profissionais geradas`);
 
     runtime.result = {
@@ -247,14 +245,17 @@ async function runCreation(form) {
       plan,
       intelligence,
       instrumental,
-      selectedTakeId: first.takeId,
+      selectedTakeId: project.songCreation?.latestTakeId || null,
     };
     runtime.dirtyProjectId = project.id;
     renderResult(runtime.result);
+    document.dispatchEvent(new CustomEvent('pablovoice:project-updated', {
+      detail: { projectId: project.id, source: 'song_creation_candidates_generated' },
+    }));
 
     const vocalCopy = instrumental
       ? 'Instrumentais criados. Ouça e escolha a base que quer levar ao Studio.'
-      : 'Versões cantadas solicitadas. Ouça e escolha; a auditoria acústica de vocal ainda precisa confirmar a presença da voz antes de chamar de Final.';
+      : 'Versões cantadas solicitadas. Elas só podem ser escolhidas depois que a auditoria acústica confirmar voz cantada.';
     setStatus(status, `${candidates.length} versão(ões) criada(s). ${vocalCopy}`, candidates.length === DEFAULT_CANDIDATES ? 'ok' : 'warn');
   } catch (error) {
     console.error('PABLOVOICE_SONG_CREATION_FAILED', error);
@@ -357,7 +358,6 @@ async function persistHighQualitySongTake(project, plan, highQuality, lyrics, in
   commitSongTake(project, plan, lyrics, {
     takeId,
     tracks: [track],
-    activeTrackId: track.id,
     take: {
       candidateLabel,
       referenceTrackId: track.id,
@@ -385,11 +385,10 @@ async function persistHighQualitySongTake(project, plan, highQuality, lyrics, in
   return { projectId: project.id, takeId, takeNumber, trackId: track.id, track };
 }
 
-function commitSongTake(project, plan, lyrics, { takeId, tracks, activeTrackId, take }) {
+function commitSongTake(project, plan, lyrics, { takeId, tracks, take }) {
   project.lyrics = lyrics;
   project.preset = 'music';
   project.tracks = [...(project.tracks || []), ...tracks];
-  project.activeTrackId = activeTrackId;
   project.arrangementMap = applyArrangementMap(project.arrangementMap, plan.sections);
   const nextTake = {
     id: takeId,
@@ -408,14 +407,29 @@ function commitSongTake(project, plan, lyrics, { takeId, tracks, activeTrackId, 
     ...take,
   };
   const takes = [...(project.songCreation?.takes || []), nextTake].slice(-24);
-  project.songCreation = { schema: SONG_CREATION_SCHEMA, latestTakeId: takeId, takes };
+  project.songCreation = {
+    schema: SONG_CREATION_SCHEMA,
+    latestTakeId: project.songCreation?.latestTakeId || null,
+    latestGeneratedTakeId: takeId,
+    takes,
+  };
 }
 
 async function selectCandidate(project, takeId, trackId, { saveSnapshot = true } = {}) {
-  if (!project || !takeId || !trackId) return;
+  if (!project || !takeId || !trackId) return { ok: false, code: 'candidate_missing' };
+  const take = project.songCreation?.takes?.find((item) => item.id === takeId);
+  if (!take) return { ok: false, code: 'candidate_missing' };
+  if (take.validation?.vocalRequested === true && take.validation?.vocalContentAudit !== 'acoustic_presence_verified') {
+    return { ok: false, code: 'vocal_audit_required' };
+  }
   project.activeTrackId = trackId;
-  project.songCreation = { ...(project.songCreation || {}), latestTakeId: takeId };
+  project.songCreation = {
+    ...(project.songCreation || {}),
+    latestTakeId: takeId,
+    latestApprovedAt: Date.now(),
+  };
   if (saveSnapshot) await saveSongSnapshot(project, `Versão ${candidateLabelForTake(project, takeId)} escolhida`);
+  return { ok: true, take };
 }
 
 function renderResult(result) {
@@ -426,14 +440,20 @@ function renderResult(result) {
     const url = URL.createObjectURL(candidate.blob);
     runtime.urls.push(url);
     const selected = candidate.takeId === result.selectedTakeId;
-    const vocalStatus = candidate.validation?.vocalRequested
-      ? 'Voz solicitada · auditoria acústica pendente'
+    const vocalRequested = candidate.validation?.vocalRequested === true;
+    const vocalPassed = candidate.validation?.vocalContentAudit === 'acoustic_presence_verified';
+    const vocalPending = vocalRequested && !vocalPassed;
+    const vocalStatus = vocalRequested
+      ? (vocalPassed ? '✓ Voz cantada confirmada' : 'Voz solicitada · aguardando confirmação acústica')
       : 'Instrumental';
+    const chooseLabel = selected
+      ? '✓ Versão escolhida'
+      : vocalPending ? 'Aguardando confirmação vocal' : 'Usar esta versão';
     return `<article class="pv-song-candidate ${selected ? 'selected' : ''}" data-candidate-take="${escapeHtml(candidate.takeId)}">
       <div class="pv-card-head"><div><span class="pv-kicker">VERSÃO ${escapeHtml(candidate.label)}</span><h3>Take ${candidate.takeNumber}</h3><p>${escapeHtml(vocalStatus)}</p></div><span class="pv-tag ${selected ? 'ok' : ''}">${selected ? 'ESCOLHIDA' : 'CANDIDATA'}</span></div>
       <audio controls preload="metadata" src="${url}"></audio>
       ${candidate.aiDirection?.text ? `<p class="pv-note"><b>Direção usada:</b> ${escapeHtml(candidate.aiDirection.text)}</p>` : ''}
-      <div class="pv-actions"><button class="pv-btn ${selected ? '' : 'primary'}" type="button" data-song-select-candidate data-take-id="${escapeHtml(candidate.takeId)}" data-track-id="${escapeHtml(candidate.trackId)}">${selected ? '✓ Versão escolhida' : 'Usar esta versão'}</button></div>
+      <div class="pv-actions"><button class="pv-btn ${selected ? '' : 'primary'}" type="button" data-song-select-candidate data-take-id="${escapeHtml(candidate.takeId)}" data-track-id="${escapeHtml(candidate.trackId)}" ${vocalPending ? 'disabled' : ''}>${chooseLabel}</button></div>
     </article>`;
   }).join('');
 
@@ -476,13 +496,19 @@ async function handleClick(event) {
     event.preventDefault();
     const project = await resolveActiveProject();
     if (!project) return;
-    await selectCandidate(project, choose.dataset.takeId, choose.dataset.trackId);
+    const selection = await selectCandidate(project, choose.dataset.takeId, choose.dataset.trackId);
+    if (!selection.ok) {
+      setStatus(document.querySelector('#pv-song-create-status'), 'Esta versão ainda não pode ser escolhida: primeiro preciso confirmar que ela contém voz cantada utilizável.', 'warn');
+      return;
+    }
     if (runtime.result) {
+      const candidate = runtime.result.candidates.find((item) => item.takeId === choose.dataset.takeId);
+      if (candidate && selection.take?.validation) candidate.validation = selection.take.validation;
       runtime.result.selectedTakeId = choose.dataset.takeId;
       renderResult(runtime.result);
       runtime.dirtyProjectId = project.id;
     }
-    setStatus(document.querySelector('#pv-song-create-status'), 'Versão escolhida e preservada. Você pode continuar no Studio sem perder as alternativas.', 'ok');
+    setStatus(document.querySelector('#pv-song-create-status'), 'Versão escolhida por você e preservada. Agora o Studio pode continuar sem perder as alternativas.', 'ok');
     return;
   }
 
@@ -646,6 +672,12 @@ function humanHighQualityError(result = {}) {
   return `A criação não concluiu (${result.error || 'erro do motor'}). Nenhuma versão anterior foi substituída.`;
 }
 
+function describeSongPlan(plan) {
+  const mode = plan.mode === 'major' ? 'maior' : 'menor';
+  const labels = (plan.sections || []).map((section) => section.label || section.id).join(' → ');
+  return `${String(plan.genre || 'music').toUpperCase()} · ${plan.bpm} BPM · ${plan.key || 'tom livre'} ${mode} · ${labels}`;
+}
+
 function setBusy(button, busy, text) {
   if (!button) return;
   button.disabled = Boolean(busy);
@@ -674,13 +706,14 @@ function escapeHtml(value) {
 }
 
 export const PABLOVOICE_SONG_CREATOR_POLICY = Object.freeze({
-  version: '3.0.0',
+  version: '3.1.0',
   product: 'single_song_first_studio',
   professionalCandidates: DEFAULT_CANDIDATES,
   authoredLyricsStructureWins: true,
   localToyFallback: false,
   syntheticGuidePresentedAsVocal: false,
   finalIsUserApprovedOnly: true,
+  autoSelectGeneratedCandidate: false,
   offlineGenerationRequestQueue: true,
-  vocalSuccessRequiresFutureAcousticAudit: true,
+  vocalSuccessRequiresAcousticAudit: true,
 });
