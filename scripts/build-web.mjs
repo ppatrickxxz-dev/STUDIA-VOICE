@@ -9,10 +9,9 @@ await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
 
-// Only the strict-CSP safe vNext implementations are part of the product runtime.
-// Keep the superseded variants in source history for auditability, but do not ship
-// dead duplicate code to Web/Android assets.
-for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs']) {
+// Only currently referenced product implementations belong in the shipped artifact.
+// Keep superseded/unreferenced modules in source history for auditability.
+for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs', 'audio-to-piano-roll-ui.mjs']) {
   await rm(resolve(out, obsolete), { force: true });
 }
 
@@ -23,8 +22,6 @@ await cp(resolve(packages, 'providers'), resolve(out, 'providers'), { recursive:
 await cp(resolve(packages, 'music-intelligence'), resolve(out, 'music-intelligence'), { recursive: true });
 await cp(resolve(packages, 'site-vivo'), resolve(out, 'site'), { recursive: true });
 
-// packages/app is flattened into the Web root. Rewrite only root app imports
-// that point to sibling packages, then fail the build if a relative import is unresolved.
 for (const name of await readdir(out)) {
   if (!name.endsWith('.mjs') && !name.endsWith('.js')) continue;
   const file = resolve(out, name);
@@ -37,8 +34,6 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
-// Production keeps source semantics but drops source-only layout/comment bytes.
-// Source files in packages/ remain untouched for review/audit.
 await compactModuleLayout(out);
 await compactCssLayout(out);
 await compactHtmlLayout(out);
