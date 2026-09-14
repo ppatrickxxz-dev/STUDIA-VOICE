@@ -7,7 +7,9 @@ on:
       - '.github/workflows/native-music-generation-canary.yml'
       - 'supabase/functions/compute-kaggle-v58/**'
       - 'supabase/functions/kaggle-worker-source-v58/**'
+      - 'supabase/functions/progress-kaggle-pipeline-job-v58/**'
       - 'supabase/functions/complete-kaggle-pipeline-job-v58/**'
+      - 'supabase/migrations/20260913211000_music_generation_capacity_queue.sql'
       - 'packages/app/native-music-generation-client.mjs'
   workflow_dispatch:
 
@@ -27,7 +29,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: pablovoice-production
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -80,9 +82,9 @@ jobs:
             -H 'content-type: application/json' \
             --data "$BODY")"
           cat test-results/native-music-generation/dispatch.json | jq 'del(.kernel)'
-          test "$HTTP_CODE" = '200'
+          case "$HTTP_CODE" in 200|202) ;; *) echo "Unexpected dispatch HTTP $HTTP_CODE" >&2; exit 1 ;; esac
           JOB_ID="$(jq -er '.job_id' test-results/native-music-generation/dispatch.json)"
-          jq -e '.ok == true and .status == "waiting_kaggle" and .fallback_allowed == false' test-results/native-music-generation/dispatch.json >/dev/null
+          jq -e '.ok == true and (.status == "waiting_kaggle" or .status == "queued_capacity" or .status == "dispatched") and .fallback_allowed == false' test-results/native-music-generation/dispatch.json >/dev/null
           printf 'PV_JOB_ID=%s\n' "$JOB_ID" >> "$GITHUB_ENV"
 
       - name: Wait for physical audio and verify proof
@@ -90,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           JOB_URL="$SUPABASE_URL/rest/v1/render_jobs?id=eq.$PV_JOB_ID&select=id,status,progress,current_stage,error_code,error_message,parameters,proof,output_asset_ids"
-          for attempt in $(seq 1 72); do
+          for attempt in $(seq 1 120); do
             curl --fail-with-body --silent --show-error "$JOB_URL" \
               -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
               -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
@@ -113,7 +115,8 @@ jobs:
             (.[0].proof.sample_rate | tonumber) > 0 and
             (.[0].proof.channels | tonumber) > 0 and
             (.[0].proof.audio_sha256 | test("^[0-9a-f]{64}$")) and
-            .[0].parameters.client == "pablovoice_native_music_v2_1" and
+            .[0].parameters.client == "pablovoice_native_music_v2_3" and
+            .[0].parameters.queue_schema == "pablovoice_music_capacity_queue_v1" and
             (.[0].parameters.caption_chars | tonumber) <= 512 and
             (.[0].parameters.shift | tonumber) == 3 and
             .[0].parameters.constrained_decoding == true and
