@@ -10,14 +10,12 @@ await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
 
 // Keep superseded implementations in source history for auditability, but never
-// ship dead duplicate product paths. The current Creator uses the native music
-// client + song-creation-studio and the strict-CSP vNext implementations.
+// ship dead duplicate product paths. Active compatibility modules remain shipped
+// and the unresolved-import gate below protects this list from unsafe pruning.
 for (const obsolete of [
   'pablovoice-vnext-ui.mjs',
   'pablovoice-companion-reactor.mjs',
   'creator-online-language.mjs',
-  'music-generation-client.mjs',
-  'song-creation-engine.mjs',
 ]) {
   await rm(resolve(out, obsolete), { force: true });
 }
@@ -43,9 +41,9 @@ for (const name of await readdir(out)) {
   if (rewritten !== original) await writeFile(file, rewritten, 'utf8');
 }
 
-// Strip only source-layout indentation and blank lines from shipped CSS. This keeps
-// every selector/declaration/token intact while avoiding source-formatting bytes in
-// the production artifact.
+// Production CSS keeps the exact rules/tokens while dropping comments and source
+// formatting. Strings are preserved byte-for-byte so visible copy/data URLs cannot
+// be changed by the compactor.
 await compactCssLayout(out);
 await assertBuiltRelativeImportsResolve(out);
 
@@ -66,12 +64,67 @@ async function compactCssLayout(directory) {
     }
     if (!entry.isFile() || !entry.name.endsWith('.css')) continue;
     const source = await readFile(path, 'utf8');
-    const compacted = source
-      .replace(/\r/g, '')
-      .replace(/\n[ \t]+/g, '\n')
-      .replace(/\n{2,}/g, '\n');
+    const compacted = minifyCssLayout(source);
     if (compacted !== source) await writeFile(path, compacted, 'utf8');
   }
+}
+
+function minifyCssLayout(source) {
+  let output = '';
+  let quote = '';
+  let escaped = false;
+  let comment = false;
+  let pendingSpace = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1] || '';
+
+    if (comment) {
+      if (char === '*' && next === '/') {
+        comment = false;
+        index += 1;
+        pendingSpace = true;
+      }
+      continue;
+    }
+
+    if (quote) {
+      output += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = '';
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      comment = true;
+      index += 1;
+      pendingSpace = true;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      if (pendingSpace && output && !/[\s{;,>+~]$/.test(output)) output += ' ';
+      pendingSpace = false;
+      quote = char;
+      output += char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      pendingSpace = true;
+      continue;
+    }
+
+    const punctuation = /[{};,>+~]/.test(char);
+    if (pendingSpace && output && !punctuation && !/[{;,>+~]$/.test(output)) output += ' ';
+    pendingSpace = false;
+    if (punctuation && output.endsWith(' ')) output = output.slice(0, -1);
+    output += char;
+  }
+
+  return output.trim();
 }
 
 async function assertBuiltRelativeImportsResolve(directory) {
