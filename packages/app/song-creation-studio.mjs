@@ -74,7 +74,7 @@ function injectSongCreator() {
         <button class="pv-btn" type="button" data-edit-lyrics>Editar letra</button>
       </div>
 
-      <details class="pv-create-adjustments">
+      <details class="pv-create-adjustments pv-intimate-advanced">
         <summary>Ajustes</summary>
         <div class="pv-song-fields">
           <label>Base de estilo
@@ -122,6 +122,7 @@ function injectSongCreator() {
 
       <div class="pv-create-actions">
         <button class="pv-btn primary pv-create-main" type="submit" data-song-create-hq>✦ Criar 2 versões</button>
+        <button type="submit" data-song-create-button hidden tabindex="-1" aria-hidden="true">Enfileirar geração profissional</button>
         <small>O PabloVoice gera alternativas profissionais e preserva todas as versões até você escolher.</small>
       </div>
       <div class="pv-note" id="pv-song-create-status">Sua letra + sua direção → duas versões completas → você escolhe → Studio.</div>
