@@ -1,0 +1,275 @@
+name: Render Tão Eu slow trap R&B
+
+on:
+  push:
+    branches:
+      - song/tao-eu-slow-trap-rnb-20260915
+    paths:
+      - '.github/workflows/song-tao-eu-generation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SUPABASE_URL: https://yokmhqoncdwvxmzzybqa.supabase.co
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH
+  PROJECT_ID: d64e4de9-791e-41bc-9307-7957389b2499
+  CLOUDFLARE_URL: https://studia-voice.ppatrickxxz.workers.dev
+
+jobs:
+  render-tao-eu:
+    runs-on: ubuntu-24.04
+    environment: pablovoice-production
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire transparent PabloVoice session
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pablovoice-signing")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_JSON" | jq -er '.value')"
+          SESSION="$(curl --fail-with-body --silent --show-error \
+            -X POST "$SUPABASE_URL/functions/v1/device-auth" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data '{"action":"b09_session"}')"
+          ACCESS_TOKEN="$(printf '%s' "$SESSION" | jq -er '.session.access_token')"
+          test "$(printf '%s' "$SESSION" | jq -er '.project_id')" = "$PROJECT_ID"
+          echo "::add-mask::$ACCESS_TOKEN"
+          printf 'PV_ACCESS_TOKEN=%s\n' "$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Ask PabloVoice for production direction
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results/tao-eu
+          BODY="$(jq -nc --arg project "$PROJECT_ID" '{
+            command:"generate",
+            project_id:$project,
+            task:"Direcione a produção de Tão Eu sem reescrever a letra: trap lento cantado e romântico, R&B sensual e pop muito catchy; 82 BPM; voz masculina tenor/barítono quente; versos íntimos, pré crescente, refrão grande e memorável, ponte emocional e corte total antes do refrão final. Instrumental com sub/808 redondo, kick macio, clap/snare seco, hats esparsos, pads escuros glossy, plucks discretos e synths Y2K. Nada de rap agressivo, drill, dembow, EDM drop, violão ou piano dominante. Responda só com uma direção curta de produção.",
+            context_pack:{purpose:"album_song_direction",song_title:"Tão Eu",creation_mode:"full_song"},
+            constraints:{max_direction_chars:420,preserve_artist_request:true,no_lyrics_in_response:true}
+          }')"
+          RESPONSE="$(curl --fail-with-body --silent --show-error --max-time 45 \
+            -X POST "$CLOUDFLARE_URL/api/pablo-agent" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          printf '%s' "$RESPONSE" | jq -e '.ok == true and (.reply | type == "string" and length > 0) and .fallback_allowed == false' >/dev/null
+          DIRECTION="$(printf '%s' "$RESPONSE" | jq -r '.reply' | tr '\n' ' ' | cut -c1-420)"
+          printf '%s' "$RESPONSE" | jq 'del(.reply,.text) + {verdict:"REAL_AI_DIRECTION_OK"}' > test-results/tao-eu/direction.json
+          echo "PV_DIRECTION<<EOF" >> "$GITHUB_ENV"
+          echo "$DIRECTION" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Build exact Tão Eu song plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg d "$PV_DIRECTION" '{
+            schema:"pablovoice_song_creation_v1",
+            title:"Tão Eu",
+            brief:("Slow sung trap + romantic R&B + catchy pop; 82 BPM; warm sub/808, sparse hats, glossy dark pads, intimate verse and huge hook. PabloVoice 2.0 Song DNA: "+$d),
+            genre:"slow trap R&B pop",
+            mood:"romântico, sensual, catchy",
+            bpm:82,
+            key:"F#",
+            mode:"minor",
+            durationSeconds:196,
+            singerProfile:{
+              voiceType:"male tenor",
+              tone:"warm intimate",
+              delivery:"sung R&B, no rap",
+              language:"pt-BR",
+              lowMidi:45,
+              highMidi:69,
+              falsetto:true
+            },
+            sections:[
+              {id:"intro",label:"Intro",startBeat:0,endBeat:8},
+              {id:"verso_1",label:"Verso 1",startBeat:8,endBeat:72},
+              {id:"pre_1",label:"Pré-Refrão",startBeat:72,endBeat:88},
+              {id:"refrão_a",label:"Refrão A",startBeat:88,endBeat:120},
+              {id:"verso_2",label:"Verso 2",startBeat:120,endBeat:184},
+              {id:"ponte",label:"Ponte",startBeat:184,endBeat:216},
+              {id:"cut_total",label:"Corte Total",startBeat:216,endBeat:220},
+              {id:"refrão_final",label:"Refrão Final",startBeat:220,endBeat:252},
+              {id:"outro",label:"Outro",startBeat:252,endBeat:268}
+            ],
+            guideLines:[
+              {sectionId:"verso_1",text:"Te busquei em todo lugar"},
+              {sectionId:"verso_1",text:"Foi você quem se escondeu"},
+              {sectionId:"verso_1",text:"Nesse jogo de provocar"},
+              {sectionId:"verso_1",text:"Quem ganha é você ou eu?"},
+              {sectionId:"verso_1",text:"Se eu falar, tu já se desarma"},
+              {sectionId:"verso_1",text:"Se você chama, eu vou"},
+              {sectionId:"verso_1",text:"É algum tipo de karma"},
+              {sectionId:"verso_1",text:"História que mal começou"},
+              {sectionId:"verso_1",text:"Quanto mais tenta esconder"},
+              {sectionId:"verso_1",text:"Sorrio ao te ver negar"},
+              {sectionId:"verso_1",text:"Se a tua boca disser não"},
+              {sectionId:"verso_1",text:"Teu beijo vai te entregar"},
+
+              {sectionId:"pre_1",text:"Você some e depois chega perto"},
+              {sectionId:"pre_1",text:"Eu me pergunto o que tu tem"},
+              {sectionId:"pre_1",text:"Meu quarto tá sempre aberto"},
+              {sectionId:"pre_1",text:"Pra tu se entregar, meu bem"},
+
+              {sectionId:"refrão_a",text:"Mas quando for embora"},
+              {sectionId:"refrão_a",text:"Jurando que já me esqueceu"},
+              {sectionId:"refrão_a",text:"Vai perdendo a hora"},
+              {sectionId:"refrão_a",text:"Nem lembra do que já viveu"},
+              {sectionId:"refrão_a",text:"Tu só vive o agora"},
+              {sectionId:"refrão_a",text:"Depois esquece o que aconteceu"},
+              {sectionId:"refrão_a",text:"Eu não te julgo, bora"},
+              {sectionId:"refrão_a",text:"Isso é tão eu"},
+              {sectionId:"refrão_a",text:"(Tu sabe que é meu)"},
+
+              {sectionId:"verso_2",text:"Se eu tocar, tu se desarma"},
+              {sectionId:"verso_2",text:"Quer até chamar de amor"},
+              {sectionId:"verso_2",text:"Finge que não disse nada"},
+              {sectionId:"verso_2",text:"Medo do que confessou"},
+              {sectionId:"verso_2",text:"Deixo a noite correr sem pressa"},
+              {sectionId:"verso_2",text:"Pra ver onde isso vai dar"},
+              {sectionId:"verso_2",text:"Esse teu jeito já confessa"},
+              {sectionId:"verso_2",text:"Tua boca quer me beijar"},
+              {sectionId:"verso_2",text:"Chega de tanta conversa"},
+              {sectionId:"verso_2",text:"Mesmo sem a gente falar"},
+              {sectionId:"verso_2",text:"Nunca houve uma promessa"},
+              {sectionId:"verso_2",text:"Mas sei que tu vai voltar"},
+
+              {sectionId:"ponte",text:"Quando tu me ligar"},
+              {sectionId:"ponte",text:"Querendo voltar"},
+              {sectionId:"ponte",text:"(Sei que vai...)"},
+              {sectionId:"ponte",text:"Não vou esconder"},
+              {sectionId:"ponte",text:"Mentir pra você"},
+              {sectionId:"ponte",text:"Tu é igual a mim, e por fim"},
+              {sectionId:"ponte",text:"Acho que já percebeu"},
+              {sectionId:"ponte",text:"Eu seria seu, seu..."},
+
+              {sectionId:"refrão_final",text:"Mas quando for embora"},
+              {sectionId:"refrão_final",text:"Jurando que já me esqueceu"},
+              {sectionId:"refrão_final",text:"Vai perdendo a hora"},
+              {sectionId:"refrão_final",text:"Nem lembra do que já viveu"},
+              {sectionId:"refrão_final",text:"Tu não sabe agora"},
+              {sectionId:"refrão_final",text:"Mal sabe onde se meteu"},
+              {sectionId:"refrão_final",text:"Gosto da nossa troca"},
+              {sectionId:"refrão_final",text:"Tudo isso é tão eu"},
+              {sectionId:"refrão_final",text:"(Tu é todo meu...)"},
+
+              {sectionId:"outro",text:"Tão eu..."},
+              {sectionId:"outro",text:"Todo meu..."},
+              {sectionId:"outro",text:"Tão eu..."}
+            ]
+          }' > test-results/tao-eu/plan.json
+          jq -e '.title == "Tão Eu" and .durationSeconds == 196 and (.guideLines|length) > 50' test-results/tao-eu/plan.json >/dev/null
+
+      - name: Dispatch full Tão Eu physical render
+        shell: bash
+        run: |
+          set -euo pipefail
+          SEED="$(( (GITHUB_RUN_ID % 2147483000) + 37091 ))"
+          PLAN="$(cat test-results/tao-eu/plan.json)"
+          BODY="$(jq -nc --arg project "$PROJECT_ID" --argjson plan "$PLAN" --argjson seed "$SEED" '{
+            project_id:$project,
+            plan:$plan,
+            negative_styles:["drill","aggressive rap","heavy dembow","EDM drop","acoustic guitar lead"],
+            instrumental:false,
+            variation_seed:$seed
+          }')"
+          HTTP_CODE="$(curl --silent --show-error --max-time 90 \
+            -o test-results/tao-eu/dispatch.json \
+            -w '%{http_code}' \
+            -X POST "$SUPABASE_URL/functions/v1/compute-kaggle-v58" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H 'content-type: application/json' \
+            --data "$BODY")"
+          case "$HTTP_CODE" in 200|202) ;; *) cat test-results/tao-eu/dispatch.json; exit 1 ;; esac
+          jq -e '.ok == true and (.job_id | type == "string" and length > 0) and .fallback_allowed == false' test-results/tao-eu/dispatch.json >/dev/null
+          JOB_ID="$(jq -r '.job_id' test-results/tao-eu/dispatch.json)"
+          echo "PV_JOB_ID=$JOB_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for verified full-song audio
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 390); do
+            ROWS="$(curl --fail-with-body --silent --show-error \
+              "$SUPABASE_URL/rest/v1/render_jobs?id=eq.$PV_JOB_ID&select=id,status,progress,current_stage,error_code,error_message,parameters,proof,output_asset_ids" \
+              -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+            STATUS="$(printf '%s' "$ROWS" | jq -r '.[0].status // "missing"')"
+            if [ "$STATUS" = completed ]; then
+              printf '%s' "$ROWS" > test-results/tao-eu/job.json
+              printf '%s' "$ROWS" | jq -e '.[0].progress == 100 and .[0].proof.verified == true and (.[0].proof.audio_sha256|test("^[0-9a-f]{64}$")) and .[0].proof.audio_size_bytes > 4096 and .[0].proof.duration_seconds > 150 and (.[0].output_asset_ids|length) > 0' >/dev/null
+              ASSET_ID="$(printf '%s' "$ROWS" | jq -r '.[0].output_asset_ids[0]')"
+              echo "PV_ASSET_ID=$ASSET_ID" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            if [ "$STATUS" = error ] || [ "$STATUS" = failed ] || [ "$STATUS" = cancelled ]; then
+              printf '%s' "$ROWS" > test-results/tao-eu/job.json
+              cat test-results/tao-eu/job.json
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Timed out waiting for Tão Eu physical render.' >&2
+          exit 1
+
+      - name: Download, verify and encode Tão Eu
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSETS="$(curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/rest/v1/audio_assets?id=eq.$PV_ASSET_ID&select=id,kind,storage_bucket,storage_path,mime_type,size_bytes,duration_seconds,sample_rate,channels,sha256,metadata" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY")"
+          printf '%s' "$ASSETS" > test-results/tao-eu/asset.json
+          printf '%s' "$ASSETS" | jq -e '.[0].kind == "full_mix" and .[0].storage_bucket == "audio-private" and (.[0].sha256|test("^[0-9a-f]{64}$"))' >/dev/null
+          PATH_VALUE="$(printf '%s' "$ASSETS" | jq -r '.[0].storage_path')"
+          EXPECTED_SHA="$(printf '%s' "$ASSETS" | jq -r '.[0].sha256')"
+          curl --fail-with-body --silent --show-error \
+            "$SUPABASE_URL/storage/v1/object/authenticated/audio-private/$PATH_VALUE" \
+            -H "Authorization: Bearer $PV_ACCESS_TOKEN" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -o 'test-results/tao-eu/Tao-Eu-PabloVoice-v1.flac'
+          ACTUAL_SHA="$(sha256sum 'test-results/tao-eu/Tao-Eu-PabloVoice-v1.flac' | awk '{print $1}')"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate,channels:format=duration -of json 'test-results/tao-eu/Tao-Eu-PabloVoice-v1.flac' > test-results/tao-eu/probe.json
+          jq -e '(.streams[0].sample_rate|tonumber)>0 and .streams[0].channels>0 and (.format.duration|tonumber)>150' test-results/tao-eu/probe.json >/dev/null
+          ffmpeg -hide_banner -loglevel error -y -i 'test-results/tao-eu/Tao-Eu-PabloVoice-v1.flac' -codec:a libmp3lame -b:a 320k 'test-results/tao-eu/Tao-Eu-PabloVoice-v1.mp3'
+          jq -n \
+            --arg verdict 'TAO_EU_FULL_SONG_PHYSICAL_RENDER_VERIFIED' \
+            --arg github_sha "$GITHUB_SHA" \
+            --arg job_id "$PV_JOB_ID" \
+            --arg asset_id "$PV_ASSET_ID" \
+            --arg audio_sha256 "$ACTUAL_SHA" \
+            --arg style 'slow sung trap + romantic R&B + catchy pop' \
+            '{verdict:$verdict,github_sha:$github_sha,job_id:$job_id,asset_id:$asset_id,audio_sha256:$audio_sha256,style:$style}' \
+            > test-results/tao-eu/evidence.json
+
+      - name: Upload playable Tão Eu render
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tao-eu-pablovoice-slow-trap-rnb-${{ github.run_id }}
+          path: |
+            test-results/tao-eu/Tao-Eu-PabloVoice-v1.flac
+            test-results/tao-eu/Tao-Eu-PabloVoice-v1.mp3
+            test-results/tao-eu/plan.json
+            test-results/tao-eu/dispatch.json
+            test-results/tao-eu/job.json
+            test-results/tao-eu/asset.json
+            test-results/tao-eu/probe.json
+            test-results/tao-eu/evidence.json
+            test-results/tao-eu/direction.json
+          if-no-files-found: warn
+          retention-days: 30
