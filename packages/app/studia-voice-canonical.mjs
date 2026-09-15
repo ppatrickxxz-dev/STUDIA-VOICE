@@ -52,6 +52,7 @@ function syncCanonicalUI() {
   hideLegacyAndDecorativeSurfaces(shell);
   normalizePrimaryNavigation(nav);
   normalizeProjectHeader(shell);
+  tuneCreatorForm();
   markScreen(shell);
 }
 
@@ -144,6 +145,64 @@ function normalizeProjectHeader(shell) {
   if (tools) tools.hidden = true;
   const label = meta.querySelector('small');
   if (label) setText(label, 'PROJETO');
+}
+
+function tuneCreatorForm() {
+  const form = document.querySelector('#pv-song-creator [data-song-create-form]');
+  if (!form) return;
+
+  const duration = form.elements.duration;
+  if (duration && !duration.querySelector('option[value="200"]')) {
+    const option = document.createElement('option');
+    option.value = '200';
+    option.textContent = '3:20 · música completa';
+    duration.appendChild(option);
+  }
+  if (duration && form.dataset.pvDurationDefaulted !== 'true') {
+    if (duration.value === '120') duration.value = '200';
+    form.dataset.pvDurationDefaulted = 'true';
+  }
+
+  const genre = form.elements.genre;
+  if (genre && !genre.querySelector('option[value="pagofunk"]')) {
+    const option = document.createElement('option');
+    option.value = 'pagofunk';
+    option.textContent = 'Pagofunk / Pagode + Funk';
+    genre.appendChild(option);
+  }
+
+  const fieldset = form.querySelector('.pv-song-vocal-profile');
+  if (fieldset) {
+    setText(fieldset.querySelector('legend'), 'Voz');
+    const helper = fieldset.querySelector(':scope > p');
+    if (helper) setText(helper, 'Escolha a identidade geral da voz-guia. A música continua editável depois.');
+    for (const name of ['lowMidi', 'highMidi', 'vocalLanguage']) {
+      const control = fieldset.querySelector(`[name="${name}"]`);
+      const label = control?.closest('label');
+      if (label) {
+        label.hidden = true;
+        label.dataset.pvAdvancedVoiceControl = 'true';
+      }
+    }
+    const falsetto = fieldset.querySelector('[name="falsetto"]')?.closest('label');
+    if (falsetto) {
+      falsetto.hidden = true;
+      falsetto.dataset.pvAdvancedVoiceControl = 'true';
+    }
+  }
+
+  const button = form.querySelector('[data-song-create-hq]');
+  if (button && !button.disabled) setText(button, '✦ Criar versão');
+  const modeCard = form.querySelector('.pv-song-mode-card');
+  if (modeCard) {
+    setText(modeCard.querySelector('strong'), 'Gerar música');
+    setText(modeCard.querySelector('span'), 'Cria uma versão completa com a letra, a direção e a estrutura deste projeto.');
+  }
+  const status = form.querySelector('#pv-song-create-status');
+  if (status && !/criando|fila|gpu|gerando|conectando|pronto|conclu/i.test(status.textContent || '')) {
+    setText(status, 'Revise a letra e a direção. Quando estiver bom, crie uma versão completa.');
+  }
+  form.dataset.pvUsabilityTuned = 'true';
 }
 
 function markScreen(shell) {
