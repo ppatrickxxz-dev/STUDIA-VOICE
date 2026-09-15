@@ -100,7 +100,10 @@ function homeMarkup() {
         <h2>Descreva o som que você quer.</h2>
         <p>Você pode chegar com uma ideia ou com a letra pronta. O projeto é criado automaticamente e continua no Studio.</p>
       </div>
-      <div class="pv-product-head-actions"><span class="pv-product-ai-state" data-pv-product-ai-state>Pronto</span></div>
+      <div class="pv-product-head-actions">
+        <span class="pv-product-ai-state" data-pv-product-ai-state>Pronto</span>
+        <button class="pv-btn" type="button" data-action="new-project">Novo projeto vazio</button>
+      </div>
     </div>
     <label class="pv-product-prompt-wrap">
       <span class="sr-only">Direção musical</span>
