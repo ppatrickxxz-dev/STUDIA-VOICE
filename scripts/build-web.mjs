@@ -93,6 +93,9 @@ async function compactCssLayout(directory) {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\n[ \t]+/g, '\n')
       .replace(/[ \t]+\n/g, '\n')
+      .replace(/(^|\n)([-A-Za-z_][\w-]*):[ \t]+/g, '$1$2:')
+      .replace(/(^|\n)([^\n]+?)[ \t]+\{/g, '$1$2{')
+      .replace(/;\n}/g, '\n}')
       .replace(/\n{2,}/g, '\n')
       .replace(/([;{}])\n/g, '$1');
     if (compacted !== source) await writeFile(path, compacted, 'utf8');
