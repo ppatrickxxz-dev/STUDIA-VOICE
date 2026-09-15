@@ -55,8 +55,8 @@ function syncCanonicalUI() {
   nav.dataset.pvStudiaNav = 'canonical';
   normalizeBrand(shell);
   hideLegacySurfaces(shell);
-  normalizePrimaryNavigation(nav);
   organizeSpecialistTools(nav);
+  normalizePrimaryNavigation(nav);
   markScreen(shell);
 }
 
@@ -102,23 +102,29 @@ function normalizePrimaryNavigation(nav) {
   const lyricsCommand = nav.querySelector(':scope > [data-vnext-route-command="lyrics"]');
   if (createCommand) {
     const label = createCommand.querySelector('b');
-    if (label) label.textContent = 'Criar';
+    if (label && label.textContent !== 'Criar') label.textContent = 'Criar';
   }
   if (lyricsCommand) {
     const label = lyricsCommand.querySelector('b');
-    if (label) label.textContent = 'Letras';
+    if (label && label.textContent !== 'Letras') label.textContent = 'Letras';
     lyricsCommand.dataset.pvStudiaSecondaryCompose = 'lyrics';
   }
 
-  const ordered = [];
   const home = byRoute.get('home');
   const studio = byRoute.get('studio');
   const projects = byRoute.get('projects');
   const pablo = byRoute.get('pablo');
+  const ordered = [];
   for (const item of [home, createCommand || create, lyricsCommand, studio, projects, pablo]) {
     if (item && !ordered.includes(item)) ordered.push(item);
   }
-  for (const button of ordered) nav.insertBefore(button, tools || null);
+
+  const current = [...nav.children].filter((node) => ordered.includes(node));
+  const alreadyOrdered = ordered.length === current.length && ordered.every((node, index) => current[index] === node);
+  if (!alreadyOrdered) {
+    const anchor = tools || null;
+    for (const button of ordered) nav.insertBefore(button, anchor);
+  }
   nav.dataset.pvStudiaPrimaryOrder = PRIMARY_ORDER.join(',');
 }
 
@@ -142,7 +148,7 @@ function organizeSpecialistTools(nav) {
     }
     if (!button || !grid) continue;
     const text = button.querySelector('b');
-    if (text) text.textContent = label;
+    if (text && text.textContent !== label) text.textContent = label;
     if (button.parentElement !== grid) grid.appendChild(button);
   }
   nav.querySelectorAll(':scope > .pv-vnext-nav-sep').forEach((separator) => separator.remove());
