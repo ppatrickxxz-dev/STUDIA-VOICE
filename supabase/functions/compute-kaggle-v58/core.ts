@@ -26,15 +26,46 @@ function normalizeLanguage(value:any){const raw=clean(value,16).toLowerCase();if
 function isCapacityError(value:any){return /maximum batch gpu session count|gpu session count|capacity|too many.*gpu|concurrent.*gpu/i.test(String(value||''))}
 function sectionTag(id:string){
   const v=String(id||'').toLowerCase()
+  if(v.includes('final')&&(v.includes('refr')||v.includes('chorus')))return 'Chorus'
   if(v.includes('refr')||v.includes('chorus'))return 'Chorus'
   if(v.includes('pre'))return 'Pre-Chorus'
-  if(v.includes('ponte')||v.includes('bridge'))return 'Bridge'
+  if(v.includes('ponte')||v.includes('bridge')||v.includes('rap'))return 'Bridge'
   if(v.includes('intro'))return 'Intro'
   if(v.includes('outro'))return 'Outro'
+  if(v.includes('instrumental')||v.includes('post'))return 'Instrumental'
+  if(v.includes('beat_cut')||v.includes('pickup')||v.includes('silence'))return 'Silence'
   return 'Verse'
+}
+function structuredHeader(header:string){
+  const raw=String(header||'').trim(),upper=raw.toUpperCase()
+  if(upper.startsWith('INTRO'))return'Intro'
+  if(/^VERSE\s*1|^VERSO\s*1/.test(upper))return'Verse 1'
+  if(/^VERSE\s*2|^VERSO\s*2/.test(upper))return'Verse 2'
+  if(upper.includes('PRE-CHORUS')||upper.includes('PRE CHORUS')||upper.includes('PRÉ-REFRÃO')||upper.includes('PRE-REFRAO'))return'Pre-Chorus'
+  if(upper.includes('POST-CHORUS')||upper.includes('POST CHORUS')||upper.includes('PÓS-REFRÃO')||upper.includes('POS-REFRAO'))return'Instrumental'
+  if(upper.includes('FINAL CHORUS')||upper.includes('REFRÃO FINAL')||upper.includes('REFRAO FINAL'))return'Chorus'
+  if(upper.startsWith('CHORUS')||upper.startsWith('REFR'))return'Chorus'
+  if(upper.includes('RAP')||upper.includes('BRIDGE')||upper.includes('PONTE'))return'Bridge - low intimate rap'
+  if(upper.includes('BEAT CUT')||upper.includes('PICKUP')||upper.includes('SILENCE'))return'Silence'
+  if(upper.includes('INSTRUMENTAL'))return'Instrumental'
+  if(upper.startsWith('OUTRO'))return'Outro - intimate'
+  return''
+}
+function normalizeLyricsScript(value:any){
+  const raw=String(value||'').replace(/\r/g,'').trim()
+  if(!raw)return''
+  const out:string[]=[]
+  for(const line of raw.split('\n')){
+    const trimmed=line.trim(),match=trimmed.match(/^\[([^\]]+)\]$/)
+    if(match){const tag=structuredHeader(match[1]);if(tag){out.push(`[${tag}]`);continue}}
+    out.push(line)
+  }
+  return out.join('\n').replace(/\n{3,}/g,'\n\n').slice(0,4096)
 }
 function buildLyrics(plan:any,instrumental:boolean){
   if(instrumental)return '[Instrumental]'
+  const scripted=normalizeLyricsScript(plan?.lyricsScript)
+  if(scripted)return scripted
   const lines=Array.isArray(plan?.guideLines)?plan.guideLines:[]
   const usable=lines.map((line:any)=>({text:clean(line?.text,600),sectionId:clean(line?.sectionId,80)})).filter((line:any)=>line.text)
   if(!usable.length)return '[Instrumental]'
@@ -46,22 +77,19 @@ function captionFromPlan(plan:any,negativeStyles:any[]){
   const rawBrief=String(plan?.brief||'').trim()
   const marker='PabloVoice 2.0 Song DNA:'
   const markerAt=rawBrief.indexOf(marker)
-  const userBrief=clean(markerAt>=0?rawBrief.slice(0,markerAt):rawBrief,120)
-  const songDna=clean(markerAt>=0?rawBrief.slice(markerAt+marker.length):'',75)
-  const style=[clean(plan?.genre,24),clean(plan?.mood,28)].filter(Boolean).join(', ')
+  const beforeDna=markerAt>=0?rawBrief.slice(0,markerAt):rawBrief
+  const songDna=clean(markerAt>=0?rawBrief.slice(markerAt+marker.length):'',115)
+  const artistMarker='Artist request:'
+  const artistAt=beforeDna.indexOf(artistMarker)
+  const production=clean(artistAt>=0?beforeDna.slice(0,artistAt).replace(/^AI production direction:\s*/i,''):beforeDna,245)
+  const artist=clean(artistAt>=0?beforeDna.slice(artistAt+artistMarker.length):'',230)
+  const style=[clean(plan?.genre,28),clean(plan?.mood,42)].filter(Boolean).join(', ')
   const singer=plan?.singerProfile||{}
-  const lowMidi=clamp(Math.round(Number(singer.lowMidi)||48),24,96)
-  const highMidi=clamp(Math.round(Number(singer.highMidi)||67),lowMidi,108)
-  const singerDirection=[
-    clean(singer.voiceType,12),
-    clean(singer.tone,20),
-    clean(singer.delivery,24),
-    `MIDI ${lowMidi}-${highMidi}`,
-    singer.falsetto?'falsetto ok':'no falsetto',
-  ].filter(Boolean).join(', ')
-  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,24)).filter(Boolean).slice(0,5).join(', ')
+  const singerDirection=[clean(singer.voiceType,18),clean(singer.tone,52),clean(singer.delivery,72)].filter(Boolean).join(', ')
+  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,28)).filter(Boolean).slice(0,6).join(', ')
   const parts=[
-    userBrief,
+    artist||production,
+    artist&&production?`Production: ${production}`:'',
     style?`Style: ${style}`:'',
     singerDirection?`Vocal: ${singerDirection}`:'',
     avoid?`Avoid: ${avoid}`:'',
@@ -84,7 +112,7 @@ function sanitizeQueuedGeneration(raw:any){
     vocal_language:normalizeLanguage(source.vocal_language),
     duration:clamp(Math.round(Number(source.duration)||120),10,600),
     seed,
-    inference_steps:8,
+    inference_steps:clamp(Math.round(Number(source.inference_steps)||8),4,24),
     shift:3.0,
     use_constrained_decoding:true,
   }
