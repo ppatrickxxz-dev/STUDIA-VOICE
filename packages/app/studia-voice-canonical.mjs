@@ -165,6 +165,24 @@ function markScreen(shell) {
     button.classList.toggle('active', isActive);
     button.classList.toggle('route-active', isActive);
   });
+  normalizeScreenCopy(route);
+}
+
+function normalizeScreenCopy(route) {
+  const hero = document.querySelector('main > .pv-hero.compact');
+  if (!hero) return;
+  const kicker = hero.querySelector('.pv-kicker');
+  const title = hero.querySelector('.pv-title');
+  const lead = hero.querySelector('.pv-lead');
+  if (route === 'projects') {
+    setText(kicker, 'Biblioteca');
+    setText(title, 'Projetos');
+    setText(lead, 'Abra suas músicas e continue exatamente do ponto em que parou.');
+  }
+}
+
+function setText(node, value) {
+  if (node && node.textContent !== String(value)) node.textContent = String(value);
 }
 
 installStudiaVoiceCanonicalUI();
