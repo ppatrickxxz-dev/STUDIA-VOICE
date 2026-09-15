@@ -18,6 +18,8 @@ for (const obsolete of [
   'pablovoice-intimate-ui.css',
   'pablo-life-ui.css',
   'pablovoice-product-overrides.css',
+  'pablovoice-product-ui.css',
+  'pablovoice-vnext-release-fixes.css',
 ]) {
   await rm(resolve(out, obsolete), { force: true });
 }
