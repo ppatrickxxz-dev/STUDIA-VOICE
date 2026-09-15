@@ -19,26 +19,38 @@ const GENRE_DEFAULTS = Object.freeze({
 export function createSongCreationPlan(input = {}) {
   const genre = normalizeGenre(input.genre || 'pop');
   const defaults = GENRE_DEFAULTS[genre];
-  const bpm = clamp(Math.round(Number(input.bpm) || defaults.bpm), 60, 180);
-  const durationSeconds = clamp(Math.round(Number(input.durationSeconds) || 120), 30, 210);
-  const seedText = `${input.brief || ''}|${input.lyrics || ''}|${genre}`;
+  const bpm = clamp(Math.round(Number(input.bpm) || defaults.bpm), 30, 300);
+  const requestedDuration = clamp(Math.round(Number(input.durationSeconds) || 120), 10, 600);
+  const lyricsScript = String(input.lyrics || '').replace(/\r/g, '').trim().slice(0, 12000);
+  const seedText = `${input.brief || ''}|${lyricsScript}|${genre}`;
   const seed = hashString(seedText);
   const mode = String(input.mode || defaults.mode) === 'major' ? 'major' : 'minor';
   const keyName = KEY_ROOTS[input.key] != null ? input.key : Object.keys(KEY_ROOTS)[seed % Object.keys(KEY_ROOTS).length];
   const rootMidi = KEY_ROOTS[keyName];
-  const totalBeats = Math.max(16, Math.floor(durationSeconds * bpm / 60 / BEATS_PER_BAR) * BEATS_PER_BAR);
-  const totalBars = Math.max(4, Math.floor(totalBeats / BEATS_PER_BAR));
-  const structure = structureForGenre(genre, totalBars);
-  const sections = allocateSections(structure, totalBars, bpm);
+
+  const structured = parseStructuredLyrics(lyricsScript, bpm);
+  let totalBars;
+  let sections;
+  if (structured?.sections?.length >= 2 && structured.totalBars >= 4) {
+    totalBars = structured.totalBars;
+    sections = structured.sections;
+  } else {
+    const totalBeats = Math.max(16, Math.floor(requestedDuration * bpm / 60 / BEATS_PER_BAR) * BEATS_PER_BAR);
+    totalBars = Math.max(4, Math.floor(totalBeats / BEATS_PER_BAR));
+    sections = allocateSections(structureForGenre(genre, totalBars), totalBars, bpm);
+  }
+
   const progression = defaults.progression;
   const scale = mode === 'major' ? MAJOR : MINOR;
   const harmonic = buildHarmonicNotes({ sections, progression, scale, rootMidi, seed });
   const singerProfile = normalizeSingerProfile(input.singerProfile);
-  const guide = buildGuideNotes({ lyrics: input.lyrics, sections, scale, rootMidi, seed, genre, singerProfile });
+  const guide = buildGuideNotes({ lyrics: lyricsScript, sections, scale, rootMidi, seed, genre, singerProfile });
   const drums = buildDrumEvents({ sections, bpm, genre, groove: defaults.groove, seed });
   return Object.freeze({
     schema: SONG_CREATION_SCHEMA,
     brief: String(input.brief || '').trim().slice(0, 1200),
+    lyricsScript,
+    structuredLyrics: Boolean(structured?.sections?.length >= 2),
     genre,
     mood: String(input.mood || '').trim().slice(0, 120),
     bpm,
@@ -90,6 +102,69 @@ export function describeSongPlan(plan) {
   const mode = plan.mode === 'major' ? 'maior' : 'menor';
   const labels = plan.sections.map((section) => section.label).join(' → ');
   return `${plan.genre.toUpperCase()} · ${plan.bpm} BPM · ${plan.key} ${mode} · ${labels}`;
+}
+
+function parseStructuredLyrics(lyrics, bpm) {
+  const source = String(lyrics || '').replace(/\r/g, '');
+  if (!source.includes('[')) return null;
+  const sections = [];
+  let barCursor = 0;
+  let occurrence = 0;
+  for (const line of source.split('\n')) {
+    const match = line.trim().match(/^\[([^\]]+)\]$/);
+    if (!match) continue;
+    const header = match[1].trim();
+    const counts = [...header.matchAll(/(\d+)\s*bars?/gi)].map((item) => Number(item[1])).filter((value) => value > 0);
+    if (!counts.length) continue;
+    const bars = counts.reduce((sum, value) => sum + value, 0);
+    const rawLabel = header.split(/\s+[—–-]\s+/)[0].trim();
+    const label = normalizeStructuredLabel(rawLabel);
+    const idBase = slugSection(label) || `section_${occurrence + 1}`;
+    const id = sections.some((section) => section.id === idBase) ? `${idBase}_${occurrence + 1}` : idBase;
+    const startBar = barCursor;
+    const endBar = startBar + bars;
+    barCursor = endBar;
+    occurrence += 1;
+    sections.push(Object.freeze({
+      id,
+      label,
+      startBar,
+      endBar,
+      startBeat: startBar * BEATS_PER_BAR,
+      endBeat: endBar * BEATS_PER_BAR,
+      startSeconds: startBar * BEATS_PER_BAR * 60 / bpm,
+      endSeconds: endBar * BEATS_PER_BAR * 60 / bpm,
+      energy: sectionEnergy(id),
+      sourceHeader: header,
+      bars,
+    }));
+  }
+  if (sections.length < 2 || barCursor < 4) return null;
+  return Object.freeze({ sections: Object.freeze(sections), totalBars: barCursor });
+}
+
+function normalizeStructuredLabel(value) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  const upper = text.toUpperCase();
+  if (upper.startsWith('INTRO')) return 'Intro';
+  if (/^VERSE\s*1|^VERSO\s*1/.test(upper)) return 'Verse 1';
+  if (/^VERSE\s*2|^VERSO\s*2/.test(upper)) return 'Verse 2';
+  if (upper.includes('PRE-CHORUS') || upper.includes('PRE CHORUS') || upper.includes('PRÉ-REFRÃO') || upper.includes('PRE-REFRAO')) return 'Pre-Chorus';
+  if (upper.includes('POST-CHORUS') || upper.includes('POST CHORUS') || upper.includes('PÓS-REFRÃO') || upper.includes('POS-REFRAO')) return 'Post-Chorus';
+  if (upper.includes('FINAL CHORUS') || upper.includes('REFRÃO FINAL') || upper.includes('REFRAO FINAL')) return 'Final Chorus';
+  if (/^CHORUS\s*2|^REFR[AÃ]O\s*2/.test(upper)) return 'Chorus 2';
+  if (upper.startsWith('CHORUS') || upper.startsWith('REFR')) return 'Chorus';
+  if (upper.includes('RAP') || upper.includes('BRIDGE') || upper.includes('PONTE')) return 'Rap / Bridge';
+  if (upper.includes('BEAT CUT') || upper.includes('PICKUP') || upper.includes('SILENCE')) return 'Beat Cut / Pickup';
+  if (upper.includes('INSTRUMENTAL')) return 'Instrumental Tension';
+  if (upper.startsWith('OUTRO')) return 'Outro';
+  return text || 'Section';
+}
+
+function slugSection(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 function addInstrumentLayer(target, notes, bpm, preset, sampleRate, gain) {
@@ -263,8 +338,27 @@ function allocateSections(structure, totalBars, bpm) {
   });
 }
 
-function sectionWeight(id) { if (id === 'intro' || id === 'outro') return 0.5; if (/refr/.test(id)) return 1.25; if (/pre/.test(id)) return 0.75; if (/ponte/.test(id)) return 0.8; return 1.15; }
-function sectionEnergy(id) { if (id === 'intro') return 0.28; if (id === 'outro') return 0.38; if (/refr[aã]o_final/.test(id)) return 1; if (/refr/.test(id)) return 0.9; if (/pre/.test(id)) return 0.66; if (/ponte/.test(id)) return 0.58; return 0.52; }
+function sectionWeight(id) {
+  const text = String(id || '').toLowerCase();
+  if (text === 'intro' || text.includes('outro')) return 0.5;
+  if (/refr|chorus/.test(text)) return 1.25;
+  if (/pre/.test(text)) return 0.75;
+  if (/ponte|bridge|rap/.test(text)) return 0.8;
+  if (/instrumental|post|beat_cut|pickup/.test(text)) return 0.55;
+  return 1.15;
+}
+function sectionEnergy(id) {
+  const text = String(id || '').toLowerCase();
+  if (text === 'intro') return 0.28;
+  if (text.includes('outro')) return 0.38;
+  if (/final.*(refr|chorus)|(refr|chorus).*final/.test(text)) return 1;
+  if (/refr|chorus/.test(text)) return 0.9;
+  if (/pre/.test(text)) return 0.66;
+  if (/ponte|bridge|rap/.test(text)) return 0.58;
+  if (/beat_cut|pickup|silence/.test(text)) return 0.12;
+  if (/instrumental|post/.test(text)) return 0.62;
+  return 0.52;
+}
 function sectionLabel(id) { return id.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase()); }
 function sectionAtBeat(sections, beat) { return sections.find((section) => beat >= section.startBeat && beat < section.endBeat) || sections.at(-1); }
 function melodicDegree(lineIndex, noteIndex, seed, count) { const shapes = [[0,2,4,3,2,1,0],[0,1,2,4,5,4,2],[2,4,5,4,2,1,0],[0,2,3,5,4,2,1]]; const shape = shapes[(lineIndex + seed) % shapes.length]; const value = shape[noteIndex % Math.min(shape.length, count)] ?? 0; return value + (((lineIndex + seed) % 5 === 0 && noteIndex === count - 2) ? 2 : 0); }
@@ -272,6 +366,6 @@ function triadForDegree(degree, scale, root) { const index = ((degree - 1) % 7 +
 function rootForDegree(degree, scale, root) { const index = ((degree - 1) % 7 + 7) % 7; return root + scale[index]; }
 function note(midi, velocity, start_beat, duration_beats) { return { midi: clamp(Math.round(midi), 0, 127), velocity: clamp(Math.round(velocity), 1, 127), start_beat: Math.max(0, start_beat), duration_beats: Math.max(0.05, duration_beats) }; }
 function drum(kind, beat, velocity) { return { kind, beat, velocity: clamp(velocity, 0, 1) }; }
-function normalizeGenre(value) { const text = String(value || '').toLowerCase(); if (/r&b|rnb/.test(text)) return 'rnb'; if (/funk/.test(text)) return 'funk'; if (/mpb|bossa/.test(text)) return 'mpb'; if (/rap|hip/.test(text)) return 'rap'; if (/dance|edm|eletr/.test(text)) return 'dance'; return 'pop'; }
+function normalizeGenre(value) { const text = String(value || '').toLowerCase(); if (/r&b|rnb/.test(text)) return 'rnb'; if (/funk|pagofunk|pagode/.test(text)) return 'funk'; if (/mpb|bossa/.test(text)) return 'mpb'; if (/rap|hip/.test(text)) return 'rap'; if (/dance|edm|eletr/.test(text)) return 'dance'; return 'pop'; }
 function hashString(value) { let hash = 2166136261; for (const char of String(value || '')) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); } return hash >>> 0; }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
