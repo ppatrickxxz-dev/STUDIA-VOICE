@@ -107,6 +107,7 @@ function normalizePrimaryNavigation(nav) {
   nav.querySelectorAll(':scope > button, :scope > details, :scope > .pv-vnext-nav-sep').forEach((node) => {
     const keep = primary.includes(node);
     node.hidden = !keep;
+    node.classList.toggle('pv-studia-hidden', !keep);
     if (!keep) {
       node.inert = true;
       node.setAttribute('aria-hidden', 'true');
@@ -226,24 +227,19 @@ function normalizeScreenCopy(route) {
   const kicker = hero.querySelector('.pv-kicker');
   const title = hero.querySelector('.pv-title');
   const lead = hero.querySelector('.pv-lead');
+  if (route === 'studio') {
+    setText(kicker, 'Studio');
+    return;
+  }
   const copy = {
     home: ['Criar', 'Faça uma música.', 'Comece pela ideia. Letra, versões, voz e produção continuam no mesmo projeto.'],
     compose: ['Composição', 'Letra e direção.', 'Defina o que deve acontecer na música e gere quando estiver pronto.'],
-    studio: ['Studio', 'Termine a música.', 'Edite a versão escolhida, trabalhe voz, mix e exporte sem sair do projeto.'],
     projects: ['Biblioteca', 'Projetos', 'Abra uma música e continue exatamente do ponto em que parou.'],
     pablo: ['Produtor', 'Pablo', 'Peça uma mudança concreta no projeto sem procurar a ferramenta manualmente.'],
   }[route];
   if (!copy) return;
   setText(kicker, copy[0]);
   setText(title, copy[1]);
-  if (route === 'studio') {
-    const current = String(lead?.textContent || '').trim();
-    const generic = copy[2];
-    if (current && current !== generic && !current.includes(generic) && !/^Importe ou grave uma faixa/i.test(current)) {
-      setText(lead, `${current} · ${generic}`);
-      return;
-    }
-  }
   setText(lead, copy[2]);
 }
 
