@@ -236,6 +236,14 @@ function normalizeScreenCopy(route) {
   if (!copy) return;
   setText(kicker, copy[0]);
   setText(title, copy[1]);
+  if (route === 'studio') {
+    const current = String(lead?.textContent || '').trim();
+    const generic = copy[2];
+    if (current && current !== generic && !current.includes(generic) && !/^Importe ou grave uma faixa/i.test(current)) {
+      setText(lead, `${current} · ${generic}`);
+      return;
+    }
+  }
   setText(lead, copy[2]);
 }
 
