@@ -98,3 +98,72 @@ test('PRODUCT STUDIO CUT GATE: Studio starts with the song-finishing controls, n
   await expect(page.locator('[data-pv-studio-core-action="export"]')).toBeVisible();
   await expect(page.getByText('Voice Lab', { exact: true })).toHaveCount(0);
 });
+
+test('STUDIA SINGLE UI GATE: every primary screen stays inside one canonical Studia Voice shell', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  const html = page.locator('html');
+  const shell = page.locator('[data-pv-studia-shell="canonical"]');
+  const nav = page.locator('[data-pv-studia-nav="canonical"]');
+  await expect(html).toHaveAttribute('data-pv-studia-ui', 'studia_voice_single_ui_v1', { timeout: 12_000 });
+  await expect(shell).toHaveCount(1);
+  await expect(shell).toBeVisible();
+  await expect(nav).toHaveCount(1);
+  await expect(nav).toBeVisible();
+  await expect(page.locator('.pv-legacy-nav')).toBeHidden();
+  await expect(page.locator('.pv-legacy-nav')).toHaveAttribute('aria-hidden', 'true');
+  await expect(shell.locator('[data-pv-studia-brand]')).toContainText('STUDIA VOICE · MUSIC STUDIO');
+
+  await expect(nav.getByText('Início', { exact: true })).toBeVisible();
+  await expect(nav.getByText('Criar', { exact: true })).toBeVisible();
+  await expect(nav.getByText('Letras', { exact: true })).toBeVisible();
+  await expect(nav.getByText('Studio', { exact: true })).toBeVisible();
+  await expect(nav.getByText('Projetos', { exact: true })).toBeVisible();
+  await expect(nav.getByText('Pablo Brain', { exact: true })).toBeVisible();
+
+  const tools = nav.locator('[data-pv-studia-tools="true"]');
+  await expect(tools).toBeVisible();
+  await tools.locator('summary').click();
+  for (const command of ['beat', 'instrument', 'vocal', 'record', 'mixer', 'arrangement', 'master', 'export']) {
+    await expect(tools.locator(`[data-vnext-command="${command}"]`)).toBeVisible();
+  }
+
+  await nav.locator('[data-route="home"]').click();
+  await expect(html).toHaveAttribute('data-pv-studia-screen', 'home');
+  await expect(page.locator('#pv-product-home')).toBeVisible();
+  await expect(page.locator('#pv-intimate-home')).toBeHidden();
+
+  await page.locator('[data-action="new-project"]').first().click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Studia Canon Gate');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+
+  const create = nav.locator('[data-vnext-route-command="create"]');
+  await create.click();
+  await expect(page.locator('#pv-song-creator')).toBeVisible({ timeout: 10_000 });
+  await expect(shell).toBeVisible();
+  await expect(nav).toBeVisible();
+
+  await nav.locator('[data-route="studio"]').click();
+  await expect(page.locator('.pv-transport-card')).toBeVisible();
+  await expect(shell).toBeVisible();
+  await expect(nav).toBeVisible();
+
+  await nav.locator('[data-route="projects"]').click();
+  await expect(page.getByRole('heading', { name: /Projetos/i })).toBeVisible();
+  await expect(shell).toBeVisible();
+
+  await nav.locator('[data-route="pablo"]').click();
+  await expect(shell).toBeVisible();
+  await expect(nav).toBeVisible();
+
+  const desktopOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(desktopOverflow).toBeLessThanOrEqual(1);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await nav.locator('[data-route="home"]').click();
+  await expect(shell).toBeVisible();
+  await expect(nav).toBeVisible();
+  const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(mobileOverflow).toBeLessThanOrEqual(1);
+});

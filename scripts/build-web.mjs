@@ -9,9 +9,16 @@ await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(resolve(packages, 'app'), out, { recursive: true });
 
-// Only superseded implementations are removed from the shipped artifact.
+// Superseded implementations and visual themes stay in source history for safe
+// rollback, but they are not part of the shipped Studia Voice product surface.
 // Active runtime modules must stay present so build validation fails closed on drift.
-for (const obsolete of ['pablovoice-vnext-ui.mjs', 'pablovoice-companion-reactor.mjs']) {
+for (const obsolete of [
+  'pablovoice-vnext-ui.mjs',
+  'pablovoice-companion-reactor.mjs',
+  'pablovoice-intimate-ui.css',
+  'pablo-life-ui.css',
+  'pablovoice-product-overrides.css',
+]) {
   await rm(resolve(out, obsolete), { force: true });
 }
 
