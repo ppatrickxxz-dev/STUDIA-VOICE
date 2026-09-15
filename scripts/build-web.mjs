@@ -88,18 +88,51 @@ async function compactCssLayout(directory) {
     }
     if (!entry.isFile() || !entry.name.endsWith('.css')) continue;
     const source = await readFile(path, 'utf8');
-    const compacted = source
-      .replace(/\r/g, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\n[ \t]+/g, '\n')
-      .replace(/[ \t]+\n/g, '\n')
-      .replace(/(^|\n)([-A-Za-z_][\w-]*):[ \t]+/g, '$1$2:')
-      .replace(/(^|\n)([^\n]+?)[ \t]+\{/g, '$1$2{')
-      .replace(/;\n}/g, '\n}')
-      .replace(/\n{2,}/g, '\n')
-      .replace(/([;{}])\n/g, '$1');
+    const compacted = minifyCssSafely(source.replace(/\r/g, '').replace(/\/\*[\s\S]*?\*\//g, ''));
     if (compacted !== source) await writeFile(path, compacted, 'utf8');
   }
+}
+
+function minifyCssSafely(source) {
+  let out = '';
+  let quote = '';
+  let escaped = false;
+  let pendingSpace = false;
+  let parenDepth = 0;
+  const leftTight = new Set(['{', ':', ';', ',', '>', '~']);
+  const rightTight = new Set(['}', '{', ':', ';', ',', '>', '~']);
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      out += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      if (pendingSpace && out && !leftTight.has(out.at(-1))) out += ' ';
+      pendingSpace = false;
+      quote = char;
+      out += char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      pendingSpace = true;
+      continue;
+    }
+    if (char === '(') parenDepth += 1;
+    const previous = out.at(-1) || '';
+    if (pendingSpace) {
+      const canTighten = parenDepth === 0 && (leftTight.has(previous) || rightTight.has(char));
+      if (out && !canTighten) out += ' ';
+      pendingSpace = false;
+    }
+    if (char === '}' && parenDepth === 0 && out.at(-1) === ';') out = out.slice(0, -1);
+    out += char;
+    if (char === ')' && parenDepth > 0) parenDepth -= 1;
+  }
+  return `${out.trim()}\n`;
 }
 
 async function compactHtmlLayout(directory) {
