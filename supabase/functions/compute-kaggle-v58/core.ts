@@ -85,8 +85,10 @@ function captionFromPlan(plan:any,negativeStyles:any[]){
   const artist=clean(artistAt>=0?beforeDna.slice(artistAt+artistMarker.length):'',230)
   const style=[clean(plan?.genre,28),clean(plan?.mood,42)].filter(Boolean).join(', ')
   const singer=plan?.singerProfile||{}
-  const singerDirection=[clean(singer.voiceType,18),clean(singer.tone,52),clean(singer.delivery,72)].filter(Boolean).join(', ')
-  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,28)).filter(Boolean).slice(0,6).join(', ')
+  const lowMidi=clamp(Math.round(Number(singer.lowMidi)||48),24,96)
+  const highMidi=clamp(Math.round(Number(singer.highMidi)||67),lowMidi,108)
+  const singerDirection=[clean(singer.voiceType,18),clean(singer.tone,52),clean(singer.delivery,72),`MIDI ${lowMidi}-${highMidi}`,singer.falsetto?'falsetto ok':'no falsetto'].filter(Boolean).join(', ')
+  const avoid=(Array.isArray(negativeStyles)?negativeStyles:[]).map(v=>clean(v,24)).filter(Boolean).slice(0,5).join(', ')
   const parts=[
     artist||production,
     artist&&production?`Production: ${production}`:'',
