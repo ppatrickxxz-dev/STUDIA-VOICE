@@ -98,7 +98,7 @@ function homeMarkup() {
         <span class="pv-product-eyebrow">STUDIA VOICE</span>
         <h1 class="pv-product-title">Faça uma música.</h1>
         <h2>Descreva o som que você quer.</h2>
-        <p>Você pode chegar com uma ideia ou com a letra pronta. O projeto é criado automaticamente e continua no Studio.</p>
+        <p>Comece com uma ideia ou letra pronta. Tudo continua no mesmo projeto.</p>
       </div>
       <div class="pv-product-head-actions">
         <span class="pv-product-ai-state" data-pv-product-ai-state>Pronto</span>
@@ -107,21 +107,21 @@ function homeMarkup() {
     </div>
     <label class="pv-product-prompt-wrap">
       <span class="sr-only">Direção musical</span>
-      <textarea data-pv-product-prompt rows="5" maxlength="4000" placeholder="Ex.: pagofunk noturno + R&B 2000s, masculino, íntimo, baixo melódico, tantã e pandeiro, refrão grande; sem trap e sem dembow pesado."></textarea>
+      <textarea data-pv-product-prompt rows="5" maxlength="4000" placeholder="Ex.: pagofunk + R&B 2000s, masculino, íntimo, baixo melódico, tantã, pandeiro e refrão grande; sem trap."></textarea>
     </label>
     <div class="pv-product-prompt-chips" aria-label="Direções rápidas">
-      <button type="button" data-pv-product-preset="R&B brasileiro 2000s, sensual e noturno, grave redondo, synth bass, bateria humana, voz masculina próxima e refrão grande">R&B 2000s</button>
-      <button type="button" data-pv-product-preset="Pagofunk íntimo e contemporâneo, tantã, pandeiro, baixo melódico, R&B Y2K e funk carioca contido, voz masculina natural">Pagofunk</button>
-      <button type="button" data-pv-product-preset="Pop R&B brasileiro moderno, elegante e dançante, synths gloss, pads, baixo synth e refrão memorável">Pop R&B</button>
+      <button type="button" data-pv-product-preset="R&B brasileiro 2000s, sensual, noturno, synth bass, bateria humana, voz masculina e refrão grande">R&B 2000s</button>
+      <button type="button" data-pv-product-preset="Pagofunk íntimo, tantã, pandeiro, baixo melódico, R&B Y2K, funk carioca contido e voz masculina">Pagofunk</button>
+      <button type="button" data-pv-product-preset="Pop R&B brasileiro, elegante, dançante, synths gloss, pads, baixo synth e refrão memorável">Pop R&B</button>
     </div>
     <div class="pv-product-create-actions">
-      <button class="pv-product-primary" type="button" data-route="compose" data-pv-product-create="song"><span>✦</span><b>Criar música</b><small>letra · direção · voz · geração</small></button>
-      <button class="pv-product-secondary" type="button" data-route="compose" data-pv-product-create="instrumental"><span>▥</span><b>Criar instrumental</b><small>mesmo fluxo, sem voz cantada</small></button>
+      <button class="pv-product-primary" type="button" data-route="compose" data-pv-product-create="song"><span>✦</span><b>Criar música</b><small>letra · som · voz · gerar</small></button>
+      <button class="pv-product-secondary" type="button" data-route="compose" data-pv-product-create="instrumental"><span>▥</span><b>Criar instrumental</b><small>sem voz cantada</small></button>
     </div>
   </div>
   <div class="pv-product-bottom-row pv-product-song-row">
     <button class="pv-product-project-card" type="button" data-route="projects">
-      <div><span>PROJETOS</span><b data-pv-product-project-title>Abrir minhas músicas</b><small data-pv-product-project-copy>Continue exatamente de onde parou.</small></div><i>→</i>
+      <div><span>PROJETOS</span><b data-pv-product-project-title>Abrir minhas músicas</b><small data-pv-product-project-copy>Continue de onde parou.</small></div><i>→</i>
     </button>
   </div>`;
 }
@@ -138,7 +138,7 @@ function syncHomeState(surface) {
   if (ai) {
     const online = navigator.onLine !== false;
     ai.classList.toggle('online', online);
-    setText(ai, online ? 'Geração disponível' : 'Projeto local');
+    setText(ai, online ? 'Pronto' : 'Projeto local');
   }
 }
 
@@ -197,7 +197,7 @@ function ensureCreationFlow(main, anchor) {
   if (!flow) {
     flow = document.createElement('div');
     flow.dataset.pvCreationFlow = 'true';
-    flow.setAttribute('aria-label', 'Etapas para criar a música');
+    flow.setAttribute('aria-label', 'Etapas da música');
     flow.innerHTML = '<span data-pv-flow-step="lyrics">1 · Letra</span><span data-pv-flow-step="sound">2 · Som</span><span data-pv-flow-step="voice">3 · Voz</span><span data-pv-flow-step="generate">4 · Gerar</span>';
     anchor.insertAdjacentElement('beforebegin', flow);
   }
