@@ -156,7 +156,7 @@ test('WEB COMPLETE USER FLOW GATE: import, treat, continue, export mix and track
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.locator('.pv-nav')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Faça uma música/i }).first()).toBeVisible();
 
   await page.locator('[data-action="new-project"]').first().click();
   await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Fluxo Completo');
