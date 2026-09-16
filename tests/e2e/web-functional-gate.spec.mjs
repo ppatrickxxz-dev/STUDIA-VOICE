@@ -55,7 +55,8 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
-  await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
+  await expect(page.locator('#pv-product-home')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Faça uma música/i }).first()).toBeVisible();
   await expect(page.getByText('Sua ideia ganha som.').first()).toBeVisible();
 
   await page.locator('[data-action="new-project"]').first().click();
@@ -92,13 +93,14 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
 
   await page.locator('[data-action="save"]').click();
   await expect(page.getByText('Projeto salvo neste aparelho.')).toBeVisible();
-  await page.locator('[data-route="projects"]').first().click();
+  await page.locator('.pv-vnext-nav [data-route="projects"]').click();
   await expect(page.getByText('Gate Web 2026').first()).toBeVisible();
 
   await page.reload({ waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
-  await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
-  await page.locator('[data-route="projects"]').first().click();
+  await expect(page.locator('#pv-product-home')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Faça uma música/i }).first()).toBeVisible();
+  await page.locator('.pv-vnext-nav [data-route="projects"]').click();
   await expect(page.getByText('Gate Web 2026').first()).toBeVisible();
   await page.locator('[data-action="open-project"]').first().click();
   await expect(page.getByRole('heading', { name: 'Gate Web 2026' })).toBeVisible();
@@ -160,10 +162,11 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
     return project?.revisions?.length ?? -1;
   })).toBe(revisionsBeforeExport);
 
-  await page.locator('[data-route="compose"]').first().click();
-  await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
-  await page.locator('[data-route="pablo"]').first().click();
-  await expect(page.getByText(/assistente local/i).first()).toBeVisible();
+  await page.locator('.pv-vnext-nav [data-route="home"]').click();
+  await page.locator('#pv-product-home [data-pv-product-create="song"]').click();
+  await expect(page.locator('#lyrics')).toBeVisible();
+  await page.locator('.pv-vnext-nav [data-route="pablo"]').click();
+  await expect(page.locator('[data-pablo-form]')).toBeVisible();
 
   const pabloInput = page.locator('[data-pablo-form] input[name="message"]');
   await expect(pabloInput).toBeVisible();
@@ -314,7 +317,7 @@ test('WEB SECTION MAP UI GATE: current cursor can mark, persist, edit and remove
   await page.locator('[data-section-map-close]').click();
   await page.reload({ waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
-  await page.locator('[data-route="projects"]').first().click();
+  await page.locator('.pv-vnext-nav [data-route="projects"]').click();
   await expect(page.getByText('Gate Sections').first()).toBeVisible();
   await page.locator('[data-action="open-project"]').first().click();
   await expect(page.locator('[data-section-map-open]')).toBeVisible();
@@ -365,7 +368,12 @@ test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
-  await page.locator('[data-action="record"]').first().click();
+  await page.locator('#pv-product-home').getByRole('button', { name: 'Novo projeto vazio' }).click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Recording');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
+  await page.locator('.pv-vnext-nav [data-route="studio"]').click();
+  await expect(page.locator('[data-pv-studio-core-action="record"]')).toBeVisible();
+  await page.locator('[data-pv-studio-core-action="record"]').click();
   await expect(page.getByRole('heading', { name: 'Gravando voz' })).toBeVisible();
   await page.waitForTimeout(700);
   await page.locator('[data-action="stop-record"]').click();
@@ -381,8 +389,9 @@ test('WEB MOBILE GATE: Android-sized viewport boots and navigates without overfl
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
-  await expect(page.getByRole('heading', { name: /Você tá no estúdio/i })).toBeVisible();
-  await page.locator('[data-route="studio"]').first().click();
+  await expect(page.locator('#pv-product-home')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Faça uma música/i }).first()).toBeVisible();
+  await page.locator('.pv-vnext-nav [data-route="studio"]').click();
   await expect(page.getByText(/Primeiro, uma ideia|Studio/i).first()).toBeVisible();
   const metrics = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }));
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 2);

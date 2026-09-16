@@ -6,9 +6,12 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/native-music-pr-composition-canary.yml'
+      - 'packages/app/song-creation-engine.mjs'
       - 'packages/app/native-music-generation-client.mjs'
       - 'packages/app/native-music-result-runtime.mjs'
+      - 'tests/fixtures/tao-eu-suno-3m20.mjs'
       - 'supabase/functions/compute-kaggle-v58/index.ts'
+      - 'supabase/functions/compute-kaggle-v58/core.ts'
       - 'supabase/functions/kaggle-worker-source-v58/index.ts'
       - 'supabase/functions/progress-kaggle-pipeline-job-v58/index.ts'
       - 'supabase/functions/complete-kaggle-pipeline-job-v58/index.ts'
@@ -27,7 +30,7 @@ jobs:
   real-composition:
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -40,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p test-results/real-composition
-          printf '{"verdict":"STARTED","github_sha":"%s","github_run_id":"%s"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > test-results/real-composition/start.json
+          printf '{"verdict":"STARTED","github_sha":"%s","github_run_id":"%s","benchmark":"Tão Eu 3:20 / 100 bars"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > test-results/real-composition/start.json
 
       - name: Ensure audio inspection tools
         shell: bash
@@ -51,17 +54,19 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
 
-      - name: Compose a real song through the same transparent-user runtime
+      - name: Compose physical Tão Eu through the same transparent-user runtime
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import fs from 'node:fs';
+          import { createHash } from 'node:crypto';
           import { spawnSync } from 'node:child_process';
           import { RemoteAuthAdapter } from './packages/app/remote-auth.mjs';
           import { NativeMusicGenerationClient } from './packages/app/native-music-generation-client.mjs';
           import { createSongCreationPlan } from './packages/app/song-creation-engine.mjs';
+          import { TAO_EU_SUNO_3M20 } from './tests/fixtures/tao-eu-suno-3m20.mjs';
 
           const ORIGIN = process.env.PV_STUDIO_ORIGIN;
           const outDir = 'test-results/real-composition';
@@ -88,39 +93,44 @@ jobs:
             assert.ok(session?.accessToken, 'transparent device session was not created');
 
             localProject = {
-              id: `physical-composition-${process.env.GITHUB_RUN_ID}-${Date.now()}`,
-              name: 'Canary · composição real PabloVoice',
+              id: `physical-tao-eu-${process.env.GITHUB_RUN_ID}-${Date.now()}`,
+              name: 'Tão Eu · canário físico 3:20',
             };
             linked = await auth.ensureRemoteProject(localProject);
             assert.equal(linked?.ok, true, `remote project link failed: ${linked?.error || 'unknown'}`);
             assert.ok(linked?.project?.id, 'remote project id missing');
 
-            const lyrics = `[Verso]\nEu jurei que era só mais uma noite\nSem nome na agenda, sem querer lembrar\nMas quando você chega muda o meu roteiro\nE eu finjo que não vou me entregar\n\n[Pré-Refrão]\nSe essa boca já deu pista\nChega perto pra eu entender\n\n[Refrão]\nSem promessa de outro dia\nHoje é só eu e você\nQuando o sol entrar no quarto\nAmanhã a gente vê`;
-
+            const singerProfile = {
+              voiceType: 'masculina tenor/barítono',
+              lowMidi: 45,
+              highMidi: 67,
+              language: 'pt-BR',
+              tone: 'quente, low-mid, natural e próximo',
+              delivery: 'conversacional, sensual, peito, sem belting e sem melisma excessivo',
+              falsetto: false,
+            };
             const plan = createSongCreationPlan({
-              brief: 'Pop R&B brasileiro com estética Y2K/2000s, sensual e noturno, groove de funk melody/pagofunk bem sutil, bateria solta com grave tum tum ta, baixo synth redondo, pads e plucks brilhantes, versos íntimos, pré-refrão crescente e refrão forte e chiclete. Voz masculina tenor/barítono em PT-BR, dicção clara, interpretação quente. Pouco violão e pouco piano. Nada de dembow pesado, trap, batestaca, tropical, salsa ou drop EDM.',
-              lyrics,
-              genre: 'rnb',
-              mood: 'sensual, noturno, íntimo, confiante',
-              bpm: 104,
-              durationSeconds: 32,
+              brief: TAO_EU_SUNO_3M20.style,
+              lyrics: TAO_EU_SUNO_3M20.lyrics,
+              genre: TAO_EU_SUNO_3M20.genre,
+              mood: TAO_EU_SUNO_3M20.mood,
+              bpm: TAO_EU_SUNO_3M20.bpm,
+              durationSeconds: TAO_EU_SUNO_3M20.durationSeconds,
               key: 'A',
-              singerProfile: {
-                voiceType: 'masculina tenor/barítono',
-                lowMidi: 48,
-                highMidi: 67,
-                language: 'pt-BR',
-                tone: 'quente, natural, próximo e masculino',
-                delivery: 'dicção clara, fraseado R&B, refrão aberto, ad-libs contidos',
-                falsetto: true,
-              },
+              singerProfile,
             });
+            assert.equal(plan.structuredLyrics, true, 'Tão Eu must use its structured lyric script');
+            assert.equal(plan.totalBars, TAO_EU_SUNO_3M20.totalBars, 'Tão Eu bar count drifted before physical dispatch');
+            assert.equal(plan.durationSeconds, TAO_EU_SUNO_3M20.durationSeconds, 'Tão Eu duration drifted before physical dispatch');
+            assert.equal(plan.lyricsScript, TAO_EU_SUNO_3M20.lyrics, 'Tão Eu lyric script drifted before physical dispatch');
+            assert.equal(plan.sections.length, 12, 'Tão Eu section count drifted before physical dispatch');
+            const lyricsSha256 = createHash('sha256').update(plan.lyricsScript, 'utf8').digest('hex');
 
             const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 5000 });
             const result = await client.generate({
               localProject,
               plan,
-              negativeStyles: ['heavy dembow', 'trap beat', 'batestaca', 'tropical beach', 'salsa', 'EDM drop', 'female vocal'],
+              negativeStyles: [...TAO_EU_SUNO_3M20.negativeStyles, 'female vocal'],
               instrumental: false,
               variation: 0.78,
               onProgress: (state) => {
@@ -130,23 +140,34 @@ jobs:
                   stage: state?.current_stage || null,
                   message: state?.human_message || null,
                 });
-                console.log('PV_COMPOSITION_PROGRESS', JSON.stringify(progress.at(-1)));
+                console.log('PV_TAO_EU_PROGRESS', JSON.stringify(progress.at(-1)));
               },
             });
 
             if (!result?.ok) {
               fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({ result, progress, remote_project_id: linked?.project?.id || null }, null, 2));
             }
-            assert.equal(result?.ok, true, `music generation failed: ${result?.error || 'unknown'} ${result?.detail || ''}`);
+            assert.equal(result?.ok, true, `Tão Eu generation failed: ${result?.error || 'unknown'} ${result?.detail || ''}`);
             assert.equal(result?.fallback_allowed, false);
             assert.ok(String(result?.aiDirection?.text || '').length >= 40, 'real AI production direction missing');
             assert.ok(String(result?.aiDirection?.text || '').length <= 430, 'AI direction exceeded product limit');
             assert.match(String(result?.director?.fingerprint || ''), /^pv2_[0-9a-f]{8}$/);
+            assert.equal(result?.job?.status, 'completed', 'physical music job did not complete');
+            assert.equal(result?.job?.proof?.verified, true, 'physical music proof is not verified');
+            assert.equal(result?.job?.output_asset_ids?.length, 1, 'physical job must persist exactly one full-mix asset');
+            assert.equal(String(result?.job?.output_asset_ids?.[0] || ''), String(result?.asset?.id || ''), 'job output asset and resolved asset differ');
+            assert.equal(result?.asset?.kind, 'full_mix');
+            assert.equal(result?.asset?.storage_bucket, 'audio-private');
+            assert.match(String(result?.asset?.sha256 || ''), /^[0-9a-f]{64}$/i);
+            assert.equal(String(result?.sha256 || '').toLowerCase(), String(result?.asset?.sha256 || '').toLowerCase(), 'downloaded SHA and persisted asset SHA differ');
             assert.ok(result?.blob?.size > 100_000, `generated audio too small: ${result?.blob?.size || 0}`);
+            assert.equal(Number(result?.asset?.size_bytes || 0), result.blob.size, 'persisted asset size and downloaded audio size differ');
 
-            const audioPath = `${outDir}/composition.flac`;
+            const audioPath = `${outDir}/tao-eu.flac`;
             const bytes = Buffer.from(await result.blob.arrayBuffer());
             fs.writeFileSync(audioPath, bytes);
+            const localSha256 = createHash('sha256').update(bytes).digest('hex');
+            assert.equal(localSha256, String(result.sha256).toLowerCase(), 'artifact bytes do not match persisted SHA');
 
             const probeRun = spawnSync('ffprobe', ['-v','error','-select_streams','a:0','-show_entries','stream=sample_rate,channels:format=duration','-of','json',audioPath], { encoding: 'utf8' });
             assert.equal(probeRun.status, 0, probeRun.stderr || 'ffprobe failed');
@@ -154,15 +175,15 @@ jobs:
             const duration = Number(probe?.format?.duration || 0);
             const sampleRate = Number(probe?.streams?.[0]?.sample_rate || 0);
             const channels = Number(probe?.streams?.[0]?.channels || 0);
-            assert.ok(duration >= 20, `physical song duration too short: ${duration}`);
+            assert.ok(duration >= 190 && duration <= 210, `Tão Eu physical duration must stay near 3:20: ${duration}`);
             assert.ok(sampleRate >= 32000, `sample rate too low: ${sampleRate}`);
             assert.ok(channels >= 1, `invalid channels: ${channels}`);
 
-            const pcmRun = spawnSync('ffmpeg', ['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 64 * 1024 * 1024 });
+            const pcmRun = spawnSync('ffmpeg', ['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 128 * 1024 * 1024 });
             assert.equal(pcmRun.status, 0, String(pcmRun.stderr || 'ffmpeg decode failed'));
             const pcm = pcmRun.stdout;
             const sampleCount = Math.floor(pcm.length / 2);
-            assert.ok(sampleCount > 16000, 'decoded audio is empty');
+            assert.ok(sampleCount > 16000 * 180, 'decoded Tão Eu audio is much shorter than a full song');
             let sumSq = 0;
             let peak = 0;
             let clipped = 0;
@@ -203,17 +224,21 @@ jobs:
             assert.ok(clipRatio <= 0.03, `audio is excessively clipped: clipRatio=${clipRatio}`);
 
             const evidence = {
-              verdict: 'REAL_COMPOSITION_PATH_VERIFIED',
+              verdict: 'TAO_EU_PHYSICAL_GENERATION_VERIFIED',
               github_sha: process.env.GITHUB_SHA,
               local_project_id: localProject.id,
               remote_project_id: linked.project.id,
               request_id: result.requestId || null,
+              output_asset_id: result.asset.id,
               provider: result.provider || null,
               model: result.model || null,
               model_revision: result.modelRevision || null,
               source: result.source || null,
-              audio_sha256: result.sha256 || null,
+              audio_sha256: localSha256,
+              lyrics_sha256: lyricsSha256,
               audio_bytes: result.blob.size,
+              requested_duration_seconds: TAO_EU_SUNO_3M20.durationSeconds,
+              requested_total_bars: TAO_EU_SUNO_3M20.totalBars,
               duration_seconds: duration,
               sample_rate: sampleRate,
               channels,
@@ -236,10 +261,10 @@ jobs:
             };
             fs.writeFileSync(`${outDir}/evidence.json`, JSON.stringify(evidence, null, 2));
             fs.writeFileSync(`${outDir}/probe.json`, JSON.stringify(probe, null, 2));
-            console.log('PV_REAL_COMPOSITION_OK', JSON.stringify(evidence));
+            console.log('PV_TAO_EU_PHYSICAL_OK', JSON.stringify(evidence));
           } catch (error) {
             fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({
-              verdict: 'REAL_COMPOSITION_FAILED',
+              verdict: 'TAO_EU_PHYSICAL_GENERATION_FAILED',
               github_sha: process.env.GITHUB_SHA,
               local_project_id: localProject?.id || null,
               remote_project_id: linked?.project?.id || null,
@@ -251,11 +276,11 @@ jobs:
           }
           NODE
 
-      - name: Retain the exact composition sample and evidence
+      - name: Retain exact Tão Eu sample and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pablovoice-real-composition-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: pablovoice-tao-eu-physical-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/real-composition
           if-no-files-found: error
           retention-days: 7

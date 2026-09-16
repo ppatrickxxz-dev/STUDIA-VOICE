@@ -106,7 +106,7 @@ test('FIRST SONG FLOW GATE: idea creates its project, survives reopen and export
   await page.locator('[data-action="open-project"]').first().click();
   await expect(page.getByRole('heading', { name: model.name })).toBeVisible();
   await expect(page.getByText('tao-eu-generated-master.wav').first()).toBeVisible();
-  await expect(page.locator('html')).toHaveAttribute('data-pv-studio-cut', 'song_completion_v1');
+  await expect(page.locator('html')).toHaveAttribute('data-pv-studio-cut', 'song_completion_v2');
 
   const persisted = await page.evaluate(async () => {
     const storage = await import('./storage.mjs');
