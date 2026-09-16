@@ -85,7 +85,7 @@ test('PRODUCT UX GATE: home is a creation-first unified high-quality music Studi
 
 test('PRODUCT STUDIO CUT GATE: Studio starts with the song-finishing controls, not a wall of labs', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
-  await page.locator('#pv-product-home [data-action="new-project"]').click();
+  await page.locator('#pv-product-home').getByRole('button', { name: 'Novo projeto vazio' }).click();
   await page.locator('[data-form="new-project"] input[name="name"]').fill('Studio Cut Gate');
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await page.locator('.pv-vnext-nav.pv-nav [data-route="studio"]').click();
@@ -141,7 +141,8 @@ test('STUDIA MUSIC-FIRST UI GATE: every primary screen stays inside one canonica
   await expect(page.locator('[data-vnext-visualizer]')).toBeHidden();
 
   await nav.locator('[data-route="studio"]').click();
-  await expect(page.locator('.pv-transport-card')).toBeVisible();
+  await expect(html).toHaveAttribute('data-pv-studia-screen', 'studio');
+  await expect(page.locator('[data-pv-studio-core-action="record"]')).toBeVisible();
   await expect(shell).toBeVisible();
   await expect(nav).toBeVisible();
 
