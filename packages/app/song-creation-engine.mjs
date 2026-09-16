@@ -4,7 +4,6 @@ import { normalizeSingerProfile } from './singer-profile.mjs';
 export const SONG_CREATION_SCHEMA = 'pablovoice_song_creation_v1';
 const SAMPLE_RATE = 24000;
 const BEATS_PER_BAR = 4;
-const MAX_SONG_DURATION_SECONDS = 600;
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
 const KEY_ROOTS = Object.freeze({ C: 48, Db: 49, D: 50, Eb: 51, E: 52, F: 53, Gb: 54, G: 55, Ab: 56, A: 57, Bb: 58, B: 59 });
@@ -21,7 +20,7 @@ export function createSongCreationPlan(input = {}) {
   const genre = normalizeGenre(input.genre || 'pop');
   const defaults = GENRE_DEFAULTS[genre];
   const bpm = clamp(Math.round(Number(input.bpm) || defaults.bpm), 30, 300);
-  const requestedDuration = clamp(Math.round(Number(input.durationSeconds) || 120), 10, MAX_SONG_DURATION_SECONDS);
+  const requestedDuration = clamp(Math.round(Number(input.durationSeconds) || 120), 10, 600);
   const lyricsScript = String(input.lyrics || '').replace(/\r/g, '').trim().slice(0, 12000);
   const seedText = `${input.brief || ''}|${lyricsScript}|${genre}`;
   const seed = hashString(seedText);
@@ -108,7 +107,6 @@ export function describeSongPlan(plan) {
 function parseStructuredLyrics(lyrics, bpm) {
   const source = String(lyrics || '').replace(/\r/g, '');
   if (!source.includes('[')) return null;
-  const maxBars = Math.max(4, Math.floor(MAX_SONG_DURATION_SECONDS * bpm / 60 / BEATS_PER_BAR));
   const sections = [];
   let barCursor = 0;
   let occurrence = 0;
@@ -116,11 +114,10 @@ function parseStructuredLyrics(lyrics, bpm) {
     const match = line.trim().match(/^\[([^\]]+)\]$/);
     if (!match) continue;
     const header = match[1].trim();
-    const counts = [...header.matchAll(/(\d+)\s*bars?/gi)].map((item) => Number(item[1]));
+    const counts = [...header.matchAll(/(\d+)\s*bars?/gi)].map((item) => Number(item[1])).filter((value) => value > 0);
     if (!counts.length) continue;
-    if (counts.some((value) => !Number.isFinite(value) || value <= 0)) return null;
     const bars = counts.reduce((sum, value) => sum + value, 0);
-    if (!Number.isFinite(bars) || bars <= 0 || bars > maxBars || barCursor + bars > maxBars) return null;
+    if (!Number.isFinite(bars) || barCursor + bars > bpm * 2.5) return null;
     const rawLabel = header.split(/\s+[—–-]\s+/)[0].trim();
     const label = normalizeStructuredLabel(rawLabel);
     const idBase = slugSection(label) || `section_${occurrence + 1}`;
