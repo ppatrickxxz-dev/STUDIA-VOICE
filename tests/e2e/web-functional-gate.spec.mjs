@@ -164,7 +164,7 @@ test('WEB FUNCTIONAL GATE: project, audio, edit, preview, persistence, export an
 
   await page.locator('.pv-vnext-nav [data-route="home"]').click();
   await page.locator('#pv-product-home [data-pv-product-create="song"]').click();
-  await expect(page.getByText(/Composição|compor|Songwriting/i).first()).toBeVisible();
+  await expect(page.locator('#lyrics')).toBeVisible();
   await page.locator('.pv-vnext-nav [data-route="pablo"]').click();
   await expect(page.locator('[data-pablo-form]')).toBeVisible();
 
@@ -368,6 +368,9 @@ test('WEB RECORDING GATE: real MediaRecorder path creates a Studio track', async
   const errors = captureErrors(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await waitForHydratedShell(page);
+  await page.locator('#pv-product-home').getByRole('button', { name: 'Novo projeto vazio' }).click();
+  await page.locator('[data-form="new-project"] input[name="name"]').fill('Gate Recording');
+  await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await page.locator('.pv-vnext-nav [data-route="studio"]').click();
   await expect(page.locator('[data-pv-studio-core-action="record"]')).toBeVisible();
   await page.locator('[data-pv-studio-core-action="record"]').click();
