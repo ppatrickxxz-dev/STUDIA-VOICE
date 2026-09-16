@@ -142,7 +142,8 @@ test('STUDIA MUSIC-FIRST UI GATE: every primary screen stays inside one canonica
 
   await nav.locator('[data-route="studio"]').click();
   await expect(html).toHaveAttribute('data-pv-studia-screen', 'studio');
-  await expect(page.locator('[data-pv-studio-core-action="record"]')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Primeiro, uma ideia/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Criar projeto' })).toBeVisible();
   await expect(shell).toBeVisible();
   await expect(nav).toBeVisible();
 
