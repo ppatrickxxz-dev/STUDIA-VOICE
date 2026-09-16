@@ -28,7 +28,8 @@ test('SONG CREATION GATE: one connected high-quality Studio with no login or off
   await page.locator('[data-form="new-project"]').getByRole('button', { name: 'Criar' }).click();
   await expect(page.getByRole('heading', { name: 'Gate Criação Musical' })).toBeVisible();
 
-  await page.locator('.pv-vnext-nav [data-vnext-route-command="create"]').click();
+  await page.locator('.pv-vnext-nav [data-route="home"]').click();
+  await page.locator('#pv-product-home [data-pv-product-create="song"]').click();
   await expect(page.locator('#lyrics')).toBeVisible();
   await page.locator('#lyrics').fill('Quando a cidade apaga eu vejo você\nChega mais perto, deixa acontecer\nHoje eu não prometo o que vem depois\nQuando amanhecer, amanhã a gente vê');
 
