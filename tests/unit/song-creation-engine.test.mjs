@@ -18,6 +18,47 @@ test('plans a structured song with editable guide timing', () => {
   assert.match(describeSongPlan(plan), /112 BPM/);
 });
 
+test('bounded structured lyrics preserve an explicit 100-bar arrangement', () => {
+  const plan = createSongCreationPlan({
+    lyrics: '[Verse 1 — 40 bars]\nlinha um\n[Chorus — 60 bars]\nlinha dois',
+    genre: 'rnb',
+    bpm: 120,
+    durationSeconds: 60,
+  });
+  assert.equal(plan.structuredLyrics, true);
+  assert.equal(plan.totalBars, 100);
+  assert.equal(plan.durationSeconds, 200);
+  assert.equal(plan.sections.length, 2);
+});
+
+test('structured lyric parser rejects non-finite bar counts before expanding notes', () => {
+  const enormous = '9'.repeat(400);
+  const plan = createSongCreationPlan({
+    lyrics: `[Verse 1 — ${enormous} bars]\nlinha um\n[Chorus — 8 bars]\nlinha dois`,
+    genre: 'rnb',
+    bpm: 120,
+    durationSeconds: 60,
+  });
+  assert.equal(plan.structuredLyrics, false);
+  assert.ok(Number.isFinite(plan.totalBars));
+  assert.ok(Number.isFinite(plan.durationSeconds));
+  assert.ok(plan.durationSeconds <= 600);
+});
+
+test('structured lyric parser rejects finite but unsafe cumulative bar counts', () => {
+  const plan = createSongCreationPlan({
+    lyrics: '[Verse 1 — 100000 bars]\nlinha um\n[Chorus — 8 bars]\nlinha dois',
+    genre: 'rnb',
+    bpm: 120,
+    durationSeconds: 60,
+  });
+  assert.equal(plan.structuredLyrics, false);
+  assert.ok(Number.isFinite(plan.totalBars));
+  assert.ok(Number.isFinite(plan.durationSeconds));
+  assert.ok(plan.durationSeconds <= 600);
+  assert.ok(plan.totalBars < 100000);
+});
+
 test('canonical pre-chorus kind survives section-map normalization and insertion', () => {
   assert.equal(normalizeSectionKind('pre_chorus'), 'pre_chorus');
   const map = upsertConfirmedSection(createArrangementMap(1), {
