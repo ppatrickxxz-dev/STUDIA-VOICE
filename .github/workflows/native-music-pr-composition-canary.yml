@@ -22,6 +22,7 @@ concurrency:
 
 env:
   PV_STUDIO_ORIGIN: https://studia-voice.ppatrickxxz.workers.dev
+  PV_NATIVE_MUSIC_URL: https://yokmhqoncdwvxmzzybqa.supabase.co/functions/v1/compute-kaggle-v58
 
 permissions:
   contents: read
@@ -33,18 +34,27 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-
       - name: Initialize evidence directory
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p test-results/real-composition
           printf '{"verdict":"STARTED","github_sha":"%s","github_run_id":"%s","benchmark":"Tão Eu 3:20 / 100 bars"}\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > test-results/real-composition/start.json
-
+      - name: Require candidate backend provenance before consuming GPU capacity
+        shell: bash
+        env:
+          PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error -H "apikey: $PUBLISHABLE_KEY" "$PV_NATIVE_MUSIC_URL")"
+          printf '%s\n' "$response" | jq -e --arg sha "$GITHUB_SHA" '.ok == true and .release_sha == $sha' >/dev/null || {
+            echo 'TAO_EU_PHYSICAL_GATE_BLOCKED: Supabase native-music runtime is not deployed from this exact Git SHA.' >&2
+            jq '{release_sha,service,configured,runnable,physical_canary}' <<<"$response" >&2
+            exit 1
+          }
       - name: Ensure audio inspection tools
         shell: bash
         run: |
@@ -53,7 +63,6 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y ffmpeg
           fi
-
       - name: Compose physical Tão Eu through the same transparent-user runtime
         shell: bash
         run: |
@@ -67,215 +76,27 @@ jobs:
           import { NativeMusicGenerationClient } from './packages/app/native-music-generation-client.mjs';
           import { createSongCreationPlan } from './packages/app/song-creation-engine.mjs';
           import { TAO_EU_SUNO_3M20 } from './tests/fixtures/tao-eu-suno-3m20.mjs';
-
-          const ORIGIN = process.env.PV_STUDIO_ORIGIN;
-          const outDir = 'test-results/real-composition';
-          const map = new Map();
-          const storage = {
-            getItem: (key) => map.has(key) ? map.get(key) : null,
-            setItem: (key, value) => map.set(key, String(value)),
-            removeItem: (key) => map.delete(key),
-          };
-          const baseFetch = globalThis.fetch.bind(globalThis);
-          const fetchImpl = async (input, options = {}) => {
-            const url = String(input);
-            const headers = new Headers(options.headers || {});
-            if (url.includes('/functions/v1/device-auth')) headers.set('origin', ORIGIN);
-            return baseFetch(input, { ...options, headers });
-          };
-          const location = { origin: ORIGIN, pathname: '/', search: '', hash: '', history: { replaceState() {} } };
-          const auth = new RemoteAuthAdapter({ storage, location, fetchImpl });
-          const progress = [];
-          let linked = null;
-          let localProject = null;
-          try {
-            const session = await auth.ensureSession();
-            assert.ok(session?.accessToken, 'transparent device session was not created');
-
-            localProject = {
-              id: `physical-tao-eu-${process.env.GITHUB_RUN_ID}-${Date.now()}`,
-              name: 'Tão Eu · canário físico 3:20',
-            };
-            linked = await auth.ensureRemoteProject(localProject);
-            assert.equal(linked?.ok, true, `remote project link failed: ${linked?.error || 'unknown'}`);
-            assert.ok(linked?.project?.id, 'remote project id missing');
-
-            const singerProfile = {
-              voiceType: 'masculina tenor/barítono',
-              lowMidi: 45,
-              highMidi: 67,
-              language: 'pt-BR',
-              tone: 'quente, low-mid, natural e próximo',
-              delivery: 'conversacional, sensual, peito, sem belting e sem melisma excessivo',
-              falsetto: false,
-            };
-            const plan = createSongCreationPlan({
-              brief: TAO_EU_SUNO_3M20.style,
-              lyrics: TAO_EU_SUNO_3M20.lyrics,
-              genre: TAO_EU_SUNO_3M20.genre,
-              mood: TAO_EU_SUNO_3M20.mood,
-              bpm: TAO_EU_SUNO_3M20.bpm,
-              durationSeconds: TAO_EU_SUNO_3M20.durationSeconds,
-              key: 'A',
-              singerProfile,
-            });
-            assert.equal(plan.structuredLyrics, true, 'Tão Eu must use its structured lyric script');
-            assert.equal(plan.totalBars, TAO_EU_SUNO_3M20.totalBars, 'Tão Eu bar count drifted before physical dispatch');
-            assert.equal(plan.durationSeconds, TAO_EU_SUNO_3M20.durationSeconds, 'Tão Eu duration drifted before physical dispatch');
-            assert.equal(plan.lyricsScript, TAO_EU_SUNO_3M20.lyrics, 'Tão Eu lyric script drifted before physical dispatch');
-            assert.equal(plan.sections.length, 12, 'Tão Eu section count drifted before physical dispatch');
-            const lyricsSha256 = createHash('sha256').update(plan.lyricsScript, 'utf8').digest('hex');
-
-            const client = new NativeMusicGenerationClient({ authAdapter: auth, fetchImpl, pollIntervalMs: 5000 });
-            const result = await client.generate({
-              localProject,
-              plan,
-              negativeStyles: [...TAO_EU_SUNO_3M20.negativeStyles, 'female vocal'],
-              instrumental: false,
-              variation: 0.78,
-              onProgress: (state) => {
-                progress.push({
-                  status: state?.status || null,
-                  progress: Number(state?.progress || 0),
-                  stage: state?.current_stage || null,
-                  message: state?.human_message || null,
-                });
-                console.log('PV_TAO_EU_PROGRESS', JSON.stringify(progress.at(-1)));
-              },
-            });
-
-            if (!result?.ok) {
-              fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({ result, progress, remote_project_id: linked?.project?.id || null }, null, 2));
-            }
-            assert.equal(result?.ok, true, `Tão Eu generation failed: ${result?.error || 'unknown'} ${result?.detail || ''}`);
-            assert.equal(result?.fallback_allowed, false);
-            assert.ok(String(result?.aiDirection?.text || '').length >= 40, 'real AI production direction missing');
-            assert.ok(String(result?.aiDirection?.text || '').length <= 430, 'AI direction exceeded product limit');
-            assert.match(String(result?.director?.fingerprint || ''), /^pv2_[0-9a-f]{8}$/);
-            assert.equal(result?.job?.status, 'completed', 'physical music job did not complete');
-            assert.equal(result?.job?.proof?.verified, true, 'physical music proof is not verified');
-            assert.equal(result?.job?.output_asset_ids?.length, 1, 'physical job must persist exactly one full-mix asset');
-            assert.equal(String(result?.job?.output_asset_ids?.[0] || ''), String(result?.asset?.id || ''), 'job output asset and resolved asset differ');
-            assert.equal(result?.asset?.kind, 'full_mix');
-            assert.equal(result?.asset?.storage_bucket, 'audio-private');
-            assert.match(String(result?.asset?.sha256 || ''), /^[0-9a-f]{64}$/i);
-            assert.equal(String(result?.sha256 || '').toLowerCase(), String(result?.asset?.sha256 || '').toLowerCase(), 'downloaded SHA and persisted asset SHA differ');
-            assert.ok(result?.blob?.size > 100_000, `generated audio too small: ${result?.blob?.size || 0}`);
-            assert.equal(Number(result?.asset?.size_bytes || 0), result.blob.size, 'persisted asset size and downloaded audio size differ');
-
-            const audioPath = `${outDir}/tao-eu.flac`;
-            const bytes = Buffer.from(await result.blob.arrayBuffer());
-            fs.writeFileSync(audioPath, bytes);
-            const localSha256 = createHash('sha256').update(bytes).digest('hex');
-            assert.equal(localSha256, String(result.sha256).toLowerCase(), 'artifact bytes do not match persisted SHA');
-
-            const probeRun = spawnSync('ffprobe', ['-v','error','-select_streams','a:0','-show_entries','stream=sample_rate,channels:format=duration','-of','json',audioPath], { encoding: 'utf8' });
-            assert.equal(probeRun.status, 0, probeRun.stderr || 'ffprobe failed');
-            const probe = JSON.parse(probeRun.stdout || '{}');
-            const duration = Number(probe?.format?.duration || 0);
-            const sampleRate = Number(probe?.streams?.[0]?.sample_rate || 0);
-            const channels = Number(probe?.streams?.[0]?.channels || 0);
-            assert.ok(duration >= 190 && duration <= 210, `Tão Eu physical duration must stay near 3:20: ${duration}`);
-            assert.ok(sampleRate >= 32000, `sample rate too low: ${sampleRate}`);
-            assert.ok(channels >= 1, `invalid channels: ${channels}`);
-
-            const pcmRun = spawnSync('ffmpeg', ['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'], { encoding: null, maxBuffer: 128 * 1024 * 1024 });
-            assert.equal(pcmRun.status, 0, String(pcmRun.stderr || 'ffmpeg decode failed'));
-            const pcm = pcmRun.stdout;
-            const sampleCount = Math.floor(pcm.length / 2);
-            assert.ok(sampleCount > 16000 * 180, 'decoded Tão Eu audio is much shorter than a full song');
-            let sumSq = 0;
-            let peak = 0;
-            let clipped = 0;
-            const windowSize = 4000;
-            let activeWindows = 0;
-            let totalWindows = 0;
-            const windowRms = [];
-            for (let start = 0; start < sampleCount; start += windowSize) {
-              const end = Math.min(sampleCount, start + windowSize);
-              let localSq = 0;
-              let localN = 0;
-              for (let i = start; i < end; i += 1) {
-                const value = pcm.readInt16LE(i * 2) / 32768;
-                const abs = Math.abs(value);
-                sumSq += value * value;
-                localSq += value * value;
-                localN += 1;
-                if (abs > peak) peak = abs;
-                if (abs >= 0.999) clipped += 1;
-              }
-              if (localN) {
-                const r = Math.sqrt(localSq / localN);
-                windowRms.push(r);
-                totalWindows += 1;
-                if (r >= 0.008) activeWindows += 1;
-              }
-            }
-            const rms = Math.sqrt(sumSq / sampleCount);
-            const activeRatio = totalWindows ? activeWindows / totalWindows : 0;
-            const clipRatio = clipped / sampleCount;
-            const sorted = [...windowRms].sort((a,b) => a-b);
-            const p10 = sorted[Math.floor((sorted.length - 1) * 0.10)] || 0;
-            const p90 = sorted[Math.floor((sorted.length - 1) * 0.90)] || 0;
-            const rmsContrast = p90 - p10;
-            assert.ok(rms >= 0.01, `audio is effectively silent: rms=${rms}`);
-            assert.ok(peak >= 0.08, `audio has insufficient peak energy: peak=${peak}`);
-            assert.ok(activeRatio >= 0.55, `too much silence: activeRatio=${activeRatio}`);
-            assert.ok(clipRatio <= 0.03, `audio is excessively clipped: clipRatio=${clipRatio}`);
-
-            const evidence = {
-              verdict: 'TAO_EU_PHYSICAL_GENERATION_VERIFIED',
-              github_sha: process.env.GITHUB_SHA,
-              local_project_id: localProject.id,
-              remote_project_id: linked.project.id,
-              request_id: result.requestId || null,
-              output_asset_id: result.asset.id,
-              provider: result.provider || null,
-              model: result.model || null,
-              model_revision: result.modelRevision || null,
-              source: result.source || null,
-              audio_sha256: localSha256,
-              lyrics_sha256: lyricsSha256,
-              audio_bytes: result.blob.size,
-              requested_duration_seconds: TAO_EU_SUNO_3M20.durationSeconds,
-              requested_total_bars: TAO_EU_SUNO_3M20.totalBars,
-              duration_seconds: duration,
-              sample_rate: sampleRate,
-              channels,
-              generation_seed: result?.job?.proof?.generation_seed ?? null,
-              generation_shift: result?.job?.proof?.generation_shift ?? null,
-              signal: {
-                rms: Number(rms.toFixed(6)),
-                peak: Number(peak.toFixed(6)),
-                active_ratio: Number(activeRatio.toFixed(4)),
-                clip_ratio: Number(clipRatio.toFixed(6)),
-                rms_contrast: Number(rmsContrast.toFixed(6)),
-              },
-              ai_direction: {
-                chars: String(result.aiDirection.text).length,
-                provider: result.aiDirection.provider || null,
-                model: result.aiDirection.model || null,
-              },
-              director: result.director,
-              progress,
-            };
-            fs.writeFileSync(`${outDir}/evidence.json`, JSON.stringify(evidence, null, 2));
-            fs.writeFileSync(`${outDir}/probe.json`, JSON.stringify(probe, null, 2));
-            console.log('PV_TAO_EU_PHYSICAL_OK', JSON.stringify(evidence));
-          } catch (error) {
-            fs.writeFileSync(`${outDir}/failure.json`, JSON.stringify({
-              verdict: 'TAO_EU_PHYSICAL_GENERATION_FAILED',
-              github_sha: process.env.GITHUB_SHA,
-              local_project_id: localProject?.id || null,
-              remote_project_id: linked?.project?.id || null,
-              error: String(error?.message || error),
-              stack: String(error?.stack || '').slice(0, 6000),
-              progress,
-            }, null, 2));
-            throw error;
-          }
+          const ORIGIN=process.env.PV_STUDIO_ORIGIN,outDir='test-results/real-composition',map=new Map();
+          const storage={getItem:(k)=>map.has(k)?map.get(k):null,setItem:(k,v)=>map.set(k,String(v)),removeItem:(k)=>map.delete(k)};
+          const baseFetch=globalThis.fetch.bind(globalThis);const fetchImpl=async(input,options={})=>{const url=String(input),headers=new Headers(options.headers||{});if(url.includes('/functions/v1/device-auth'))headers.set('origin',ORIGIN);return baseFetch(input,{...options,headers})};
+          const location={origin:ORIGIN,pathname:'/',search:'',hash:'',history:{replaceState(){}}};const auth=new RemoteAuthAdapter({storage,location,fetchImpl});const progress=[];let linked=null,localProject=null;
+          try{
+            const session=await auth.ensureSession();assert.ok(session?.accessToken,'transparent device session was not created');
+            localProject={id:`physical-tao-eu-${process.env.GITHUB_RUN_ID}-${Date.now()}`,name:'Tão Eu · canário físico 3:20'};linked=await auth.ensureRemoteProject(localProject);assert.equal(linked?.ok,true,`remote project link failed: ${linked?.error||'unknown'}`);assert.ok(linked?.project?.id,'remote project id missing');
+            const singerProfile={voiceType:'masculina tenor/barítono',lowMidi:45,highMidi:67,language:'pt-BR',tone:'quente, low-mid, natural e próximo',delivery:'conversacional, sensual, peito, sem belting e sem melisma excessivo',falsetto:false};
+            const plan=createSongCreationPlan({brief:TAO_EU_SUNO_3M20.style,lyrics:TAO_EU_SUNO_3M20.lyrics,genre:TAO_EU_SUNO_3M20.genre,mood:TAO_EU_SUNO_3M20.mood,bpm:TAO_EU_SUNO_3M20.bpm,durationSeconds:TAO_EU_SUNO_3M20.durationSeconds,key:'A',singerProfile});
+            assert.equal(plan.structuredLyrics,true);assert.equal(plan.totalBars,TAO_EU_SUNO_3M20.totalBars);assert.equal(plan.durationSeconds,TAO_EU_SUNO_3M20.durationSeconds);assert.equal(plan.lyricsScript,TAO_EU_SUNO_3M20.lyrics);assert.equal(plan.sections.length,12);const lyricsSha256=createHash('sha256').update(plan.lyricsScript,'utf8').digest('hex');
+            const client=new NativeMusicGenerationClient({authAdapter:auth,fetchImpl,pollIntervalMs:5000});const result=await client.generate({localProject,plan,negativeStyles:[...TAO_EU_SUNO_3M20.negativeStyles,'female vocal'],instrumental:false,variation:0.78,onProgress:(state)=>{progress.push({status:state?.status||null,progress:Number(state?.progress||0),stage:state?.current_stage||null,message:state?.human_message||null});console.log('PV_TAO_EU_PROGRESS',JSON.stringify(progress.at(-1)))}});
+            if(!result?.ok)fs.writeFileSync(`${outDir}/failure.json`,JSON.stringify({result,progress,remote_project_id:linked?.project?.id||null},null,2));
+            assert.equal(result?.ok,true,`Tão Eu generation failed: ${result?.error||'unknown'} ${result?.detail||''}`);assert.equal(result?.fallback_allowed,false);assert.ok(String(result?.aiDirection?.text||'').length>=40);assert.ok(String(result?.aiDirection?.text||'').length<=430);assert.match(String(result?.director?.fingerprint||''),/^pv2_[0-9a-f]{8}$/);assert.equal(result?.job?.status,'completed');assert.equal(result?.job?.proof?.verified,true);assert.equal(result?.job?.output_asset_ids?.length,1);assert.equal(String(result?.job?.output_asset_ids?.[0]||''),String(result?.asset?.id||''));assert.equal(result?.asset?.kind,'full_mix');assert.equal(result?.asset?.storage_bucket,'audio-private');assert.match(String(result?.asset?.sha256||''),/^[0-9a-f]{64}$/i);assert.equal(String(result?.sha256||'').toLowerCase(),String(result?.asset?.sha256||'').toLowerCase());assert.ok(result?.blob?.size>100000);assert.equal(Number(result?.asset?.size_bytes||0),result.blob.size);
+            const audioPath=`${outDir}/tao-eu.flac`,bytes=Buffer.from(await result.blob.arrayBuffer());fs.writeFileSync(audioPath,bytes);const localSha256=createHash('sha256').update(bytes).digest('hex');assert.equal(localSha256,String(result.sha256).toLowerCase());
+            const probeRun=spawnSync('ffprobe',['-v','error','-select_streams','a:0','-show_entries','stream=sample_rate,channels:format=duration','-of','json',audioPath],{encoding:'utf8'});assert.equal(probeRun.status,0,probeRun.stderr||'ffprobe failed');const probe=JSON.parse(probeRun.stdout||'{}'),duration=Number(probe?.format?.duration||0),sampleRate=Number(probe?.streams?.[0]?.sample_rate||0),channels=Number(probe?.streams?.[0]?.channels||0);assert.ok(duration>=190&&duration<=210);assert.ok(sampleRate>=32000);assert.ok(channels>=1);
+            const pcmRun=spawnSync('ffmpeg',['-v','error','-i',audioPath,'-f','s16le','-ac','1','-ar','16000','pipe:1'],{encoding:null,maxBuffer:128*1024*1024});assert.equal(pcmRun.status,0,String(pcmRun.stderr||'ffmpeg decode failed'));const pcm=pcmRun.stdout,sampleCount=Math.floor(pcm.length/2);assert.ok(sampleCount>16000*180);let sumSq=0,peak=0,clipped=0;const windowSize=4000;let activeWindows=0,totalWindows=0;const windowRms=[];
+            for(let start=0;start<sampleCount;start+=windowSize){const end=Math.min(sampleCount,start+windowSize);let localSq=0,localN=0;for(let i=start;i<end;i+=1){const value=pcm.readInt16LE(i*2)/32768,abs=Math.abs(value);sumSq+=value*value;localSq+=value*value;localN+=1;if(abs>peak)peak=abs;if(abs>=0.999)clipped+=1}if(localN){const r=Math.sqrt(localSq/localN);windowRms.push(r);totalWindows+=1;if(r>=0.008)activeWindows+=1}}
+            const rms=Math.sqrt(sumSq/sampleCount),activeRatio=totalWindows?activeWindows/totalWindows:0,clipRatio=clipped/sampleCount,sorted=[...windowRms].sort((a,b)=>a-b),p10=sorted[Math.floor((sorted.length-1)*0.10)]||0,p90=sorted[Math.floor((sorted.length-1)*0.90)]||0,rmsContrast=p90-p10;assert.ok(rms>=0.01);assert.ok(peak>=0.08);assert.ok(activeRatio>=0.55);assert.ok(clipRatio<=0.03);
+            const evidence={verdict:'TAO_EU_PHYSICAL_GENERATION_VERIFIED',github_sha:process.env.GITHUB_SHA,local_project_id:localProject.id,remote_project_id:linked.project.id,request_id:result.requestId||null,output_asset_id:result.asset.id,provider:result.provider||null,model:result.model||null,model_revision:result.modelRevision||null,source:result.source||null,audio_sha256:localSha256,lyrics_sha256:lyricsSha256,audio_bytes:result.blob.size,requested_duration_seconds:TAO_EU_SUNO_3M20.durationSeconds,requested_total_bars:TAO_EU_SUNO_3M20.totalBars,duration_seconds:duration,sample_rate:sampleRate,channels,generation_seed:result?.job?.proof?.generation_seed??null,generation_shift:result?.job?.proof?.generation_shift??null,signal:{rms:Number(rms.toFixed(6)),peak:Number(peak.toFixed(6)),active_ratio:Number(activeRatio.toFixed(4)),clip_ratio:Number(clipRatio.toFixed(6)),rms_contrast:Number(rmsContrast.toFixed(6))},ai_direction:{chars:String(result.aiDirection.text).length,provider:result.aiDirection.provider||null,model:result.aiDirection.model||null},director:result.director,progress};fs.writeFileSync(`${outDir}/evidence.json`,JSON.stringify(evidence,null,2));fs.writeFileSync(`${outDir}/probe.json`,JSON.stringify(probe,null,2));console.log('PV_TAO_EU_PHYSICAL_OK',JSON.stringify(evidence));
+          }catch(error){fs.writeFileSync(`${outDir}/failure.json`,JSON.stringify({verdict:'TAO_EU_PHYSICAL_GENERATION_FAILED',github_sha:process.env.GITHUB_SHA,local_project_id:localProject?.id||null,remote_project_id:linked?.project?.id||null,error:String(error?.message||error),stack:String(error?.stack||'').slice(0,6000),progress},null,2));throw error}
           NODE
-
       - name: Retain exact Tão Eu sample and evidence
         if: always()
         uses: actions/upload-artifact@v4
