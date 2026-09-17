@@ -29,14 +29,16 @@ test('draft PRs keep fast Web feedback while deferring physical Android gates', 
   assert.doesNotMatch(androidJobs, /\n  android-open-with-project-emulator:/, 'open-with must not boot a third emulator job');
 });
 
-test('marking a PR ready re-enables the real composition canary instead of deleting the release proof', () => {
+test('marking a PR ready re-enables the real Tão Eu composition canary instead of deleting the release proof', () => {
   assert.match(compositionCanary, readyEvent);
   assert.match(compositionCanary, /real-composition:/);
   assert.match(compositionCanary, /github\.event\.pull_request\.draft == false/);
-  assert.match(compositionCanary, /Compose a real song through the same transparent-user runtime/);
-  assert.match(compositionCanary, /REAL_COMPOSITION_PATH_VERIFIED/);
+  assert.match(compositionCanary, /Compose physical Tão Eu through the same transparent-user runtime/);
+  assert.match(compositionCanary, /TAO_EU_PHYSICAL_GENERATION_VERIFIED/);
   assert.match(compositionCanary, /ffprobe/);
   assert.match(compositionCanary, /ffmpeg/);
+  assert.match(compositionCanary, /audio_sha256/);
+  assert.match(compositionCanary, /lyrics_sha256/);
 });
 
 test('Cloudflare keeps cheap contracts in draft and defers only the physical preview', () => {
