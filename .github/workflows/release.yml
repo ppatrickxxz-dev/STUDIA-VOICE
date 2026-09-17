@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   signed-release:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-24.04
     environment: pablovoice-production
     timeout-minutes: 40
@@ -176,7 +176,7 @@ jobs:
 
   signed-release-emulator:
     needs: signed-release
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
