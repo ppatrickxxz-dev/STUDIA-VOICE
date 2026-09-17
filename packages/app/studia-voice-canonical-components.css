@@ -1,3 +1,4 @@
+html[data-pv-studia-ui="studia_voice_usability_v1"] .pv-vnext-nav>[hidden]{display:none!important}
 .pv-studio-life-rail{display:grid;gap:10px;margin:0 0 12px;padding:12px 14px;border:1px solid var(--sv-border);border-radius:14px;background:rgba(255,255,255,.018)}
 .pv-studio-life-head{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px}
 .pv-studio-life-head>span{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;border:1px solid rgba(169,148,255,.17);background:rgba(126,98,221,.08);color:#a994e4}

@@ -1,8 +1,10 @@
 const PROJECT_URL = 'https://yokmhqoncdwvxmzzybqa.supabase.co';
 const PUBLISHABLE_KEY = 'sb_publishable_bERmgxiwqEbVFUQ2W5-ggA_1Z6-vALH';
-// music_generation has no second-dispatch daemon. A backend "retrying" state
-// therefore means the worker already failed and must not hold the Creator open.
+// music_generation is durable: the user can close/reopen the app while the backend
+// keeps the job alive. The foreground waiter therefore allows the real GPU queue
+// enough time to complete instead of turning normal capacity wait into an error.
 const TERMINAL = new Set(['completed', 'error', 'failed', 'cancelled', 'retrying']);
+const MAX_FOREGROUND_WAIT_MS = 2 * 60 * 60 * 1000;
 
 function authHeaders(token = '') {
   const headers = { apikey: PUBLISHABLE_KEY };
@@ -34,8 +36,9 @@ export async function getNativeMusicJob({ token, jobId, fetchImpl = globalThis.f
   return job;
 }
 
-export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = 20 * 60 * 1000, onProgress = () => {} }) {
+export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.fetch, pollIntervalMs = 5000, maxWaitMs = MAX_FOREGROUND_WAIT_MS, onProgress = () => {} }) {
   const started = Date.now();
+  const effectiveMaxWaitMs = Math.max(Number(maxWaitMs) || 0, MAX_FOREGROUND_WAIT_MS);
   for (;;) {
     const job = await getNativeMusicJob({ token, jobId, fetchImpl });
     onProgress(job);
@@ -49,7 +52,7 @@ export async function waitForNativeMusic({ token, jobId, fetchImpl = globalThis.
       if (job.proof?.verified !== true) throw new Error('music_proof_missing');
       return job;
     }
-    if (Date.now() - started >= maxWaitMs) throw new Error('music_job_timeout');
+    if (Date.now() - started >= effectiveMaxWaitMs) throw new Error('music_job_timeout');
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 }
@@ -103,6 +106,6 @@ export const NATIVE_MUSIC_RESULT_RUNTIME = Object.freeze({
   jobType: 'music_generation',
   outputKind: 'full_mix',
   bucket: 'audio-private',
-  maxWaitMs: 20 * 60 * 1000,
+  maxWaitMs: MAX_FOREGROUND_WAIT_MS,
   terminalStates: [...TERMINAL],
 });
